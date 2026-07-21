@@ -30,6 +30,17 @@ interface GoogleAdsSignalConfig {
   conversion_action_lead?: string
 }
 
+interface TikTokEventsConfig {
+  advertiser_id: string
+  pixel_code: string
+  access_token: string
+}
+
+interface SnapchatCapiConfig {
+  pixel_id: string
+  access_token: string
+}
+
 function sha256(value: string): string {
   return crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex')
 }
@@ -110,13 +121,101 @@ async function sendGoogleEnhancedConversion(config: GoogleAdsSignalConfig, paylo
   )
 }
 
+// TikTok's Events API v1.3 and Snapchat's Conversions API v3 each use their own
+// standard-event vocabulary rather than Meta's — mapped once here rather than at
+// each call site. Unverified against a live ad account (no maintained npm wrapper
+// exists for either, hand-rolled against their documented REST shape) — same
+// disclosure Facebook/Google carried before real credentials existed (Step 5).
+const TIKTOK_EVENT_NAME: Record<SignalEventType, string> = {
+  Purchase: 'CompletePayment',
+  Lead: 'CompleteRegistration',
+  ViewContent: 'ViewContent',
+  AddToCart: 'AddToCart',
+  InitiateCheckout: 'InitiateCheckout',
+}
+
+const TIKTOK_API_VERSION = 'v1.3'
+
+async function sendTikTokEvents(config: TikTokEventsConfig, payload: SignalPayload): Promise<void> {
+  const body = {
+    event_source: 'web',
+    event_source_id: config.pixel_code,
+    data: [
+      {
+        event: TIKTOK_EVENT_NAME[payload.eventType],
+        event_time: Math.floor(payload.eventTime.getTime() / 1000),
+        event_id: crypto.randomUUID(),
+        user: {
+          email: payload.email ? [sha256(payload.email)] : undefined,
+          ip: payload.ip ?? undefined,
+          user_agent: payload.userAgent ?? undefined,
+        },
+        properties: {
+          value: payload.value ?? undefined,
+          currency: payload.currency ?? 'USD',
+        },
+      },
+    ],
+  }
+
+  const res = await fetch(`https://business-api.tiktok.com/open_api/${TIKTOK_API_VERSION}/event/track/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Access-Token': config.access_token },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`TikTok Events API request failed (${res.status}): ${text}`)
+  }
+}
+
+const SNAPCHAT_EVENT_NAME: Record<SignalEventType, string> = {
+  Purchase: 'PURCHASE',
+  Lead: 'SIGN_UP',
+  ViewContent: 'VIEW_CONTENT',
+  AddToCart: 'ADD_CART',
+  InitiateCheckout: 'START_CHECKOUT',
+}
+
+async function sendSnapchatCapi(config: SnapchatCapiConfig, payload: SignalPayload): Promise<void> {
+  const body = {
+    data: [
+      {
+        event_name: SNAPCHAT_EVENT_NAME[payload.eventType],
+        event_time: Math.floor(payload.eventTime.getTime() / 1000),
+        event_id: crypto.randomUUID(),
+        action_source: 'WEBSITE',
+        user_data: {
+          em: payload.email ? [sha256(payload.email)] : undefined,
+          client_ip_address: payload.ip ?? undefined,
+          client_user_agent: payload.userAgent ?? undefined,
+        },
+        custom_data: {
+          value: payload.value ?? undefined,
+          currency: payload.currency ?? 'USD',
+        },
+      },
+    ],
+  }
+
+  const res = await fetch(
+    `https://tr.snapchat.com/v3/${config.pixel_id}/events?access_token=${encodeURIComponent(config.access_token)}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Snapchat Conversions API request failed (${res.status}): ${text}`)
+  }
+}
+
 // Fires the given event to every ad-platform integration the client has configured.
 // Never throws — a failed/missing integration must never block the purchase, lead, or
 // event flow that triggered it, same philosophy as jobs/adCosts/run.ts's per-client
 // try/catch.
 export async function sendConversionSignals(clientId: string, payload: SignalPayload): Promise<void> {
   const { rows } = await db.query<{ platform: string; config: Record<string, string> }>(
-    `SELECT platform, config FROM client_integrations WHERE client_id = $1 AND platform IN ('facebook_capi', 'google_ads')`,
+    `SELECT platform, config FROM client_integrations
+     WHERE client_id = $1 AND platform IN ('facebook_capi', 'google_ads', 'tiktok_ads', 'snapchat_ads')`,
     [clientId]
   )
 
@@ -124,6 +223,8 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
     | FacebookCapiConfig
     | undefined
   const googleConfig = rows.find((r) => r.platform === 'google_ads')?.config as GoogleAdsSignalConfig | undefined
+  const tiktokConfig = rows.find((r) => r.platform === 'tiktok_ads')?.config as TikTokEventsConfig | undefined
+  const snapchatConfig = rows.find((r) => r.platform === 'snapchat_ads')?.config as SnapchatCapiConfig | undefined
 
   const tasks: Promise<void>[] = []
 
@@ -131,6 +232,25 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
     tasks.push(
       sendFacebookCapi(facebookConfig, payload).catch((err) => {
         console.error(`[conversionSignals] Facebook CAPI failed for client=${clientId}:`, (err as Error).message)
+      })
+    )
+  }
+
+  if (tiktokConfig?.pixel_code && tiktokConfig?.access_token) {
+    tasks.push(
+      sendTikTokEvents(tiktokConfig, payload).catch((err) => {
+        console.error(`[conversionSignals] TikTok Events API failed for client=${clientId}:`, (err as Error).message)
+      })
+    )
+  }
+
+  if (snapchatConfig?.pixel_id && snapchatConfig?.access_token) {
+    tasks.push(
+      sendSnapchatCapi(snapchatConfig, payload).catch((err) => {
+        console.error(
+          `[conversionSignals] Snapchat Conversions API failed for client=${clientId}:`,
+          (err as Error).message
+        )
       })
     )
   }

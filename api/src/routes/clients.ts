@@ -339,6 +339,34 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', { webhook_secret }))
   })
 
+  // Save or update a TikTok Ads integration — Step 16 (signals) / Step 19 (cost sync)
+  // share this same client_integrations row, unlike Facebook's split facebook_ads/
+  // facebook_capi — TikTok's Events API and Marketing API use the same access token.
+  app.post<{
+    Params: { id: string }
+    Body: { access_token: string; advertiser_id: string; pixel_code: string }
+  }>('/clients/:id/integrations/tiktok-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, advertiser_id, pixel_code } = req.body
+    if (!access_token || !advertiser_id || !pixel_code) {
+      return reply.code(400).send({ error: 'access_token, advertiser_id, and pixel_code required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code }))
+  })
+
+  // Save or update a Snapchat Ads integration — Step 16 (signals) / Step 19 (cost sync).
+  app.post<{
+    Params: { id: string }
+    Body: { access_token: string; pixel_id: string; ad_account_id: string }
+  }>('/clients/:id/integrations/snapchat-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, pixel_id, ad_account_id } = req.body
+    if (!access_token || !pixel_id || !ad_account_id) {
+      return reply.code(400).send({ error: 'access_token, pixel_id, and ad_account_id required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id }))
+  })
+
   // Save or update a Customers.ai integration — Step 12. See routes/webhooks/customersAi.ts
   // for why this is a shared secret rather than a real signature (same reason as GoHighLevel).
   app.post<{

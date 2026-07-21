@@ -366,6 +366,52 @@ export function applyLeadTag(clientId: string, email: string, tagId: string): Pr
   });
 }
 
+// Step 28 — Audience Sync. Segments are re-evaluated against live data on every
+// sync, not a frozen snapshot at creation time.
+export type AudiencePlatform = "facebook_custom_audience" | "google_customer_match";
+export type SegmentType = "all_customers" | "ltv_above" | "tag";
+
+export interface SegmentDefinition {
+  type: SegmentType;
+  threshold?: number;
+  tag_name?: string;
+}
+
+export interface AudienceSync {
+  id: string;
+  client_id: string;
+  platform: AudiencePlatform;
+  name: string;
+  segment_definition: SegmentDefinition;
+  external_audience_id: string | null;
+  last_synced_at: string | null;
+  last_sync_count: number | null;
+  last_sync_error: string | null;
+  created_at: string;
+}
+
+export function getAudienceSyncs(clientId: string): Promise<AudienceSync[]> {
+  return fetchJson<AudienceSync[]>(`/clients/${clientId}/audience-syncs`);
+}
+
+export function createAudienceSync(
+  clientId: string,
+  input: { platform: AudiencePlatform; name: string; segment_definition: SegmentDefinition }
+): Promise<AudienceSync> {
+  return fetch(`${API_URL}/clients/${clientId}/audience-syncs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function runAudienceSync(syncId: string): Promise<AudienceSync> {
+  return mutateJson<AudienceSync>(`/audience-syncs/${syncId}/run`, "POST");
+}
+
 // Step 26 — Custom Costs: manual ad-spend entry for platforms without a native
 // cost-sync integration. Folded into the overview/campaigns/funnel reports server-side.
 export interface CustomCost {

@@ -18,7 +18,8 @@
     "setup:remarketing": "tsx scripts/setup-remarketing-client.ts",
     "migrate": "npm run migrate --workspace=api",
     "sync:ad-costs": "npm run sync:ad-costs --workspace=api",
-    "refresh:ltv": "npm run refresh:ltv --workspace=api"
+    "refresh:ltv": "npm run refresh:ltv --workspace=api",
+    "sync:audiences": "npm run sync:audiences --workspace=api"
   },
   "devDependencies": {
     "tsx": "^4.16.2",

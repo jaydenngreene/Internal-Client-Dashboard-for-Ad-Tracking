@@ -2,13 +2,14 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import * as dotenv from 'dotenv'
+import * as path from 'path'
 
 import { pageviewRoutes } from './routes/pageview'
 import { identifyRoutes } from './routes/identify'
 import { conversionRoutes } from './routes/conversion'
 import { webhookRoutes } from './routes/webhooks'
 
-dotenv.config()
+dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
 const app = Fastify({ logger: true, trustProxy: true })
 

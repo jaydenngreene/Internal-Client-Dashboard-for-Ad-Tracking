@@ -8,8 +8,17 @@ export interface NormalizedConversion {
   processor: string
 }
 
-// Insert a purchase, walk back to the ad session that acquired the customer,
-// write attribution credit, and roll the revenue into customer_ltv.
+type AttributionModel = 'first_click' | 'last_click' | 'linear'
+
+interface TouchSession {
+  id: string
+  utm_campaign: string | null
+  utm_content: string | null
+  utm_source: string | null
+}
+
+// Insert a purchase, walk back through the customer's ad sessions, split revenue
+// credit across them per the client's attribution model, and roll revenue into customer_ltv.
 export async function recordPurchase(clientId: string, conv: NormalizedConversion): Promise<void> {
   if (!conv.email || !conv.revenue) return
 
@@ -34,24 +43,40 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
 
   const visitorId = identityRows[0].visitor_id
 
-  const { rows: sessionRows } = await db.query(
+  const { rows: sessionRows } = await db.query<TouchSession>(
     `SELECT id, utm_campaign, utm_content, utm_source
      FROM sessions
      WHERE visitor_id = $1
        AND started_at >= NOW() - INTERVAL '90 days'
-     ORDER BY started_at ASC
-     LIMIT 1`,
+     ORDER BY started_at ASC`,
     [visitorId]
   )
   if (sessionRows.length === 0) return
 
-  const session = sessionRows[0]
-
-  await db.query(
-    `INSERT INTO attributions (client_id, purchase_id, session_id, model, credit_fraction, attributed_revenue)
-     VALUES ($1, $2, $3, 'first_click', 1.0, $4)`,
-    [clientId, purchaseId, session.id, conv.revenue]
+  const { rows: clientRows } = await db.query<{ attribution_model: AttributionModel }>(
+    'SELECT attribution_model FROM clients WHERE id = $1',
+    [clientId]
   )
+  const model: AttributionModel = clientRows[0]?.attribution_model ?? 'first_click'
+
+  // Acquisition channel for LTV is always the true first touch, independent of
+  // attribution model — the model only changes how revenue credit is split for ROAS.
+  const firstSession = sessionRows[0]
+
+  const creditedTouches: Array<{ session: TouchSession; fraction: number }> =
+    model === 'last_click'
+      ? [{ session: sessionRows[sessionRows.length - 1], fraction: 1 }]
+      : model === 'linear'
+        ? sessionRows.map((session) => ({ session, fraction: 1 / sessionRows.length }))
+        : [{ session: firstSession, fraction: 1 }]
+
+  for (const { session, fraction } of creditedTouches) {
+    await db.query(
+      `INSERT INTO attributions (client_id, purchase_id, session_id, model, credit_fraction, attributed_revenue)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [clientId, purchaseId, session.id, model, fraction, conv.revenue * fraction]
+    )
+  }
 
   await db.query(
     `INSERT INTO customer_ltv
@@ -62,11 +87,13 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
        revenue_lifetime = customer_ltv.revenue_lifetime + EXCLUDED.revenue_lifetime,
        purchase_count   = customer_ltv.purchase_count + 1,
        last_updated     = NOW()`,
-    [clientId, email, session.utm_campaign, session.utm_content, session.utm_source, conv.revenue]
+    [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, conv.revenue]
   )
 }
 
-// Deduct a refund from the matching purchase, its attribution record, and customer_ltv.
+// Deduct a refund from the matching purchase, its attribution record(s), and customer_ltv.
+// Refund is prorated across attribution rows by credit_fraction, so linear-model
+// purchases (multiple touches) get the refund split the same way the revenue was.
 export async function recordRefund(clientId: string, orderId: string, refundAmount: number): Promise<void> {
   if (refundAmount <= 0) return
 
@@ -92,7 +119,7 @@ export async function recordRefund(clientId: string, orderId: string, refundAmou
 
   await db.query(
     `UPDATE attributions
-     SET attributed_revenue = GREATEST(0, attributed_revenue - $2)
+     SET attributed_revenue = GREATEST(0, attributed_revenue - ($2 * credit_fraction))
      WHERE purchase_id = $1`,
     [purchaseId, refundAmount]
   )

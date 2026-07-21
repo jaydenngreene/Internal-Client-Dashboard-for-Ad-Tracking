@@ -33,6 +33,26 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
+  // Change a client's attribution model (first_click / last_click / linear)
+  app.patch<{
+    Params: { id: string }
+    Body: { attribution_model: string }
+  }>('/clients/:id/attribution-model', async (req, reply) => {
+    const { id } = req.params
+    const { attribution_model } = req.body
+
+    if (!['first_click', 'last_click', 'linear'].includes(attribution_model)) {
+      return reply.code(400).send({ error: 'attribution_model must be first_click, last_click, or linear' })
+    }
+
+    const { rows } = await db.query(
+      'UPDATE clients SET attribution_model = $1 WHERE id = $2 RETURNING *',
+      [attribution_model, id]
+    )
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
   // Save or update a Shopify integration for a client
   app.post<{
     Params: { id: string }

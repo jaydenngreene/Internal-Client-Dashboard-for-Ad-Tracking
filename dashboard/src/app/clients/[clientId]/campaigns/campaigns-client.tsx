@@ -14,7 +14,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 const BREAKDOWN_OPTIONS: { value: FunnelBreakdown; label: string }[] = [
   { value: "campaign", label: "Campaign" },
   { value: "source", label: "Source" },
+  { value: "keyword", label: "Keyword" },
 ];
+
+const BREAKDOWN_TITLE: Record<FunnelBreakdown, string> = {
+  campaign: "Campaigns",
+  source: "Traffic Sources",
+  keyword: "Keywords",
+};
+
+const BREAKDOWN_COLUMN_LABEL: Record<FunnelBreakdown, string> = {
+  campaign: "Campaign",
+  source: "Source",
+  keyword: "Keyword",
+};
 
 export function CampaignsClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
@@ -52,13 +65,10 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       {data && (
         <Card className="px-0">
           <CardHeader className="px-4">
-            <CardTitle>{breakdown === "campaign" ? "Campaigns" : "Traffic Sources"}</CardTitle>
+            <CardTitle>{BREAKDOWN_TITLE[breakdown]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <CampaignBreakdownTable
-              rows={data.campaigns}
-              nameColumnLabel={breakdown === "campaign" ? "Campaign" : "Source"}
-            />
+            <CampaignBreakdownTable rows={data.campaigns} nameColumnLabel={BREAKDOWN_COLUMN_LABEL[breakdown]} />
           </CardContent>
         </Card>
       )}

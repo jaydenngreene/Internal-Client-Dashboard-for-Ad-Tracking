@@ -111,7 +111,7 @@ export interface LtvReport {
   campaigns: LtvCampaignRow[];
 }
 
-export type FunnelBreakdown = "campaign" | "source";
+export type FunnelBreakdown = "campaign" | "source" | "keyword";
 
 export interface FunnelRow {
   name: string;

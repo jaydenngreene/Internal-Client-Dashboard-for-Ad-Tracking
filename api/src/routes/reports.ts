@@ -70,7 +70,7 @@ interface CallsQuery {
 interface FunnelQuery {
   from?: string
   to?: string
-  breakdown?: 'campaign' | 'source'
+  breakdown?: 'campaign' | 'source' | 'keyword'
 }
 
 interface AgencyOverviewQuery {
@@ -197,6 +197,45 @@ function getRevenueBySource(clientId: string, from: string, to: string) {
   )
 }
 
+// Keyword/search-term breakdown (Step 27) — utm_term was already captured on every
+// session (Step 1) but never surfaced in a report until now. No keyword-level
+// ad_costs exists (ad_costs is ad-level, not keyword-level, from any current
+// cost-sync fetcher), so this breakdown has no spend query at all — cost/matched
+// degrade to 0/false for every row, same "no cost counterpart" convention every
+// other unmatched row in this file already uses. True keyword-level ROAS would need
+// a separate Google Ads keyword_view pull into a new table — a bigger lift, not this.
+function getLeadsByKeyword(clientId: string, from: string, to: string) {
+  return db.query<{ utm_term: string | null; leads: string }>(
+    `SELECT s.utm_term, COUNT(DISTINCT l.id) AS leads
+     FROM leads l
+     JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
+     JOIN LATERAL (
+       SELECT utm_term FROM sessions
+       WHERE visitor_id = i.visitor_id
+         AND started_at <= l.created_at
+         AND started_at >= l.created_at - INTERVAL '90 days'
+       ORDER BY started_at ASC
+       LIMIT 1
+     ) s ON true
+     WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_term`,
+    [clientId, from, to]
+  )
+}
+
+function getRevenueByKeyword(clientId: string, from: string, to: string) {
+  return db.query<{ utm_term: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_term, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+     FROM attributions a
+     JOIN sessions s ON s.id = a.session_id
+     JOIN purchases p ON p.id = a.purchase_id
+     WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_term`,
+    [clientId, from, to]
+  )
+}
+
+const normalizeKeyword = (name: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeCampaignName = (name: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeSource = (name: string | null) => (name ?? '').trim().toLowerCase().replace(/_ads$/, '')
 
@@ -688,7 +727,8 @@ export async function reportRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
-      const breakdown = req.query.breakdown === 'source' ? 'source' : 'campaign'
+      const breakdown =
+        req.query.breakdown === 'source' ? 'source' : req.query.breakdown === 'keyword' ? 'keyword' : 'campaign'
 
       const [spendRows, leadRows, revenueRows] =
         breakdown === 'source'
@@ -697,13 +737,20 @@ export async function reportRoutes(app: FastifyInstance) {
               getLeadsBySource(clientId, from, to),
               getRevenueBySource(clientId, from, to),
             ])
-          : await Promise.all([
-              getSpendByCampaign(clientId, from, to),
-              getLeadsByCampaign(clientId, from, to),
-              getRevenueByCampaign(clientId, from, to),
-            ])
+          : breakdown === 'keyword'
+            ? await Promise.all([
+                Promise.resolve({ rows: [] as SpendRow[] }),
+                getLeadsByKeyword(clientId, from, to),
+                getRevenueByKeyword(clientId, from, to),
+              ])
+            : await Promise.all([
+                getSpendByCampaign(clientId, from, to),
+                getLeadsByCampaign(clientId, from, to),
+                getRevenueByCampaign(clientId, from, to),
+              ])
 
-      const normalize = breakdown === 'source' ? normalizeSource : normalizeCampaignName
+      const normalize =
+        breakdown === 'source' ? normalizeSource : breakdown === 'keyword' ? normalizeKeyword : normalizeCampaignName
 
       interface Row {
         name: string
@@ -734,17 +781,26 @@ export async function reportRoutes(app: FastifyInstance) {
         row.cost = parseFloat(r.cost)
       }
 
+      const fieldFor = (r: unknown): string | null =>
+        breakdown === 'source'
+          ? (r as { utm_source: string | null }).utm_source
+          : breakdown === 'keyword'
+            ? (r as { utm_term: string | null }).utm_term
+            : (r as { utm_campaign: string | null }).utm_campaign
+      const fallbackFor = () =>
+        breakdown === 'source' ? '(no utm_source)' : breakdown === 'keyword' ? '(no utm_term)' : '(no utm_campaign)'
+
       for (const r of leadRows.rows) {
-        const name = breakdown === 'source' ? (r as { utm_source: string | null }).utm_source : (r as { utm_campaign: string | null }).utm_campaign
+        const name = fieldFor(r)
         const key = normalize(name)
-        const row = getOrCreate(key, name ?? (breakdown === 'source' ? '(no utm_source)' : '(no utm_campaign)'))
+        const row = getOrCreate(key, name ?? fallbackFor())
         row.leads = parseInt(r.leads, 10)
       }
 
       for (const r of revenueRows.rows) {
-        const name = breakdown === 'source' ? (r as { utm_source: string | null }).utm_source : (r as { utm_campaign: string | null }).utm_campaign
+        const name = fieldFor(r)
         const key = normalize(name)
-        const row = getOrCreate(key, name ?? (breakdown === 'source' ? '(no utm_source)' : '(no utm_campaign)'))
+        const row = getOrCreate(key, name ?? fallbackFor())
         row.revenue = parseFloat(r.revenue)
         row.sales = parseInt(r.sales, 10)
       }

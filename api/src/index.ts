@@ -11,6 +11,7 @@ import { webhookRoutes } from './routes/webhooks'
 import { shopifyWebhookRoutes } from './routes/webhooks/shopify'
 import { stripeWebhookRoutes } from './routes/webhooks/stripe'
 import { clientRoutes } from './routes/clients'
+import { reportRoutes } from './routes/reports'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -40,6 +41,7 @@ app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
 app.register(stripeWebhookRoutes)
 app.register(clientRoutes)
+app.register(reportRoutes)
 
 const start = async () => {
   try {

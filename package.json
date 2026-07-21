@@ -10,6 +10,7 @@
   "scripts": {
     "dev:api": "npm run dev --workspace=api",
     "dev:pixel": "npm run dev --workspace=pixel",
+    "dev:dashboard": "npm run dev --workspace=dashboard",
     "build": "npm run build --workspaces",
     "setup:shopify": "tsx scripts/setup-shopify-client.ts",
     "setup:stripe": "tsx scripts/setup-stripe-client.ts",

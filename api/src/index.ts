@@ -22,6 +22,7 @@ import { dniRoutes } from './routes/dni'
 import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
 import { remarketingRoutes } from './routes/remarketing'
+import { customCostsRoutes } from './routes/customCosts'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -62,6 +63,7 @@ app.register(dniRoutes)
 app.register(callRoutes)
 app.register(shopifyAppRoutes)
 app.register(remarketingRoutes)
+app.register(customCostsRoutes)
 
 // Public Attribution API (Step 11) — the same report routes, mounted again under
 // /api/v1 with bearer-token auth, so this data can feed other tools without going

@@ -275,3 +275,29 @@ export interface CohortsReport {
 export function getCohorts(clientId: string, months = 12): Promise<CohortsReport> {
   return fetchJson<CohortsReport>(`/clients/${clientId}/reports/cohorts?months=${months}`);
 }
+
+// Step 26 — Custom Costs: manual ad-spend entry for platforms without a native
+// cost-sync integration. Folded into the overview/campaigns/funnel reports server-side.
+export interface CustomCost {
+  id: string;
+  client_id: string;
+  platform_label: string;
+  date: string;
+  spend: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export function addCustomCost(
+  clientId: string,
+  input: { platform_label: string; date: string; spend: number; notes?: string }
+): Promise<CustomCost> {
+  return fetch(`${API_URL}/clients/${clientId}/custom-costs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}

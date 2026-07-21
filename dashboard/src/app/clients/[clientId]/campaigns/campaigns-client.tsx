@@ -7,6 +7,7 @@ import { RangePreset, resolveRange } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
+import { AddCustomCostForm } from "@/components/add-custom-cost-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -43,6 +44,8 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       {isError && (
         <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>
       )}
+
+      <AddCustomCostForm clientId={clientId} />
 
       {isLoading && <Skeleton className="h-96 w-full" />}
 

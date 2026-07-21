@@ -91,13 +91,23 @@ interface SpendRow {
   clicks: string
 }
 
+// Custom Costs (Step 26) have no campaign/ad structure, just a free-text label — they
+// fold in as their own unmatched row (platform_label doubling as both name and
+// platform), same "matched: false when there's no revenue counterpart" convention
+// every other unmatched row in this file already uses.
 function getSpendByCampaign(clientId: string, from: string, to: string) {
   return db.query<SpendRow>(
     `SELECT campaign_id, campaign_name, platform,
             SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks
      FROM ad_costs
      WHERE client_id = $1 AND date BETWEEN $2 AND $3
-     GROUP BY campaign_id, campaign_name, platform`,
+     GROUP BY campaign_id, campaign_name, platform
+     UNION ALL
+     SELECT NULL AS campaign_id, platform_label AS campaign_name, platform_label AS platform,
+            SUM(spend) AS cost, 0 AS impressions, 0 AS clicks
+     FROM custom_costs
+     WHERE client_id = $1 AND date BETWEEN $2 AND $3
+     GROUP BY platform_label`,
     [clientId, from, to]
   )
 }
@@ -146,7 +156,12 @@ function getSpendBySource(clientId: string, from: string, to: string) {
     `SELECT platform, SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks
      FROM ad_costs
      WHERE client_id = $1 AND date BETWEEN $2 AND $3
-     GROUP BY platform`,
+     GROUP BY platform
+     UNION ALL
+     SELECT platform_label AS platform, SUM(spend) AS cost, 0 AS impressions, 0 AS clicks
+     FROM custom_costs
+     WHERE client_id = $1 AND date BETWEEN $2 AND $3
+     GROUP BY platform_label`,
     [clientId, from, to]
   )
 }
@@ -194,7 +209,10 @@ export async function reportRoutes(app: FastifyInstance) {
 
       const [costTotal, revenueTotal, leadsTotal, salesTotal, costByDay, revenueByDay] = await Promise.all([
         db.query<{ total: string }>(
-          `SELECT COALESCE(SUM(spend), 0) AS total FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3`,
+          `SELECT
+             (SELECT COALESCE(SUM(spend), 0) FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3) +
+             (SELECT COALESCE(SUM(spend), 0) FROM custom_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3)
+             AS total`,
           [clientId, from, to]
         ),
         db.query<{ total: string }>(
@@ -213,8 +231,12 @@ export async function reportRoutes(app: FastifyInstance) {
           [clientId, from, to]
         ),
         db.query<{ date: string; total: string }>(
-          `SELECT date::text, SUM(spend) AS total FROM ad_costs
-           WHERE client_id = $1 AND date BETWEEN $2 AND $3 GROUP BY date`,
+          `SELECT date::text, SUM(spend) AS total FROM (
+             SELECT date, spend FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3
+             UNION ALL
+             SELECT date, spend FROM custom_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3
+           ) combined
+           GROUP BY date`,
           [clientId, from, to]
         ),
         db.query<{ date: string; total: string }>(

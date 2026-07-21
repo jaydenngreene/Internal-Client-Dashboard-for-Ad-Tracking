@@ -339,11 +339,40 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', { webhook_secret }))
   })
 
+  // Save or update a Customers.ai integration — Step 12. See routes/webhooks/customersAi.ts
+  // for why this is a shared secret rather than a real signature (same reason as GoHighLevel).
+  app.post<{
+    Params: { id: string }
+    Body: { webhook_secret: string }
+  }>('/clients/:id/integrations/customers-ai', async (req, reply) => {
+    const { id } = req.params
+    const { webhook_secret } = req.body
+    if (!webhook_secret) {
+      return reply.code(400).send({ error: 'webhook_secret required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'customers_ai', { webhook_secret }))
+  })
+
+  // Save or update the Klaviyo integration used by the Step 12 remarketing agent's
+  // (not-yet-auto-wired) dispatch step — see lib/klaviyoDispatch.ts. list_id is the
+  // Klaviyo list the client's own flow/campaign is set up to react to.
+  app.post<{
+    Params: { id: string }
+    Body: { api_key: string; list_id: string }
+  }>('/clients/:id/integrations/klaviyo', async (req, reply) => {
+    const { id } = req.params
+    const { api_key, list_id } = req.body
+    if (!api_key || !list_id) {
+      return reply.code(400).send({ error: 'api_key and list_id required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'klaviyo', { api_key, list_id }))
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(
       `SELECT platform, created_at,
-              config - 'webhook_secret' - 'access_token' - 'refresh_token' - 'client_secret' - 'signature_key' - 'auth_token' AS config
+              config - 'webhook_secret' - 'access_token' - 'refresh_token' - 'client_secret' - 'signature_key' - 'auth_token' - 'api_key' AS config
        FROM client_integrations WHERE client_id = $1`,
       [req.params.id]
     )

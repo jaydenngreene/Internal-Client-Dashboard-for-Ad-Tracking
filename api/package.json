@@ -11,6 +11,7 @@
     "refresh:ltv": "node -r tsx/cjs src/jobs/ltv/run.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.4",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^13.0.0",
     "adm-zip": "^0.6.0",

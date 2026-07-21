@@ -15,11 +15,13 @@ import { paypalWebhookRoutes } from './routes/webhooks/paypal'
 import { squareWebhookRoutes } from './routes/webhooks/square'
 import { goHighLevelWebhookRoutes } from './routes/webhooks/gohighlevel'
 import { twilioWebhookRoutes } from './routes/webhooks/twilio'
+import { customersAiWebhookRoutes } from './routes/webhooks/customersAi'
 import { clientRoutes } from './routes/clients'
 import { reportRoutes } from './routes/reports'
 import { dniRoutes } from './routes/dni'
 import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
+import { remarketingRoutes } from './routes/remarketing'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -53,11 +55,13 @@ app.register(paypalWebhookRoutes)
 app.register(squareWebhookRoutes)
 app.register(goHighLevelWebhookRoutes)
 app.register(twilioWebhookRoutes)
+app.register(customersAiWebhookRoutes)
 app.register(clientRoutes)
 app.register(reportRoutes)
 app.register(dniRoutes)
 app.register(callRoutes)
 app.register(shopifyAppRoutes)
+app.register(remarketingRoutes)
 
 // Public Attribution API (Step 11) — the same report routes, mounted again under
 // /api/v1 with bearer-token auth, so this data can feed other tools without going

@@ -159,6 +159,14 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function mutateJson<T>(path: string, method: "PATCH" | "POST"): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { method });
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status}): ${path}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 function rangeQuery(range?: DateRange, extra?: Record<string, string>): string {
   const params = new URLSearchParams({ ...(range ? { from: range.from, to: range.to } : {}), ...extra });
   const qs = params.toString();
@@ -203,4 +211,45 @@ export function getFunnel(
 
 export function getAgencyOverview(range?: DateRange): Promise<AgencyOverviewReport> {
   return fetchJson<AgencyOverviewReport>(`/reports/agency-overview${rangeQuery(range)}`);
+}
+
+// Step 12 — AI remarketing agent. Candidates are deanonymized visitors (via Customers.ai)
+// with an AI-drafted outreach message awaiting human review. Approve/reject only change
+// review status here — nothing on this page ever sends anything to a real inbox; see
+// api/src/routes/remarketing.ts for why dispatch is a separate, not-yet-wired-in step.
+export type RemarketingStatus = "pending" | "approved" | "rejected" | "dispatched";
+
+export interface RemarketingCandidate {
+  id: string;
+  client_id: string;
+  source: string;
+  email: string;
+  phone: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  page_url: string | null;
+  page_title: string | null;
+  identified_at: string;
+  status: RemarketingStatus;
+  draft_subject: string | null;
+  draft_body: string | null;
+  draft_generated_at: string | null;
+  draft_error: string | null;
+}
+
+export function getRemarketingCandidates(
+  clientId: string,
+  status: RemarketingStatus = "pending"
+): Promise<RemarketingCandidate[]> {
+  return fetchJson<RemarketingCandidate[]>(
+    `/clients/${clientId}/remarketing/candidates${rangeQuery(undefined, { status })}`
+  );
+}
+
+export function approveRemarketingCandidate(id: string): Promise<RemarketingCandidate> {
+  return mutateJson<RemarketingCandidate>(`/remarketing/${id}/approve`, "PATCH");
+}
+
+export function rejectRemarketingCandidate(id: string): Promise<RemarketingCandidate> {
+  return mutateJson<RemarketingCandidate>(`/remarketing/${id}/reject`, "PATCH");
 }

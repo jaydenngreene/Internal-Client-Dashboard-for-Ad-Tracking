@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getFunnel, FunnelBreakdown } from "@/lib/api";
+import { getFunnel, getClients, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
@@ -42,13 +42,19 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
     queryFn: () => getFunnel(clientId, range, breakdown),
   });
 
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
+  const niche = clients?.find((c) => c.id === clientId)?.niche;
+  const goal = campaignGoalForNiche(niche ?? "other");
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Campaigns</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Cost → leads → sales → revenue → ROAS, broken down by campaign, source, keyword, or individual creative
+            {goal === "leads"
+              ? "Cost, cost per lead, revenue, and ROAS, broken down by campaign, source, keyword, or individual creative"
+              : "Cost, cost per purchase, revenue, and ROAS, broken down by campaign, source, keyword, or individual creative"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -71,7 +77,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
             <CardTitle>{BREAKDOWN_TITLE[breakdown]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <CampaignBreakdownTable rows={data.campaigns} nameColumnLabel={BREAKDOWN_COLUMN_LABEL[breakdown]} />
+            <CampaignBreakdownTable rows={data.campaigns} nameColumnLabel={BREAKDOWN_COLUMN_LABEL[breakdown]} goal={goal} />
           </CardContent>
         </Card>
       )}

@@ -117,7 +117,10 @@
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-critical: #d03b3b;
-  --sidebar: #0a0e17;
+  /* Sidebar sits one step above the page canvas in the same navy hue family
+     (background < sidebar < card), giving the nav rail a real second-neutral
+     surface instead of matching the content canvas exactly. */
+  --sidebar: #0d1220;
   --sidebar-foreground: #f5f6fa;
   --sidebar-primary: #3987e5;
   --sidebar-primary-foreground: #ffffff;

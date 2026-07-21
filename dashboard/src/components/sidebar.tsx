@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { Radar } from "lucide-react";
 import { getClients } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const navLinkBase =
+  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar";
 
 // `niches` restricts a nav item to clients of that niche (e.g. Subscriptions only
 // makes sense for niche='saas'); omitted entirely means it shows for every client —
@@ -38,9 +42,12 @@ export function Sidebar() {
   const visibleNavItems = NAV_ITEMS.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche)));
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-sidebar">
-      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-        <span className="text-sm font-semibold tracking-wide text-sidebar-foreground">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+      <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
+          <Radar className="size-4" strokeWidth={2.25} />
+        </span>
+        <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
           Ad Tracking
         </span>
       </div>
@@ -50,7 +57,8 @@ export function Sidebar() {
           <Link
             href="/agency"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+              navLinkBase,
+              "font-medium",
               isAgencyOverview
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -87,7 +95,7 @@ export function Sidebar() {
                   <Link
                     href={`/clients/${client.id}/overview`}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                      navLinkBase,
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -122,7 +130,8 @@ export function Sidebar() {
                       <Link
                         href={href}
                         className={cn(
-                          "flex items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors",
+                          navLinkBase,
+                          "justify-between",
                           isActive
                             ? "bg-sidebar-accent text-sidebar-accent-foreground"
                             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"

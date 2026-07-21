@@ -12,6 +12,15 @@ export interface Client {
   created_at: string;
 }
 
+// Which funnel-stage metrics matter depends on what the client is actually selling.
+// A call/lead_gen/saas business is optimizing for cost per lead; ecommerce/
+// info_product/other are optimizing for cost per purchase and order value.
+const LEAD_GOAL_NICHES: Niche[] = ["call", "lead_gen", "saas"];
+
+export function campaignGoalForNiche(niche: Niche): "leads" | "sales" {
+  return LEAD_GOAL_NICHES.includes(niche) ? "leads" : "sales";
+}
+
 export interface DateRange {
   from: string;
   to: string;
@@ -129,6 +138,8 @@ export interface FunnelRow {
   leads: number;
   cpl: number | null;
   sales: number;
+  costPerPurchase: number | null;
+  aov: number | null;
   revenue: number;
   profit: number;
   roas: number | null;

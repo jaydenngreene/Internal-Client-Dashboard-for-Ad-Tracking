@@ -26,7 +26,7 @@ export function SubscriptionsClient({ clientId }: { clientId: string }) {
         <div>
           <h1 className="text-lg font-semibold">Subscriptions</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            MRR, trial conversion, and churn — current MRR is a live snapshot, the rest is scoped to the selected range
+            MRR, trial conversion, and churn. Current MRR is a live snapshot, the rest is scoped to the selected range
           </p>
         </div>
         <DateRangeSelect value={preset} onChange={setPreset} />

@@ -27,9 +27,9 @@ const STAGE_OPTIONS: { value: Stage; label: string }[] = [
 ];
 
 const STAGE_SUBTITLE: Record<Stage, string> = {
-  tof: "Top of funnel — leads coming in and what they cost",
-  mof: "Middle of funnel — engagement between first click and conversion",
-  bof: "Bottom of funnel — who actually buys, how fast, and what sticks",
+  tof: "Top of funnel: leads coming in and what they cost",
+  mof: "Middle of funnel: engagement between first click and conversion",
+  bof: "Bottom of funnel: who actually buys, how fast, and what sticks",
 };
 
 export function FunnelClient({ clientId }: { clientId: string }) {
@@ -103,7 +103,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
             <CardContent className="px-0">
               <p className="text-xs font-medium text-muted-foreground">Cost Per Lead</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {tof.data.cpl === null ? "—" : formatCurrency(tof.data.cpl)}
+                {tof.data.cpl === null ? "-" : formatCurrency(tof.data.cpl)}
               </p>
             </CardContent>
           </Card>
@@ -129,7 +129,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               <CardContent className="px-0">
                 <p className="text-xs font-medium text-muted-foreground">Avg Pageviews / Session</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {mof.data.avgPageviewsPerSession === null ? "—" : mof.data.avgPageviewsPerSession.toFixed(1)}
+                  {mof.data.avgPageviewsPerSession === null ? "-" : mof.data.avgPageviewsPerSession.toFixed(1)}
                 </p>
               </CardContent>
             </Card>
@@ -211,7 +211,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               <CardContent className="px-0">
                 <p className="text-xs font-medium text-muted-foreground">Avg Days to Convert</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {bof.data.avgDaysToConvert === null ? "—" : bof.data.avgDaysToConvert.toFixed(1)}
+                  {bof.data.avgDaysToConvert === null ? "-" : bof.data.avgDaysToConvert.toFixed(1)}
                 </p>
               </CardContent>
             </Card>
@@ -300,7 +300,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                     <p className="text-xs font-medium text-muted-foreground">Avg Qualification Score</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums">
                       {calls.data.avgQualificationScore === null
-                        ? "—"
+                        ? "-"
                         : calls.data.avgQualificationScore.toFixed(2)}
                     </p>
                   </CardContent>
@@ -309,7 +309,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   <CardContent className="px-0">
                     <p className="text-xs font-medium text-muted-foreground">Avg Call Duration</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {calls.data.avgDurationSeconds === null ? "—" : formatDuration(calls.data.avgDurationSeconds)}
+                      {calls.data.avgDurationSeconds === null ? "-" : formatDuration(calls.data.avgDurationSeconds)}
                     </p>
                   </CardContent>
                 </Card>
@@ -317,7 +317,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   <CardContent className="px-0">
                     <p className="text-xs font-medium text-muted-foreground">Top Campaign</p>
                     <p className="mt-1 truncate text-lg font-semibold">
-                      {calls.data.byCampaign[0]?.campaign_name ?? "—"}
+                      {calls.data.byCampaign[0]?.campaign_name ?? "-"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {calls.data.byCampaign[0] ? `${formatNumber(calls.data.byCampaign[0].calls)} calls` : ""}

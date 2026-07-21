@@ -7,10 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/ui/field-label";
 import { formatCurrency } from "@/lib/format";
 
-const inputClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+// Native <select> can't render through the Input component (different element), but
+// shares its exact visual vocabulary so it still reads as the same form-control family.
+const selectClass =
+  "flex h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 const TAG_TYPE_LABEL: Record<TagType, string> = {
   freeform: "Freeform",
@@ -50,13 +54,13 @@ function CreateTagForm({ clientId }: { clientId: string }) {
       }}
     >
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tag name</label>
-        <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. webinar_attended" />
+        <FieldLabel>Tag name</FieldLabel>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. webinar_attended" />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Type</label>
+        <FieldLabel>Type</FieldLabel>
         <select
-          className={inputClass}
+          className={selectClass}
           value={tagType}
           onChange={(e) => setTagType(e.target.value as TagType)}
         >
@@ -67,14 +71,14 @@ function CreateTagForm({ clientId }: { clientId: string }) {
       </div>
       {tagType === "funnel_stage" && (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Stage order</label>
-          <input type="number" className={`${inputClass} w-20`} value={stageOrder} onChange={(e) => setStageOrder(e.target.value)} />
+          <FieldLabel>Stage order</FieldLabel>
+          <Input type="number" className="w-20" value={stageOrder} onChange={(e) => setStageOrder(e.target.value)} />
         </div>
       )}
       {tagType === "product" && (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Product value</label>
-          <input type="number" min="0" step="0.01" className={`${inputClass} w-24`} value={productValue} onChange={(e) => setProductValue(e.target.value)} />
+          <FieldLabel>Product value</FieldLabel>
+          <Input type="number" min="0" step="0.01" className="w-24" value={productValue} onChange={(e) => setProductValue(e.target.value)} />
         </div>
       )}
       <Button type="submit" size="sm" disabled={!name.trim() || mutation.isPending}>
@@ -113,7 +117,7 @@ function TagsTable({ clientId, tags }: { clientId: string; tags: Tag[] }) {
               <Badge variant="outline">{TAG_TYPE_LABEL[tag.tag_type]}</Badge>
             </TableCell>
             <TableCell className="text-right tabular-nums">
-              {tag.tag_type === "product" && tag.product_value != null ? formatCurrency(tag.product_value) : tag.stage_order ?? "—"}
+              {tag.tag_type === "product" && tag.product_value != null ? formatCurrency(tag.product_value) : tag.stage_order ?? "-"}
             </TableCell>
             <TableCell>
               <Button size="xs" variant="ghost" onClick={() => mutation.mutate(tag.id)}>
@@ -151,12 +155,12 @@ function ApplyTagPanel({ clientId, tags }: { clientId: string; tags: Tag[] }) {
       <CardContent className="flex flex-col gap-3 px-0">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Lead email</label>
-            <input className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="lead@example.com" />
+            <FieldLabel>Lead email</FieldLabel>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="lead@example.com" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tag</label>
-            <select className={inputClass} value={selectedTagId} onChange={(e) => setSelectedTagId(e.target.value)}>
+            <FieldLabel>Tag</FieldLabel>
+            <select className={selectClass} value={selectedTagId} onChange={(e) => setSelectedTagId(e.target.value)}>
               <option value="">Select a tag…</option>
               {tags.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -205,7 +209,7 @@ export function TagsClient({ clientId }: { clientId: string }) {
       <div>
         <h1 className="text-lg font-semibold">Tags & Stages</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Freeform labels, funnel stages, and product tags — applying a product tag to a lead generates a Sale automatically
+          Freeform labels, funnel stages, and product tags. Applying a product tag to a lead generates a Sale automatically
         </p>
       </div>
 

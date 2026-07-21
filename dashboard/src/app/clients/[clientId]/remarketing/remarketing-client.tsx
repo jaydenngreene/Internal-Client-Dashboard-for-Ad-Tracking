@@ -110,7 +110,7 @@ export function RemarketingClient({ clientId }: { clientId: string }) {
           <h1 className="text-lg font-semibold">Remarketing Agent</h1>
           <p className="text-sm text-muted-foreground">
             Visitors identified by Customers.ai, with AI-drafted outreach copy awaiting review.
-            Approving here does not send anything — it only marks a candidate ready for a
+            Approving here does not send anything: it only marks a candidate ready for a
             separate, deliberate dispatch step.
           </p>
         </div>

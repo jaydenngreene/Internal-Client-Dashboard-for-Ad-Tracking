@@ -13,10 +13,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/ui/field-label";
 import { formatNumber } from "@/lib/format";
 
-const inputClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+// Native <select> can't render through the Input component (different element), but
+// shares its exact visual vocabulary so it still reads as the same form-control family.
+const selectClass =
+  "flex h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 const PLATFORM_LABEL: Record<AudiencePlatform, string> = {
   facebook_custom_audience: "Meta Custom Audience",
@@ -59,34 +63,34 @@ function CreateSyncForm({ clientId }: { clientId: string }) {
       }}
     >
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sync name</label>
-        <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. High-LTV customers" />
+        <FieldLabel>Sync name</FieldLabel>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. High-LTV customers" />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Platform</label>
-        <select className={inputClass} value={platform} onChange={(e) => setPlatform(e.target.value as AudiencePlatform)}>
+        <FieldLabel>Platform</FieldLabel>
+        <select className={selectClass} value={platform} onChange={(e) => setPlatform(e.target.value as AudiencePlatform)}>
           <option value="facebook_custom_audience">Meta Custom Audience</option>
           <option value="google_customer_match">Google Customer Match</option>
         </select>
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Segment</label>
-        <select className={inputClass} value={segmentType} onChange={(e) => setSegmentType(e.target.value as SegmentType)}>
+        <FieldLabel>Segment</FieldLabel>
+        <select className={selectClass} value={segmentType} onChange={(e) => setSegmentType(e.target.value as SegmentType)}>
           <option value="all_customers">All customers</option>
-          <option value="ltv_above">LTV above…</option>
-          <option value="tag">Has tag…</option>
+          <option value="ltv_above">LTV above a threshold</option>
+          <option value="tag">Has a specific tag</option>
         </select>
       </div>
       {segmentType === "ltv_above" && (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Threshold ($)</label>
-          <input type="number" min="0" step="0.01" className={`${inputClass} w-24`} value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+          <FieldLabel>Threshold ($)</FieldLabel>
+          <Input type="number" min="0" step="0.01" className="w-24" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
         </div>
       )}
       {segmentType === "tag" && (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tag name</label>
-          <input className={inputClass} value={tagName} onChange={(e) => setTagName(e.target.value)} />
+          <FieldLabel>Tag name</FieldLabel>
+          <Input value={tagName} onChange={(e) => setTagName(e.target.value)} />
         </div>
       )}
       <Button type="submit" size="sm" disabled={!name.trim() || mutation.isPending}>
@@ -110,7 +114,7 @@ function SyncRow({ clientId, sync }: { clientId: string; sync: AudienceSync }) {
           <div>
             <p className="text-sm font-medium">{sync.name}</p>
             <p className="text-xs text-muted-foreground">
-              {PLATFORM_LABEL[sync.platform]} — {sync.segment_definition.type}
+              {PLATFORM_LABEL[sync.platform]}: {sync.segment_definition.type}
               {sync.segment_definition.type === "ltv_above" && ` $${sync.segment_definition.threshold}`}
               {sync.segment_definition.type === "tag" && ` "${sync.segment_definition.tag_name}"`}
             </p>
@@ -123,7 +127,7 @@ function SyncRow({ clientId, sync }: { clientId: string; sync: AudienceSync }) {
           <Badge variant="destructive">Last sync failed: {sync.last_sync_error.slice(0, 120)}</Badge>
         ) : sync.last_synced_at ? (
           <p className="text-xs text-muted-foreground">
-            Last synced {new Date(sync.last_synced_at).toLocaleString()} — {formatNumber(sync.last_sync_count ?? 0)} members
+            Last synced {new Date(sync.last_synced_at).toLocaleString()}, {formatNumber(sync.last_sync_count ?? 0)} members
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">Never synced yet</p>
@@ -144,7 +148,7 @@ export function AudiencesClient({ clientId }: { clientId: string }) {
       <div>
         <h1 className="text-lg font-semibold">Audiences</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Export lead/customer segments as Meta Custom Audiences or Google Customer Match lists — re-evaluated against live data on every sync
+          Export lead/customer segments as Meta Custom Audiences or Google Customer Match lists, re-evaluated against live data on every sync
         </p>
       </div>
 

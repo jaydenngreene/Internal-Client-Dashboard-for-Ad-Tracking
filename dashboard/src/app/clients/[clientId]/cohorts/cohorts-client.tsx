@@ -28,7 +28,7 @@ export function CohortsClient({ clientId }: { clientId: string }) {
         <div>
           <h1 className="text-lg font-semibold">LTV Cohorts</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Customers grouped by acquisition month — same trailing-window LTV snapshots as the LTV report, refreshed nightly
+            Customers grouped by acquisition month, using the same trailing-window LTV snapshots as the LTV report, refreshed nightly
           </p>
         </div>
         <SegmentedToggle value={months} onChange={setMonths} options={MONTH_OPTIONS} />

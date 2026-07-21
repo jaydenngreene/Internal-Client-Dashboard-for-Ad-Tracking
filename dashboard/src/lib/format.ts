@@ -11,12 +11,12 @@ export function formatNumber(value: number): string {
 }
 
 export function formatRoas(value: number | null): string {
-  if (value === null) return "—";
+  if (value === null) return "-";
   return `${value.toFixed(2)}x`;
 }
 
 export function formatPercent(value: number | null): string {
-  if (value === null) return "—";
+  if (value === null) return "-";
   return `${value.toFixed(1)}%`;
 }
 

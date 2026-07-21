@@ -24,7 +24,7 @@ export function LtvClient({ clientId }: { clientId: string }) {
         <div>
           <h1 className="text-lg font-semibold">LTV by Acquisition Campaign</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Filtered by first purchase date — LTV windows are trailing-window snapshots as of now, refreshed nightly
+            Filtered by first purchase date. LTV windows are trailing-window snapshots as of now, refreshed nightly
           </p>
         </div>
         <DateRangeSelect value={preset} onChange={setPreset} />

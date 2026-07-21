@@ -997,6 +997,8 @@ export async function reportRoutes(app: FastifyInstance) {
         .map((r) => ({
           ...r,
           cpl: r.leads > 0 ? r.cost / r.leads : null,
+          costPerPurchase: r.sales > 0 ? r.cost / r.sales : null,
+          aov: r.sales > 0 ? r.revenue / r.sales : null,
           profit: r.revenue - r.cost,
           roas: r.cost > 0 ? r.revenue / r.cost : null,
           ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,

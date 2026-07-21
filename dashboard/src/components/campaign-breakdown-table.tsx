@@ -14,26 +14,58 @@ import { FunnelRow } from "@/lib/api";
 import { formatCurrency, formatNumber, formatRoas, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortKey = "name" | "cost" | "ctr" | "cpc" | "leads" | "cpl" | "sales" | "revenue" | "profit" | "roas";
+type SortKey =
+  | "name"
+  | "cost"
+  | "ctr"
+  | "cpc"
+  | "leads"
+  | "cpl"
+  | "sales"
+  | "costPerPurchase"
+  | "aov"
+  | "revenue"
+  | "profit"
+  | "roas";
+
+// Which funnel-stage metric block applies depends on what the client is actually
+// selling: a lead-gen/call/SaaS business is optimizing for cost per lead, an
+// ecommerce/info-product business is optimizing for cost per purchase and order
+// value. Showing both blocks on every client buries the number that actually
+// matters for that business under one that doesn't apply.
+export type CampaignGoal = "leads" | "sales";
 
 export function CampaignBreakdownTable({
   rows,
   nameColumnLabel,
+  goal,
 }: {
   rows: FunnelRow[];
   nameColumnLabel: string;
+  goal: CampaignGoal;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
+
+  const goalColumns: { key: SortKey; label: string; align?: "right" }[] =
+    goal === "leads"
+      ? [
+          { key: "leads", label: "Leads", align: "right" },
+          { key: "cpl", label: "CPL", align: "right" },
+          { key: "sales", label: "Sales", align: "right" },
+        ]
+      : [
+          { key: "sales", label: "Purchases", align: "right" },
+          { key: "costPerPurchase", label: "Cost / Purchase", align: "right" },
+          { key: "aov", label: "AOV", align: "right" },
+        ];
 
   const columns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "name", label: nameColumnLabel },
     { key: "cost", label: "Cost", align: "right" },
     { key: "ctr", label: "CTR", align: "right" },
     { key: "cpc", label: "CPC", align: "right" },
-    { key: "leads", label: "Leads", align: "right" },
-    { key: "cpl", label: "CPL", align: "right" },
-    { key: "sales", label: "Sales", align: "right" },
+    ...goalColumns,
     { key: "revenue", label: "Revenue", align: "right" },
     { key: "profit", label: "Profit", align: "right" },
     { key: "roas", label: "ROAS", align: "right" },
@@ -103,13 +135,29 @@ export function CampaignBreakdownTable({
                 </div>
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(row.cost)}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.ctr === null ? "—" : formatPercent(row.ctr)}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.cpc === null ? "—" : formatCurrency(row.cpc)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatNumber(row.leads)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatPercent(row.ctr)}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {row.cpl === null ? "—" : formatCurrency(row.cpl)}
+                {row.cpc === null ? "-" : formatCurrency(row.cpc)}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatNumber(row.sales)}</TableCell>
+              {goal === "leads" ? (
+                <>
+                  <TableCell className="text-right tabular-nums">{formatNumber(row.leads)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {row.cpl === null ? "-" : formatCurrency(row.cpl)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatNumber(row.sales)}</TableCell>
+                </>
+              ) : (
+                <>
+                  <TableCell className="text-right tabular-nums">{formatNumber(row.sales)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {row.costPerPurchase === null ? "-" : formatCurrency(row.costPerPurchase)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {row.aov === null ? "-" : formatCurrency(row.aov)}
+                  </TableCell>
+                </>
+              )}
               <TableCell className="text-right tabular-nums text-chart-1">{formatCurrency(row.revenue)}</TableCell>
               <TableCell
                 className={cn("text-right tabular-nums", row.profit >= 0 ? "text-chart-1" : "text-chart-2")}

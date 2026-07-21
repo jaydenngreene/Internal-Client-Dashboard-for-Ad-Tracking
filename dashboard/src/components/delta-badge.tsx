@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 export function DeltaBadge({ pct }: { pct: number | null }) {
   if (pct === null) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    return <span className="text-xs text-muted-foreground">-</span>;
   }
   const isUp = pct > 0;
   const isFlat = pct === 0;

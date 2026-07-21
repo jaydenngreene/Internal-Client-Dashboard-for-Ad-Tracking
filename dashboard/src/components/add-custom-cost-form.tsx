@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addCustomCost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-
-const inputClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/ui/field-label";
 
 // Step 26 — inline manual ad-spend entry, matching how Hyros itself surfaces Custom
 // Costs (inline in the spend view, not a separate page) for platforms with no native
@@ -39,27 +38,20 @@ export function AddCustomCostForm({ clientId }: { clientId: string }) {
       }}
     >
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Platform / label
-        </label>
-        <input
-          className={inputClass}
-          placeholder="e.g. Native Ad Network"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-        />
+        <FieldLabel>Platform / label</FieldLabel>
+        <Input placeholder="e.g. Native Ad Network" value={label} onChange={(e) => setLabel(e.target.value)} />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Date</label>
-        <input type="date" className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+        <FieldLabel>Date</FieldLabel>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
       <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Spend</label>
-        <input
+        <FieldLabel>Spend</FieldLabel>
+        <Input
           type="number"
           min="0"
           step="0.01"
-          className={`${inputClass} w-28`}
+          className="w-28"
           placeholder="0.00"
           value={spend}
           onChange={(e) => setSpend(e.target.value)}

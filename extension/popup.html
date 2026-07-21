@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        width: 280px;
+        padding: 16px;
+        background: #10162a;
+        color: #f5f6fa;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 12px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #8b93ab;
+        margin-top: 10px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 4px;
+        padding: 6px 8px;
+        background: #171d33;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: #f5f6fa;
+        font-size: 12px;
+      }
+      button {
+        margin-top: 14px;
+        width: 100%;
+        padding: 8px;
+        background: #3987e5;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      p {
+        font-size: 11px;
+        color: #8b93ab;
+        margin-top: 10px;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ad Tracking Overlay</h1>
+    <label for="apiUrl">API URL</label>
+    <input id="apiUrl" placeholder="https://api.yourdomain.com" />
+    <label for="apiSecret">API Secret (Bearer token)</label>
+    <input id="apiSecret" type="password" />
+    <label for="clientId">Client ID</label>
+    <input id="clientId" placeholder="from the internal dashboard" />
+    <button id="save">Save</button>
+    <div id="status"></div>
+    <p>Prototype — reload the Facebook/Google Ads tab after saving to see the overlay.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+#adt-overlay {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2147483647;
+  width: 200px;
+  background: #10162a;
+  color: #f5f6fa;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+#adt-overlay .adt-overlay-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8b93ab;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#adt-overlay .adt-overlay-close {
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+#adt-overlay .adt-overlay-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+#adt-overlay .adt-overlay-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+#adt-overlay .adt-cost {
+  color: #e66767;
+}
+
+#adt-overlay .adt-revenue {
+  color: #009a00;
+}
+
+#adt-overlay .adt-overlay-error {
+  color: #8b93ab;
+  font-size: 11px;
+}

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Ad Tracking — True Attribution Overlay",
+  "version": "0.1.0",
+  "description": "Prototype: overlays true cost/revenue/ROAS from the internal ad tracking dashboard directly onto Facebook Ads Manager and Google Ads.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://business.facebook.com/*",
+    "https://adsmanager.facebook.com/*",
+    "https://ads.google.com/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://business.facebook.com/*",
+        "https://adsmanager.facebook.com/*",
+        "https://ads.google.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["overlay.css"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

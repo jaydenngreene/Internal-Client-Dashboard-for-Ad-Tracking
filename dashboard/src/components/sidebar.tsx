@@ -18,6 +18,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "ltv", label: "LTV", enabled: true },
   { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
   { slug: "remarketing", label: "Remarketing", enabled: true },
+  { slug: "tags", label: "Tags & Stages", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: true },
 ];
 

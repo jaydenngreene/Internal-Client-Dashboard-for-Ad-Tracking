@@ -238,6 +238,14 @@
     })
   }
 
+  ADT.applyTag = function (tagName) {
+    if (!tagName) return
+    send('/track/tag', {
+      anonymous_id: getVisitorId(),
+      tag_name: tagName,
+    })
+  }
+
   ADT.trackConversion = function (email, revenue, options) {
     if (!email || !revenue) return
     options = options || {}

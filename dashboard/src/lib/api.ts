@@ -308,6 +308,64 @@ export function getSubscriptions(clientId: string, range?: DateRange): Promise<S
   return fetchJson<SubscriptionsReport>(`/clients/${clientId}/reports/subscriptions${rangeQuery(range)}`);
 }
 
+// Step 24/25 — Tags & Stages. 'product'-type tags auto-generate a Sale server-side
+// when newly applied to a lead (see api/src/lib/tagAutomation.ts) — the dashboard
+// never computes that itself, it just calls the apply endpoint.
+export type TagType = "freeform" | "funnel_stage" | "product";
+
+export interface Tag {
+  id: string;
+  client_id: string;
+  name: string;
+  tag_type: TagType;
+  stage_order: number | null;
+  product_value: number | null;
+  created_at: string;
+}
+
+export interface LeadTag extends Tag {
+  applied_at: string;
+  applied_by: string;
+}
+
+export function getTags(clientId: string): Promise<Tag[]> {
+  return fetchJson<Tag[]>(`/clients/${clientId}/tags`);
+}
+
+export function createTag(
+  clientId: string,
+  input: { name: string; tag_type: TagType; stage_order?: number; product_value?: number }
+): Promise<Tag> {
+  return fetch(`${API_URL}/clients/${clientId}/tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function deleteTag(tagId: string): Promise<void> {
+  return fetch(`${API_URL}/tags/${tagId}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
+export function getLeadTags(clientId: string, email: string): Promise<LeadTag[]> {
+  return fetchJson<LeadTag[]>(`/clients/${clientId}/leads/${encodeURIComponent(email)}/tags`);
+}
+
+export function applyLeadTag(clientId: string, email: string, tagId: string): Promise<void> {
+  return fetch(`${API_URL}/clients/${clientId}/leads/${encodeURIComponent(email)}/tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_id: tagId }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 // Step 26 — Custom Costs: manual ad-spend entry for platforms without a native
 // cost-sync integration. Folded into the overview/campaigns/funnel reports server-side.
 export interface CustomCost {

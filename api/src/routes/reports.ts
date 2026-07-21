@@ -48,6 +48,12 @@ interface LtvQuery {
 interface FunnelQuery {
   from?: string
   to?: string
+  breakdown?: 'campaign' | 'source'
+}
+
+interface AgencyOverviewQuery {
+  from?: string
+  to?: string
 }
 
 interface SpendRow {
@@ -105,7 +111,53 @@ function getRevenueByCampaign(clientId: string, from: string, to: string) {
   )
 }
 
+// "Source" breakdown pairs ad_costs.platform ('facebook_ads') against
+// sessions.utm_source ('facebook') — different vocabularies for the same thing.
+// Strip a trailing "_ads" and lowercase both sides so 'facebook_ads' and
+// 'facebook' merge into one row instead of showing up as two.
+function getSpendBySource(clientId: string, from: string, to: string) {
+  return db.query<{ platform: string; cost: string; impressions: string; clicks: string }>(
+    `SELECT platform, SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks
+     FROM ad_costs
+     WHERE client_id = $1 AND date BETWEEN $2 AND $3
+     GROUP BY platform`,
+    [clientId, from, to]
+  )
+}
+
+function getLeadsBySource(clientId: string, from: string, to: string) {
+  return db.query<{ utm_source: string | null; leads: string }>(
+    `SELECT s.utm_source, COUNT(DISTINCT l.id) AS leads
+     FROM leads l
+     JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
+     JOIN LATERAL (
+       SELECT utm_source FROM sessions
+       WHERE visitor_id = i.visitor_id
+         AND started_at <= l.created_at
+         AND started_at >= l.created_at - INTERVAL '90 days'
+       ORDER BY started_at ASC
+       LIMIT 1
+     ) s ON true
+     WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_source`,
+    [clientId, from, to]
+  )
+}
+
+function getRevenueBySource(clientId: string, from: string, to: string) {
+  return db.query<{ utm_source: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_source, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+     FROM attributions a
+     JOIN sessions s ON s.id = a.session_id
+     JOIN purchases p ON p.id = a.purchase_id
+     WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_source`,
+    [clientId, from, to]
+  )
+}
+
 const normalizeCampaignName = (name: string | null) => (name ?? '').trim().toLowerCase()
+const normalizeSource = (name: string | null) => (name ?? '').trim().toLowerCase().replace(/_ads$/, '')
 
 export async function reportRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string }; Querystring: OverviewQuery }>(
@@ -456,15 +508,25 @@ export async function reportRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
+      const breakdown = req.query.breakdown === 'source' ? 'source' : 'campaign'
 
-      const [spendRows, leadsByCampaign, revenueByCampaign] = await Promise.all([
-        getSpendByCampaign(clientId, from, to),
-        getLeadsByCampaign(clientId, from, to),
-        getRevenueByCampaign(clientId, from, to),
-      ])
+      const [spendRows, leadRows, revenueRows] =
+        breakdown === 'source'
+          ? await Promise.all([
+              getSpendBySource(clientId, from, to),
+              getLeadsBySource(clientId, from, to),
+              getRevenueBySource(clientId, from, to),
+            ])
+          : await Promise.all([
+              getSpendByCampaign(clientId, from, to),
+              getLeadsByCampaign(clientId, from, to),
+              getRevenueByCampaign(clientId, from, to),
+            ])
+
+      const normalize = breakdown === 'source' ? normalizeSource : normalizeCampaignName
 
       interface Row {
-        campaign_name: string
+        name: string
         platform: string | null
         cost: number
         leads: number
@@ -477,36 +539,40 @@ export async function reportRoutes(app: FastifyInstance) {
       const getOrCreate = (key: string, fallbackName: string): Row => {
         let row = rows.get(key)
         if (!row) {
-          row = { campaign_name: fallbackName, platform: null, cost: 0, leads: 0, sales: 0, revenue: 0 }
+          row = { name: fallbackName, platform: null, cost: 0, leads: 0, sales: 0, revenue: 0 }
           rows.set(key, row)
         }
         return row
       }
 
       for (const r of spendRows.rows) {
-        const key = normalizeCampaignName(r.campaign_name)
-        const row = getOrCreate(key, r.campaign_name ?? '(unnamed campaign)')
-        row.platform = r.platform
+        const name = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).campaign_name
+        const platform = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).platform
+        const key = normalize(name)
+        const row = getOrCreate(key, name ?? '(unnamed campaign)')
+        row.platform = platform
         row.cost = parseFloat(r.cost)
       }
 
-      for (const r of leadsByCampaign.rows) {
-        const key = normalizeCampaignName(r.utm_campaign)
-        const row = getOrCreate(key, r.utm_campaign ?? '(no utm_campaign)')
+      for (const r of leadRows.rows) {
+        const name = breakdown === 'source' ? (r as { utm_source: string | null }).utm_source : (r as { utm_campaign: string | null }).utm_campaign
+        const key = normalize(name)
+        const row = getOrCreate(key, name ?? (breakdown === 'source' ? '(no utm_source)' : '(no utm_campaign)'))
         row.leads = parseInt(r.leads, 10)
       }
 
-      for (const r of revenueByCampaign.rows) {
-        const key = normalizeCampaignName(r.utm_campaign)
-        const row = getOrCreate(key, r.utm_campaign ?? '(no utm_campaign)')
+      for (const r of revenueRows.rows) {
+        const name = breakdown === 'source' ? (r as { utm_source: string | null }).utm_source : (r as { utm_campaign: string | null }).utm_campaign
+        const key = normalize(name)
+        const row = getOrCreate(key, name ?? (breakdown === 'source' ? '(no utm_source)' : '(no utm_campaign)'))
         row.revenue = parseFloat(r.revenue)
         row.sales = parseInt(r.sales, 10)
       }
 
-      // Here "matched" specifically means real ad-platform spend backs this campaign
-      // name — the funnel table's anchor dimension is spend, so a row assembled only
-      // from leads/revenue with no cost is the UTM-mismatch signal worth flagging.
-      const campaigns = Array.from(rows.values())
+      // "matched" means real ad-platform spend backs this row — the anchor dimension
+      // here is spend, so a row assembled only from leads/revenue with no cost is the
+      // UTM-tagging-mismatch signal worth flagging rather than hiding.
+      const rowsOut = Array.from(rows.values())
         .map((r) => ({
           ...r,
           cpl: r.leads > 0 ? r.cost / r.leads : null,
@@ -516,7 +582,59 @@ export async function reportRoutes(app: FastifyInstance) {
         }))
         .sort((a, b) => b.revenue - a.revenue)
 
-      return reply.send({ from, to, campaigns })
+      return reply.send({ from, to, breakdown, campaigns: rowsOut })
     }
   )
+
+  app.get<{ Querystring: AgencyOverviewQuery }>('/reports/agency-overview', async (req, reply) => {
+    const { from, to } = defaultRange(req.query.from, req.query.to)
+
+    const { rows } = await db.query<{
+      id: string
+      name: string
+      cost: string
+      revenue: string
+    }>(
+      `SELECT
+         c.id,
+         c.name,
+         COALESCE(spend.total, 0) AS cost,
+         COALESCE(rev.total, 0) AS revenue
+       FROM clients c
+       LEFT JOIN (
+         SELECT client_id, SUM(spend) AS total FROM ad_costs
+         WHERE date BETWEEN $1 AND $2 GROUP BY client_id
+       ) spend ON spend.client_id = c.id
+       LEFT JOIN (
+         SELECT a.client_id, SUM(a.attributed_revenue) AS total
+         FROM attributions a JOIN purchases p ON p.id = a.purchase_id
+         WHERE p.purchased_at::date BETWEEN $1 AND $2
+         GROUP BY a.client_id
+       ) rev ON rev.client_id = c.id
+       ORDER BY c.name`,
+      [from, to]
+    )
+
+    const clients = rows.map((r) => {
+      const cost = parseFloat(r.cost)
+      const revenue = parseFloat(r.revenue)
+      const profit = revenue - cost
+      return {
+        id: r.id,
+        name: r.name,
+        cost,
+        revenue,
+        profit,
+        roas: cost > 0 ? revenue / cost : null,
+        roi: cost > 0 ? (profit / cost) * 100 : null,
+      }
+    })
+
+    const totals = clients.reduce(
+      (acc, c) => ({ cost: acc.cost + c.cost, revenue: acc.revenue + c.revenue, profit: acc.profit + c.profit }),
+      { cost: 0, revenue: 0, profit: 0 }
+    )
+
+    return reply.send({ from, to, clients, totals })
+  })
 }

@@ -5,7 +5,7 @@ export default async function HomePage() {
   const clients = await getClients().catch(() => []);
 
   if (clients.length > 0) {
-    redirect(`/clients/${clients[0].id}/overview`);
+    redirect("/agency");
   }
 
   return (

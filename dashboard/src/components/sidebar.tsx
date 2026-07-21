@@ -9,9 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const NAV_ITEMS = [
   { slug: "overview", label: "Overview", enabled: true },
-  { slug: "funnel", label: "Full Funnel", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
-  { slug: "leads", label: "Leads", enabled: true },
   { slug: "bof", label: "BOF", enabled: true },
   { slug: "ltv", label: "LTV", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: false },
@@ -21,6 +19,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const params = useParams<{ clientId?: string }>();
   const activeClientId = params?.clientId;
+  const isAgencyOverview = pathname === "/agency";
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
@@ -36,6 +35,26 @@ export function Sidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="mb-6">
+          <Link
+            href="/agency"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+              isAgencyOverview
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+            )}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                isAgencyOverview ? "bg-primary" : "bg-muted-foreground/40"
+              )}
+            />
+            Agency Overview
+          </Link>
+        </div>
+
         <div className="mb-6">
           <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Clients

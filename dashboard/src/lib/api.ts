@@ -34,42 +34,6 @@ export interface OverviewReport {
   series: OverviewSeriesPoint[];
 }
 
-export interface CampaignRow {
-  campaign_name: string;
-  platform: string | null;
-  cost: number;
-  impressions: number;
-  clicks: number;
-  revenue: number;
-  sales: number;
-  profit: number;
-  roas: number | null;
-  matched: boolean;
-}
-
-export interface CampaignsReport {
-  from: string;
-  to: string;
-  campaigns: CampaignRow[];
-}
-
-export interface LeadCampaignRow {
-  campaign_name: string;
-  platform: string | null;
-  cost: number;
-  leads: number;
-  cpl: number | null;
-  matched: boolean;
-}
-
-export interface LeadsReport {
-  from: string;
-  to: string;
-  totalLeads: number;
-  cpl: number | null;
-  campaigns: LeadCampaignRow[];
-}
-
 export interface AovBySourceRow {
   source: string;
   aov: number;
@@ -106,8 +70,10 @@ export interface LtvReport {
   campaigns: LtvCampaignRow[];
 }
 
-export interface FunnelCampaignRow {
-  campaign_name: string;
+export type FunnelBreakdown = "campaign" | "source";
+
+export interface FunnelRow {
+  name: string;
   platform: string | null;
   cost: number;
   leads: number;
@@ -122,7 +88,25 @@ export interface FunnelCampaignRow {
 export interface FunnelReport {
   from: string;
   to: string;
-  campaigns: FunnelCampaignRow[];
+  breakdown: FunnelBreakdown;
+  campaigns: FunnelRow[];
+}
+
+export interface AgencyClientRow {
+  id: string;
+  name: string;
+  cost: number;
+  revenue: number;
+  profit: number;
+  roas: number | null;
+  roi: number | null;
+}
+
+export interface AgencyOverviewReport {
+  from: string;
+  to: string;
+  clients: AgencyClientRow[];
+  totals: { cost: number; revenue: number; profit: number };
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
@@ -133,9 +117,10 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function rangeQuery(range?: DateRange): string {
-  if (!range) return "";
-  return `?from=${range.from}&to=${range.to}`;
+function rangeQuery(range?: DateRange, extra?: Record<string, string>): string {
+  const params = new URLSearchParams({ ...(range ? { from: range.from, to: range.to } : {}), ...extra });
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export function getClients(): Promise<Client[]> {
@@ -146,14 +131,6 @@ export function getOverview(clientId: string, range?: DateRange): Promise<Overvi
   return fetchJson<OverviewReport>(`/clients/${clientId}/reports/overview${rangeQuery(range)}`);
 }
 
-export function getCampaigns(clientId: string, range?: DateRange): Promise<CampaignsReport> {
-  return fetchJson<CampaignsReport>(`/clients/${clientId}/reports/campaigns${rangeQuery(range)}`);
-}
-
-export function getLeads(clientId: string, range?: DateRange): Promise<LeadsReport> {
-  return fetchJson<LeadsReport>(`/clients/${clientId}/reports/leads${rangeQuery(range)}`);
-}
-
 export function getBof(clientId: string, range?: DateRange): Promise<BofReport> {
   return fetchJson<BofReport>(`/clients/${clientId}/reports/bof${rangeQuery(range)}`);
 }
@@ -162,6 +139,14 @@ export function getLtv(clientId: string, range?: DateRange): Promise<LtvReport> 
   return fetchJson<LtvReport>(`/clients/${clientId}/reports/ltv${rangeQuery(range)}`);
 }
 
-export function getFunnel(clientId: string, range?: DateRange): Promise<FunnelReport> {
-  return fetchJson<FunnelReport>(`/clients/${clientId}/reports/funnel${rangeQuery(range)}`);
+export function getFunnel(
+  clientId: string,
+  range?: DateRange,
+  breakdown: FunnelBreakdown = "campaign"
+): Promise<FunnelReport> {
+  return fetchJson<FunnelReport>(`/clients/${clientId}/reports/funnel${rangeQuery(range, { breakdown })}`);
+}
+
+export function getAgencyOverview(range?: DateRange): Promise<AgencyOverviewReport> {
+  return fetchJson<AgencyOverviewReport>(`/reports/agency-overview${rangeQuery(range)}`);
 }

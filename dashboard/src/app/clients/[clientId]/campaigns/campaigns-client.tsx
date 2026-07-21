@@ -2,27 +2,42 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getCampaigns } from "@/lib/api";
+import { getFunnel, FunnelBreakdown } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
-import { CampaignTable } from "@/components/campaign-table";
+import { SegmentedToggle } from "@/components/segmented-toggle";
+import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const BREAKDOWN_OPTIONS: { value: FunnelBreakdown; label: string }[] = [
+  { value: "campaign", label: "Campaign" },
+  { value: "source", label: "Source" },
+];
+
 export function CampaignsClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
+  const [breakdown, setBreakdown] = useState<FunnelBreakdown>("campaign");
   const range = resolveRange(preset);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["campaigns", clientId, range.from, range.to],
-    queryFn: () => getCampaigns(clientId, range),
+    queryKey: ["campaigns", clientId, range.from, range.to, breakdown],
+    queryFn: () => getFunnel(clientId, range, breakdown),
   });
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Campaign Performance</h1>
-        <DateRangeSelect value={preset} onChange={setPreset} />
+        <div>
+          <h1 className="text-lg font-semibold">Campaigns</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Cost → leads → sales → revenue → ROAS, broken down by campaign or traffic source
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <SegmentedToggle value={breakdown} onChange={setBreakdown} options={BREAKDOWN_OPTIONS} />
+          <DateRangeSelect value={preset} onChange={setPreset} />
+        </div>
       </div>
 
       {isError && (
@@ -34,10 +49,13 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       {data && (
         <Card className="px-0">
           <CardHeader className="px-4">
-            <CardTitle>Campaigns</CardTitle>
+            <CardTitle>{breakdown === "campaign" ? "Campaigns" : "Traffic Sources"}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <CampaignTable campaigns={data.campaigns} />
+            <CampaignBreakdownTable
+              rows={data.campaigns}
+              nameColumnLabel={breakdown === "campaign" ? "Campaign" : "Source"}
+            />
           </CardContent>
         </Card>
       )}

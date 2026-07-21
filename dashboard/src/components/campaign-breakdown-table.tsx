@@ -10,28 +10,34 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FunnelCampaignRow } from "@/lib/api";
+import { FunnelRow } from "@/lib/api";
 import { formatCurrency, formatNumber, formatRoas } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortKey = "campaign_name" | "cost" | "leads" | "cpl" | "sales" | "revenue" | "profit" | "roas";
+type SortKey = "name" | "cost" | "leads" | "cpl" | "sales" | "revenue" | "profit" | "roas";
 
-const COLUMNS: { key: SortKey; label: string; align?: "right" }[] = [
-  { key: "campaign_name", label: "Campaign" },
-  { key: "cost", label: "Cost", align: "right" },
-  { key: "leads", label: "Leads", align: "right" },
-  { key: "cpl", label: "CPL", align: "right" },
-  { key: "sales", label: "Sales", align: "right" },
-  { key: "revenue", label: "Revenue", align: "right" },
-  { key: "profit", label: "Profit", align: "right" },
-  { key: "roas", label: "ROAS", align: "right" },
-];
-
-export function FunnelTable({ campaigns }: { campaigns: FunnelCampaignRow[] }) {
+export function CampaignBreakdownTable({
+  rows,
+  nameColumnLabel,
+}: {
+  rows: FunnelRow[];
+  nameColumnLabel: string;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
 
-  const sorted = [...campaigns].sort((a, b) => {
+  const columns: { key: SortKey; label: string; align?: "right" }[] = [
+    { key: "name", label: nameColumnLabel },
+    { key: "cost", label: "Cost", align: "right" },
+    { key: "leads", label: "Leads", align: "right" },
+    { key: "cpl", label: "CPL", align: "right" },
+    { key: "sales", label: "Sales", align: "right" },
+    { key: "revenue", label: "Revenue", align: "right" },
+    { key: "profit", label: "Profit", align: "right" },
+    { key: "roas", label: "ROAS", align: "right" },
+  ];
+
+  const sorted = [...rows].sort((a, b) => {
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "string" || typeof bv === "string") {
@@ -53,7 +59,7 @@ export function FunnelTable({ campaigns }: { campaigns: FunnelCampaignRow[] }) {
     }
   }
 
-  if (campaigns.length === 0) {
+  if (rows.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-muted-foreground">
         No spend, leads, or revenue in this range yet.
@@ -66,7 +72,7 @@ export function FunnelTable({ campaigns }: { campaigns: FunnelCampaignRow[] }) {
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            {COLUMNS.map((col) => (
+            {columns.map((col) => (
               <TableHead
                 key={col.key}
                 onClick={() => toggleSort(col.key)}
@@ -83,10 +89,10 @@ export function FunnelTable({ campaigns }: { campaigns: FunnelCampaignRow[] }) {
         </TableHeader>
         <TableBody>
           {sorted.map((row) => (
-            <TableRow key={row.campaign_name}>
+            <TableRow key={row.name}>
               <TableCell className="max-w-64 truncate font-medium">
                 <div className="flex items-center gap-2">
-                  <span className="truncate">{row.campaign_name}</span>
+                  <span className="truncate">{row.name}</span>
                   {!row.matched && (
                     <Badge variant="outline" className="shrink-0 text-[10px] text-status-warning border-status-warning/40">
                       unmatched

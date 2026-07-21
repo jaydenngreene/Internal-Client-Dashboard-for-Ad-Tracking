@@ -251,6 +251,52 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token }))
   })
 
+  // Save or update a Twilio integration for a client — Step 11 call tracking.
+  // Just the auth token for webhook signature verification; the account itself
+  // (and any purchased numbers) lives entirely in the client's own Twilio account.
+  app.post<{
+    Params: { id: string }
+    Body: { account_sid: string; auth_token: string }
+  }>('/clients/:id/integrations/twilio', async (req, reply) => {
+    const { id } = req.params
+    const { account_sid, auth_token } = req.body
+    if (!account_sid || !auth_token) {
+      return reply.code(400).send({ error: 'account_sid and auth_token required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'twilio', { account_sid, auth_token }))
+  })
+
+  // Register a tracking number the client already purchased in their own Twilio
+  // account — this app never buys numbers or touches billing on anyone's behalf.
+  app.post<{
+    Params: { id: string }
+    Body: { phone_number: string; forward_to: string }
+  }>('/clients/:id/tracking-numbers', async (req, reply) => {
+    const { id } = req.params
+    const { phone_number, forward_to } = req.body
+    if (!phone_number || !forward_to) {
+      return reply.code(400).send({ error: 'phone_number and forward_to required' })
+    }
+    const { rows } = await db.query(
+      `INSERT INTO tracking_numbers (client_id, phone_number, forward_to)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (client_id, phone_number) DO UPDATE SET forward_to = EXCLUDED.forward_to
+       RETURNING *`,
+      [id, phone_number, forward_to]
+    )
+    return reply.code(201).send(rows[0])
+  })
+
+  // List a client's tracking numbers and their current assignment state.
+  app.get<{ Params: { id: string } }>('/clients/:id/tracking-numbers', async (req, reply) => {
+    const { rows } = await db.query(
+      `SELECT id, phone_number, forward_to, status, assigned_at, created_at
+       FROM tracking_numbers WHERE client_id = $1 ORDER BY created_at DESC`,
+      [req.params.id]
+    )
+    return reply.send(rows)
+  })
+
   // Save or update a PayPal integration — Step 9. client_id/client_secret authenticate
   // to PayPal's own webhook-signature-verification API; webhook_id identifies which
   // registered webhook this is (PayPal ties signature verification to it).
@@ -297,7 +343,7 @@ export async function clientRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(
       `SELECT platform, created_at,
-              config - 'webhook_secret' - 'access_token' - 'refresh_token' - 'client_secret' - 'signature_key' AS config
+              config - 'webhook_secret' - 'access_token' - 'refresh_token' - 'client_secret' - 'signature_key' - 'auth_token' AS config
        FROM client_integrations WHERE client_id = $1`,
       [req.params.id]
     )

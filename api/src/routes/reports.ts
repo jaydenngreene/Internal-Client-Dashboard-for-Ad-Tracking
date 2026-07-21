@@ -62,6 +62,11 @@ interface MofQuery {
   to?: string
 }
 
+interface CallsQuery {
+  from?: string
+  to?: string
+}
+
 interface FunnelQuery {
   from?: string
   to?: string
@@ -741,4 +746,48 @@ export async function reportRoutes(app: FastifyInstance) {
 
     return reply.send({ from, to, clients, totals })
   })
+
+  app.get<{ Params: { id: string }; Querystring: CallsQuery }>(
+    '/clients/:id/reports/calls',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [totalsRow, campaignRows] = await Promise.all([
+        db.query<{ total: string; qualified: string; avg_duration: string | null }>(
+          `SELECT COUNT(*) AS total,
+                  COUNT(*) FILTER (WHERE qualified) AS qualified,
+                  AVG(duration_seconds) AS avg_duration
+           FROM calls WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ utm_campaign: string | null; calls: string }>(
+          `SELECT s.utm_campaign, COUNT(*) AS calls
+           FROM calls c
+           JOIN sessions s ON s.id = c.session_id
+           WHERE c.client_id = $1 AND c.started_at::date BETWEEN $2 AND $3
+           GROUP BY s.utm_campaign
+           ORDER BY COUNT(*) DESC`,
+          [clientId, from, to]
+        ),
+      ])
+
+      const totalCalls = parseInt(totalsRow.rows[0].total, 10)
+      const qualifiedCalls = parseInt(totalsRow.rows[0].qualified, 10)
+
+      return reply.send({
+        from,
+        to,
+        totalCalls,
+        qualifiedCalls,
+        qualifiedRate: totalCalls > 0 ? (qualifiedCalls / totalCalls) * 100 : null,
+        avgDurationSeconds:
+          totalsRow.rows[0].avg_duration !== null ? parseFloat(totalsRow.rows[0].avg_duration) : null,
+        byCampaign: campaignRows.rows.map((r) => ({
+          campaign_name: r.utm_campaign ?? '(untracked)',
+          calls: parseInt(r.calls, 10),
+        })),
+      })
+    }
+  )
 }

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTof, getMof, getBof, getClients } from "@/lib/api";
+import { getTof, getMof, getBof, getCalls, getClients } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatDuration } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import {
@@ -56,7 +56,15 @@ export function FunnelClient({ clientId }: { clientId: string }) {
   const active = stage === "tof" ? tof : stage === "mof" ? mof : bof;
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
-  const isEcommerce = clients?.find((c) => c.id === clientId)?.niche === "ecommerce";
+  const niche = clients?.find((c) => c.id === clientId)?.niche;
+  const isEcommerce = niche === "ecommerce";
+  const isCallBased = niche === "call";
+
+  const calls = useQuery({
+    queryKey: ["calls", clientId, range.from, range.to],
+    queryFn: () => getCalls(clientId, range),
+    enabled: stage === "bof" && isCallBased,
+  });
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -265,6 +273,50 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               )}
             </CardContent>
           </Card>
+
+          {isCallBased && calls.data && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Calls</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Total Calls</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(calls.data.totalCalls)}</p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Qualified Rate</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-1">
+                      {formatPercent(calls.data.qualifiedRate)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatNumber(calls.data.qualifiedCalls)} of {formatNumber(calls.data.totalCalls)} calls
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Avg Call Duration</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {calls.data.avgDurationSeconds === null ? "—" : formatDuration(calls.data.avgDurationSeconds)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Top Campaign</p>
+                    <p className="mt-1 truncate text-lg font-semibold">
+                      {calls.data.byCampaign[0]?.campaign_name ?? "—"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {calls.data.byCampaign[0] ? `${formatNumber(calls.data.byCampaign[0].calls)} calls` : ""}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

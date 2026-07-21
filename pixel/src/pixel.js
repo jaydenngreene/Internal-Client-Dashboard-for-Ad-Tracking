@@ -138,6 +138,34 @@
     trackCartEvent('begin_checkout', null, value)
   }
 
+  // Dynamic Number Insertion — swaps the phone number(s) matching `selector` with a
+  // tracking number assigned to this visitor, so an inbound call can be traced back
+  // to the campaign that generated it. Needs a response back (unlike the other
+  // tracking calls), so this can't use sendBeacon — a plain XHR instead.
+  ADT.enableDNI = function (selector) {
+    var xhr = new XMLHttpRequest()
+    xhr.open('POST', API_URL + '/track/dni', true)
+    xhr.setRequestHeader('Content-Type', 'application/json')
+    xhr.onload = function () {
+      if (xhr.status !== 200) return
+      var data
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch (e) {
+        return
+      }
+      if (!data || !data.phone_number) return
+      var els = document.querySelectorAll(selector)
+      for (var i = 0; i < els.length; i++) {
+        els[i].textContent = data.phone_number
+        if (els[i].tagName === 'A') {
+          els[i].setAttribute('href', 'tel:' + data.phone_number)
+        }
+      }
+    }
+    xhr.send(JSON.stringify({ pixel_key: PIXEL_KEY, anonymous_id: getVisitorId() }))
+  }
+
   window.ADT = ADT
 
   // ── Auto pageview ───────────────────────────────────────────────────────────

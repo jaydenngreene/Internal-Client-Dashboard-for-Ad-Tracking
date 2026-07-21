@@ -79,6 +79,21 @@ export interface MofReport {
   cartAbandonmentRate: number | null;
 }
 
+export interface CallsByCampaignRow {
+  campaign_name: string;
+  calls: number;
+}
+
+export interface CallsReport {
+  from: string;
+  to: string;
+  totalCalls: number;
+  qualifiedCalls: number;
+  qualifiedRate: number | null;
+  avgDurationSeconds: number | null;
+  byCampaign: CallsByCampaignRow[];
+}
+
 export interface LtvCampaignRow {
   campaign_name: string;
   customers: number;
@@ -160,6 +175,10 @@ export function getOverview(clientId: string, range?: DateRange): Promise<Overvi
 
 export function getBof(clientId: string, range?: DateRange): Promise<BofReport> {
   return fetchJson<BofReport>(`/clients/${clientId}/reports/bof${rangeQuery(range)}`);
+}
+
+export function getCalls(clientId: string, range?: DateRange): Promise<CallsReport> {
+  return fetchJson<CallsReport>(`/clients/${clientId}/reports/calls${rangeQuery(range)}`);
 }
 
 export function getTof(clientId: string, range?: DateRange): Promise<TofReport> {

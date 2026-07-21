@@ -82,6 +82,11 @@ interface CohortsQuery {
   months?: string
 }
 
+interface SubscriptionsQuery {
+  from?: string
+  to?: string
+}
+
 interface SpendRow {
   campaign_id: string | null
   campaign_name: string | null
@@ -718,6 +723,99 @@ export async function reportRoutes(app: FastifyInstance) {
           avgLtvLifetime: parseFloat(r.avg_lifetime),
           totalLtvLifetime: parseFloat(r.total_lifetime),
         })),
+      })
+    }
+  )
+
+  // Subscriptions (Step 22) — MRR/churn/trial-conversion reporting for the SaaS
+  // vertical (niche='saas'). Current MRR is a live snapshot (not date-scoped);
+  // new/churned MRR and trial conversion are scoped to [from, to] via
+  // subscription_events. The trend series is a running-total reconstruction —
+  // MRR isn't a per-day metric like ad spend, it's cumulative, so every delta
+  // up to and including the display range gets summed, then forward-filled across
+  // days with no events (same "carry the last known value" as any balance-style metric).
+  app.get<{ Params: { id: string }; Querystring: SubscriptionsQuery }>(
+    '/clients/:id/reports/subscriptions',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [currentMrrRow, rangeStatsRow, deltaRows] = await Promise.all([
+        db.query<{ current_mrr: string; active_count: string }>(
+          `SELECT COALESCE(SUM(mrr_amount), 0) AS current_mrr, COUNT(*) AS active_count
+           FROM subscriptions WHERE client_id = $1 AND status = 'active'`,
+          [clientId]
+        ),
+        db.query<{
+          trials_started: string
+          trials_converted: string
+          canceled_count: string
+          new_mrr: string
+          churned_mrr: string
+        }>(
+          `SELECT
+             COUNT(*) FILTER (WHERE event_type = 'trial_started') AS trials_started,
+             COUNT(*) FILTER (WHERE event_type = 'trial_converted') AS trials_converted,
+             COUNT(*) FILTER (WHERE event_type = 'canceled') AS canceled_count,
+             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type IN ('created', 'trial_converted', 'reactivated')), 0) AS new_mrr,
+             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type = 'canceled'), 0) AS churned_mrr
+           FROM subscription_events
+           WHERE client_id = $1 AND occurred_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ date: string; delta: string }>(
+          `SELECT occurred_at::date::text AS date, SUM(mrr_delta) AS delta
+           FROM subscription_events
+           WHERE client_id = $1 AND occurred_at::date <= $2
+           GROUP BY occurred_at::date
+           ORDER BY occurred_at::date`,
+          [clientId, to]
+        ),
+      ])
+
+      const deltaByDate = new Map(deltaRows.rows.map((r) => [r.date, parseFloat(r.delta)]))
+      const allDates = Array.from(deltaByDate.keys()).sort()
+      let running = 0
+      let dateIdx = 0
+      const cumulativeByDate = new Map<string, number>()
+      for (const date of allDates) {
+        running += deltaByDate.get(date) ?? 0
+        cumulativeByDate.set(date, running)
+      }
+
+      let lastKnown = 0
+      const series = dateList(from, to).map((date) => {
+        while (dateIdx < allDates.length && allDates[dateIdx] <= date) {
+          lastKnown = cumulativeByDate.get(allDates[dateIdx])!
+          dateIdx++
+        }
+        return { date, mrr: lastKnown }
+      })
+
+      const trialsStarted = parseInt(rangeStatsRow.rows[0].trials_started, 10)
+      const trialsConverted = parseInt(rangeStatsRow.rows[0].trials_converted, 10)
+      const canceledCount = parseInt(rangeStatsRow.rows[0].canceled_count, 10)
+      const currentMrr = parseFloat(currentMrrRow.rows[0].current_mrr)
+      const activeCount = parseInt(currentMrrRow.rows[0].active_count, 10)
+      // Logo churn rate: canceled-in-range / (currently active + canceled-in-range) —
+      // an approximation of "active at the start of the period" without needing a
+      // point-in-time historical snapshot, same simplicity as the BOF report's
+      // refund-rate math elsewhere in this file.
+      const churnBase = activeCount + canceledCount
+
+      return reply.send({
+        from,
+        to,
+        currentMrr,
+        activeCount,
+        newMrr: parseFloat(rangeStatsRow.rows[0].new_mrr),
+        churnedMrr: parseFloat(rangeStatsRow.rows[0].churned_mrr),
+        trialsStarted,
+        trialsConverted,
+        trialConversionRate: trialsStarted > 0 ? (trialsConverted / trialsStarted) * 100 : null,
+        canceledCount,
+        churnRate: churnBase > 0 ? (canceledCount / churnBase) * 100 : null,
+        series,
       })
     }
   )

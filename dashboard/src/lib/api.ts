@@ -283,6 +283,31 @@ export function getCohorts(clientId: string, months = 12): Promise<CohortsReport
   return fetchJson<CohortsReport>(`/clients/${clientId}/reports/cohorts?months=${months}`);
 }
 
+// Step 22 — MRR/churn/trial reporting, SaaS vertical (niche === 'saas').
+export interface SubscriptionsSeriesPoint {
+  date: string;
+  mrr: number;
+}
+
+export interface SubscriptionsReport {
+  from: string;
+  to: string;
+  currentMrr: number;
+  activeCount: number;
+  newMrr: number;
+  churnedMrr: number;
+  trialsStarted: number;
+  trialsConverted: number;
+  trialConversionRate: number | null;
+  canceledCount: number;
+  churnRate: number | null;
+  series: SubscriptionsSeriesPoint[];
+}
+
+export function getSubscriptions(clientId: string, range?: DateRange): Promise<SubscriptionsReport> {
+  return fetchJson<SubscriptionsReport>(`/clients/${clientId}/reports/subscriptions${rangeQuery(range)}`);
+}
+
 // Step 26 — Custom Costs: manual ad-spend entry for platforms without a native
 // cost-sync integration. Folded into the overview/campaigns/funnel reports server-side.
 export interface CustomCost {

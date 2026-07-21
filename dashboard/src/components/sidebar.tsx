@@ -7,11 +7,16 @@ import { getClients } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const NAV_ITEMS = [
+// `niches` restricts a nav item to clients of that niche (e.g. Subscriptions only
+// makes sense for niche='saas'); omitted entirely means it shows for every client —
+// this is the sidebar's first niche-aware nav item (existing niche filtering only
+// happened *within* a page, e.g. funnel-client.tsx's cart cards).
+const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: string[] }[] = [
   { slug: "overview", label: "Overview", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "funnel", label: "Funnel", enabled: true },
   { slug: "ltv", label: "LTV", enabled: true },
+  { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
   { slug: "remarketing", label: "Remarketing", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: true },
 ];
@@ -26,6 +31,9 @@ export function Sidebar() {
     queryKey: ["clients"],
     queryFn: getClients,
   });
+
+  const activeNiche = clients?.find((c) => c.id === activeClientId)?.niche;
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche)));
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-sidebar">
@@ -103,7 +111,7 @@ export function Sidebar() {
               Reports
             </p>
             <ul className="space-y-0.5">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const href = `/clients/${activeClientId}/${item.slug}`;
                 const isActive = pathname === href;
                 return (

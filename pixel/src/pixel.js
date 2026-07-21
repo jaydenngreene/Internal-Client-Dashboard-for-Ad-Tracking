@@ -181,6 +181,7 @@
       fbclid: params.get('fbclid'),
       gclid: params.get('gclid'),
       ttclid: params.get('ttclid'),
+      msclkid: params.get('msclkid'),
       utm_source: params.get('utm_source'),
       utm_medium: params.get('utm_medium'),
       utm_campaign: params.get('utm_campaign'),
@@ -191,7 +192,7 @@
 
   // Store ad params in sessionStorage so they persist across page navigations
   function storeAdParams(params) {
-    var hasAdData = params.fbclid || params.gclid || params.utm_source
+    var hasAdData = params.fbclid || params.gclid || params.msclkid || params.utm_source
     if (hasAdData) {
       sessionStorage.setItem('_adt_params', JSON.stringify(params))
     }

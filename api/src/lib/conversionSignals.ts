@@ -2,6 +2,7 @@ import * as crypto from 'crypto'
 import { services } from 'google-ads-api'
 import { db } from '../db'
 import { getGoogleAdsCustomer } from './googleAdsClient'
+import { getBingAccessToken, bingAuthHeaders, BingAdsClientConfig } from './bingAdsClient'
 
 export type SignalEventType = 'Purchase' | 'Lead' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout'
 
@@ -12,6 +13,7 @@ export interface SignalPayload {
   currency?: string
   fbclid?: string | null
   gclid?: string | null
+  msclkid?: string | null
   ip?: string | null
   userAgent?: string | null
   eventTime: Date
@@ -339,6 +341,42 @@ async function sendRedditConversion(config: RedditConversionConfig, payload: Sig
   }
 }
 
+// Reuses the existing bing_ads integration (Step 5/11's cost-sync credentials) —
+// no new integration route, unlike every other platform above. Gated the same way
+// Google Enhanced Conversions is: Purchase/Lead only, needs the platform's own click
+// id. ConversionName here is a static "Purchase"/"Lead" string — Bing's UET offline
+// import matches against a goal name pre-configured in the account's own UET setup,
+// so in practice this needs that goal named to match; not configurable per-client in
+// this pass (same "unverified against a live account" disclosure as the cost-sync side).
+async function sendBingOfflineConversion(config: BingAdsClientConfig, payload: SignalPayload): Promise<void> {
+  if (!payload.msclkid) return
+
+  const token = await getBingAccessToken(config.refresh_token)
+  const headers = bingAuthHeaders(token, config)
+
+  const body = {
+    OfflineConversions: [
+      {
+        MicrosoftClickId: payload.msclkid,
+        ConversionName: payload.eventType,
+        ConversionTime: payload.eventTime.toISOString(),
+        ConversionCurrencyCode: payload.currency ?? 'USD',
+        ConversionValue: payload.value ?? undefined,
+      },
+    ],
+  }
+
+  const res = await fetch('https://campaign.api.bingads.microsoft.com/CampaignManagement/v13/OfflineConversions/Apply', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Bing offline conversion import failed (${res.status}): ${text}`)
+  }
+}
+
 // Fires the given event to every ad-platform integration the client has configured.
 // Never throws — a failed/missing integration must never block the purchase, lead, or
 // event flow that triggered it, same philosophy as jobs/adCosts/run.ts's per-client
@@ -348,7 +386,7 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
     `SELECT platform, config FROM client_integrations
      WHERE client_id = $1 AND platform IN (
        'facebook_capi', 'google_ads', 'tiktok_ads', 'snapchat_ads',
-       'pinterest_ads', 'linkedin_ads', 'reddit_ads'
+       'pinterest_ads', 'linkedin_ads', 'reddit_ads', 'bing_ads'
      )`,
     [clientId]
   )
@@ -366,6 +404,7 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
     | LinkedInConversionConfig
     | undefined
   const redditConfig = rows.find((r) => r.platform === 'reddit_ads')?.config as RedditConversionConfig | undefined
+  const bingConfig = rows.find((r) => r.platform === 'bing_ads')?.config as BingAdsClientConfig | undefined
 
   const tasks: Promise<void>[] = []
 
@@ -436,6 +475,21 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
     tasks.push(
       sendRedditConversion(redditConfig, payload).catch((err) => {
         console.error(`[conversionSignals] Reddit Conversions API failed for client=${clientId}:`, (err as Error).message)
+      })
+    )
+  }
+
+  if (
+    bingConfig?.refresh_token &&
+    payload.msclkid &&
+    (payload.eventType === 'Purchase' || payload.eventType === 'Lead')
+  ) {
+    tasks.push(
+      sendBingOfflineConversion(bingConfig, payload).catch((err) => {
+        console.error(
+          `[conversionSignals] Bing offline conversion import failed for client=${clientId}:`,
+          (err as Error).message
+        )
       })
     )
   }

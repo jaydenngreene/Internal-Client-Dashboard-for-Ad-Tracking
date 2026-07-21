@@ -1,5 +1,6 @@
 import AdmZip from 'adm-zip'
 import { AdCostRow } from './types'
+import { BingAdsClientConfig, getBingAccessToken, bingAuthHeaders } from '../../lib/bingAdsClient'
 
 // UNVERIFIED AGAINST A LIVE ACCOUNT — same disclosure as the Facebook/Google syncs had
 // before real credentials existed for them. Structure follows Microsoft's documented
@@ -7,49 +8,9 @@ import { AdCostRow } from './types'
 // npm wrapper for Bing/Microsoft Advertising the way there is for Google Ads, so this
 // is hand-rolled against the docs rather than a tested client library.
 
-export interface BingAdsClientConfig {
-  customer_id: string
-  account_id: string
-  refresh_token: string
-}
+export type { BingAdsClientConfig }
 
 const REPORTING_BASE = 'https://reporting.api.bingads.microsoft.com/Reporting/v13'
-const AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-
-async function getAccessToken(refreshToken: string): Promise<string> {
-  const clientId = process.env.BING_ADS_CLIENT_ID
-  const clientSecret = process.env.BING_ADS_CLIENT_SECRET
-  if (!clientId) throw new Error('BING_ADS_CLIENT_ID must be set')
-
-  const params = new URLSearchParams({
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-    client_id: clientId,
-    scope: 'https://ads.microsoft.com/msads.manage offline_access',
-  })
-  if (clientSecret) params.set('client_secret', clientSecret)
-
-  const res = await fetch(AUTH_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  })
-  if (!res.ok) throw new Error(`Bing Ads OAuth token request failed (${res.status})`)
-  const data = (await res.json()) as { access_token: string }
-  return data.access_token
-}
-
-function authHeaders(token: string, config: BingAdsClientConfig): Record<string, string> {
-  const developerToken = process.env.BING_ADS_DEVELOPER_TOKEN
-  if (!developerToken) throw new Error('BING_ADS_DEVELOPER_TOKEN must be set')
-  return {
-    Authorization: `Bearer ${token}`,
-    DeveloperToken: developerToken,
-    CustomerAccountId: config.account_id,
-    CustomerId: config.customer_id,
-    'Content-Type': 'application/json',
-  }
-}
 
 function toBingDate(iso: string): { Year: number; Month: number; Day: number } {
   const [year, month, day] = iso.split('-').map(Number)
@@ -140,8 +101,8 @@ function parseReportCsv(csvText: string): AdCostRow[] {
 }
 
 export async function fetchBingAdCosts(config: BingAdsClientConfig, since: string, until: string): Promise<AdCostRow[]> {
-  const token = await getAccessToken(config.refresh_token)
-  const headers = authHeaders(token, config)
+  const token = await getBingAccessToken(config.refresh_token)
+  const headers = bingAuthHeaders(token, config)
   const reportRequestId = await submitReport(headers, config.account_id, since, until)
   const downloadUrl = await pollReport(headers, reportRequestId)
 

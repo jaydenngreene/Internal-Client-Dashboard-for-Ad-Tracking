@@ -71,8 +71,8 @@ export async function identifyRoutes(app: FastifyInstance) {
       [clientId, normalizedEmail, lead_type, page, metadata ? JSON.stringify(metadata) : null]
     )
 
-    const { rows: sessionRows } = await db.query<{ fbclid: string | null; gclid: string | null }>(
-      `SELECT fbclid, gclid FROM sessions WHERE visitor_id = $1 ORDER BY started_at DESC LIMIT 1`,
+    const { rows: sessionRows } = await db.query<{ fbclid: string | null; gclid: string | null; msclkid: string | null }>(
+      `SELECT fbclid, gclid, msclkid FROM sessions WHERE visitor_id = $1 ORDER BY started_at DESC LIMIT 1`,
       [visitorId]
     )
     await sendConversionSignals(clientId, {
@@ -80,6 +80,7 @@ export async function identifyRoutes(app: FastifyInstance) {
       email: normalizedEmail,
       fbclid: sessionRows[0]?.fbclid ?? null,
       gclid: sessionRows[0]?.gclid ?? null,
+      msclkid: sessionRows[0]?.msclkid ?? null,
       eventTime: new Date(),
     })
 

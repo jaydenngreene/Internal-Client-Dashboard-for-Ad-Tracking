@@ -4,6 +4,7 @@ interface AdParams {
   fbclid?: string
   gclid?: string
   ttclid?: string
+  msclkid?: string
   utm_source?: string
   utm_medium?: string
   utm_campaign?: string
@@ -24,13 +25,13 @@ export async function resolveSession(
   url: string,
   params: AdParams = {}
 ): Promise<string> {
-  const hasAdData = params.fbclid || params.gclid || params.ttclid || params.utm_source
+  const hasAdData = params.fbclid || params.gclid || params.ttclid || params.msclkid || params.utm_source
 
   if (hasAdData) {
     const { rows } = await db.query(
       `INSERT INTO sessions
-       (client_id, visitor_id, fbclid, gclid, ttclid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         clientId,
@@ -38,6 +39,7 @@ export async function resolveSession(
         params.fbclid,
         params.gclid,
         params.ttclid,
+        params.msclkid,
         params.utm_source,
         params.utm_medium,
         params.utm_campaign,

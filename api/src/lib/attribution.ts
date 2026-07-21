@@ -18,6 +18,7 @@ interface TouchSession {
   utm_source: string | null
   fbclid: string | null
   gclid: string | null
+  msclkid: string | null
 }
 
 // Insert a purchase, walk back through the customer's ad sessions, split revenue
@@ -47,7 +48,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   const visitorId = identityRows[0].visitor_id
 
   const { rows: sessionRows } = await db.query<TouchSession>(
-    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid
+    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid
      FROM sessions
      WHERE visitor_id = $1
        AND started_at >= NOW() - INTERVAL '90 days'
@@ -103,6 +104,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     value: conv.revenue,
     fbclid: lastSession.fbclid,
     gclid: lastSession.gclid,
+    msclkid: lastSession.msclkid,
     eventTime: new Date(),
   })
 }

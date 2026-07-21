@@ -59,8 +59,8 @@ export async function eventRoutes(app: FastifyInstance) {
       [clientId, sessionId, event_type, product_id ?? null, product_name ?? null, value ?? null]
     )
 
-    const { rows: sessionRows } = await db.query<{ fbclid: string | null; gclid: string | null }>(
-      'SELECT fbclid, gclid FROM sessions WHERE id = $1',
+    const { rows: sessionRows } = await db.query<{ fbclid: string | null; gclid: string | null; msclkid: string | null }>(
+      'SELECT fbclid, gclid, msclkid FROM sessions WHERE id = $1',
       [sessionId]
     )
 
@@ -69,6 +69,7 @@ export async function eventRoutes(app: FastifyInstance) {
       value: value ?? null,
       fbclid: sessionRows[0]?.fbclid ?? null,
       gclid: sessionRows[0]?.gclid ?? null,
+      msclkid: sessionRows[0]?.msclkid ?? null,
       ip: visitor.ip,
       userAgent: visitor.user_agent,
       eventTime: new Date(),

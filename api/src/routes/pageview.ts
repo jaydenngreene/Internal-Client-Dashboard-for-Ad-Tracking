@@ -9,6 +9,7 @@ interface PageviewBody {
   fbclid?: string
   gclid?: string
   ttclid?: string
+  msclkid?: string
   utm_source?: string
   utm_medium?: string
   utm_campaign?: string
@@ -29,6 +30,7 @@ export async function pageviewRoutes(app: FastifyInstance) {
       fbclid,
       gclid,
       ttclid,
+      msclkid,
       utm_source,
       utm_medium,
       utm_campaign,
@@ -73,6 +75,7 @@ export async function pageviewRoutes(app: FastifyInstance) {
       fbclid,
       gclid,
       ttclid,
+      msclkid,
       utm_source,
       utm_medium,
       utm_campaign,

@@ -40,6 +40,11 @@ interface BofQuery {
   to?: string
 }
 
+interface LtvQuery {
+  from?: string
+  to?: string
+}
+
 interface SpendRow {
   campaign_id: string | null
   campaign_name: string | null
@@ -376,6 +381,58 @@ export async function reportRoutes(app: FastifyInstance) {
           source: r.utm_source ?? '(unknown)',
           aov: parseFloat(r.aov),
           sales: parseInt(r.sales, 10),
+        })),
+      })
+    }
+  )
+
+  app.get<{ Params: { id: string }; Querystring: LtvQuery }>(
+    '/clients/:id/reports/ltv',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      // customer_ltv already carries acquisition_campaign (set at first-purchase time
+      // by recordPurchase) and revenue_30d/60d/90d/180d/lifetime (kept current by the
+      // nightly refresh:ltv job — Step 10) — no joins needed, just aggregate by cohort.
+      const { rows } = await db.query<{
+        acquisition_campaign: string | null
+        customers: string
+        avg_30d: string
+        avg_60d: string
+        avg_90d: string
+        avg_180d: string
+        avg_lifetime: string
+        total_lifetime: string
+      }>(
+        `SELECT
+           acquisition_campaign,
+           COUNT(*) AS customers,
+           AVG(revenue_30d) AS avg_30d,
+           AVG(revenue_60d) AS avg_60d,
+           AVG(revenue_90d) AS avg_90d,
+           AVG(revenue_180d) AS avg_180d,
+           AVG(revenue_lifetime) AS avg_lifetime,
+           SUM(revenue_lifetime) AS total_lifetime
+         FROM customer_ltv
+         WHERE client_id = $1 AND first_purchase_date::date BETWEEN $2 AND $3
+         GROUP BY acquisition_campaign
+         ORDER BY SUM(revenue_lifetime) DESC`,
+        [clientId, from, to]
+      )
+
+      return reply.send({
+        from,
+        to,
+        campaigns: rows.map((r) => ({
+          campaign_name: r.acquisition_campaign ?? '(unknown)',
+          customers: parseInt(r.customers, 10),
+          avgLtv30d: parseFloat(r.avg_30d),
+          avgLtv60d: parseFloat(r.avg_60d),
+          avgLtv90d: parseFloat(r.avg_90d),
+          avgLtv180d: parseFloat(r.avg_180d),
+          avgLtvLifetime: parseFloat(r.avg_lifetime),
+          totalLtvLifetime: parseFloat(r.total_lifetime),
         })),
       })
     }

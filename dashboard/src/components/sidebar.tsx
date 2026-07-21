@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "leads", label: "Leads", enabled: true },
   { slug: "bof", label: "BOF", enabled: true },
-  { slug: "ltv", label: "LTV", enabled: false },
+  { slug: "ltv", label: "LTV", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: false },
 ];
 

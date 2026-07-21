@@ -89,6 +89,23 @@ export interface BofReport {
   aovBySource: AovBySourceRow[];
 }
 
+export interface LtvCampaignRow {
+  campaign_name: string;
+  customers: number;
+  avgLtv30d: number;
+  avgLtv60d: number;
+  avgLtv90d: number;
+  avgLtv180d: number;
+  avgLtvLifetime: number;
+  totalLtvLifetime: number;
+}
+
+export interface LtvReport {
+  from: string;
+  to: string;
+  campaigns: LtvCampaignRow[];
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) {
@@ -120,4 +137,8 @@ export function getLeads(clientId: string, range?: DateRange): Promise<LeadsRepo
 
 export function getBof(clientId: string, range?: DateRange): Promise<BofReport> {
   return fetchJson<BofReport>(`/clients/${clientId}/reports/bof${rangeQuery(range)}`);
+}
+
+export function getLtv(clientId: string, range?: DateRange): Promise<LtvReport> {
+  return fetchJson<LtvReport>(`/clients/${clientId}/reports/ltv${rangeQuery(range)}`);
 }

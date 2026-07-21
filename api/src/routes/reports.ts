@@ -9,6 +9,18 @@ function defaultRange(from?: string, to?: string): { from: string; to: string } 
   return { from: fromDate.toISOString().slice(0, 10), to: toDate.toISOString().slice(0, 10) }
 }
 
+// Same-length window immediately preceding [from, to] — for period-over-period deltas.
+function previousPeriod(from: string, to: string): { prevFrom: string; prevTo: string } {
+  const fromDate = new Date(from + 'T00:00:00Z')
+  const toDate = new Date(to + 'T00:00:00Z')
+  const lengthDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1
+  const prevTo = new Date(fromDate)
+  prevTo.setUTCDate(prevTo.getUTCDate() - 1)
+  const prevFrom = new Date(prevTo)
+  prevFrom.setUTCDate(prevFrom.getUTCDate() - (lengthDays - 1))
+  return { prevFrom: prevFrom.toISOString().slice(0, 10), prevTo: prevTo.toISOString().slice(0, 10) }
+}
+
 function dateList(from: string, to: string): string[] {
   const dates: string[] = []
   const cur = new Date(from + 'T00:00:00Z')
@@ -41,6 +53,11 @@ interface BofQuery {
 }
 
 interface LtvQuery {
+  from?: string
+  to?: string
+}
+
+interface MofQuery {
   from?: string
   to?: string
 }
@@ -451,6 +468,48 @@ export async function reportRoutes(app: FastifyInstance) {
     }
   )
 
+  // MOF (middle of funnel): engagement between the first click and a lead/purchase —
+  // the one funnel stage with no existing report, using pageviews/sessions as the
+  // proxy signal since add-to-cart tracking doesn't exist yet (Step 11 backlog).
+  app.get<{ Params: { id: string }; Querystring: MofQuery }>(
+    '/clients/:id/reports/mof',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [sessionsRow, pageviewsRow, engagedRow] = await Promise.all([
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM pageviews WHERE client_id = $1 AND timestamp::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string }>(
+          `SELECT COUNT(DISTINCT pv.session_id) AS total
+           FROM pageviews pv JOIN sessions s ON s.id = pv.session_id
+           WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+      ])
+
+      const totalSessions = parseInt(sessionsRow.rows[0].total, 10)
+      const totalPageviews = parseInt(pageviewsRow.rows[0].total, 10)
+      const engagedSessions = parseInt(engagedRow.rows[0].total, 10)
+
+      return reply.send({
+        from,
+        to,
+        totalSessions,
+        totalPageviews,
+        engagedSessions,
+        avgPageviewsPerSession: totalSessions > 0 ? totalPageviews / totalSessions : null,
+        engagementRate: totalSessions > 0 ? (engagedSessions / totalSessions) * 100 : null,
+      })
+    }
+  )
+
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(
     '/clients/:id/reports/ltv',
     async (req, reply) => {
@@ -588,18 +647,21 @@ export async function reportRoutes(app: FastifyInstance) {
 
   app.get<{ Querystring: AgencyOverviewQuery }>('/reports/agency-overview', async (req, reply) => {
     const { from, to } = defaultRange(req.query.from, req.query.to)
+    const { prevFrom, prevTo } = previousPeriod(from, to)
 
     const { rows } = await db.query<{
       id: string
       name: string
       cost: string
       revenue: string
+      prev_revenue: string
     }>(
       `SELECT
          c.id,
          c.name,
          COALESCE(spend.total, 0) AS cost,
-         COALESCE(rev.total, 0) AS revenue
+         COALESCE(rev.total, 0) AS revenue,
+         COALESCE(prev_rev.total, 0) AS prev_revenue
        FROM clients c
        LEFT JOIN (
          SELECT client_id, SUM(spend) AS total FROM ad_costs
@@ -611,13 +673,20 @@ export async function reportRoutes(app: FastifyInstance) {
          WHERE p.purchased_at::date BETWEEN $1 AND $2
          GROUP BY a.client_id
        ) rev ON rev.client_id = c.id
+       LEFT JOIN (
+         SELECT a.client_id, SUM(a.attributed_revenue) AS total
+         FROM attributions a JOIN purchases p ON p.id = a.purchase_id
+         WHERE p.purchased_at::date BETWEEN $3 AND $4
+         GROUP BY a.client_id
+       ) prev_rev ON prev_rev.client_id = c.id
        ORDER BY c.name`,
-      [from, to]
+      [from, to, prevFrom, prevTo]
     )
 
     const clients = rows.map((r) => {
       const cost = parseFloat(r.cost)
       const revenue = parseFloat(r.revenue)
+      const prevRevenue = parseFloat(r.prev_revenue)
       const profit = revenue - cost
       return {
         id: r.id,
@@ -627,6 +696,7 @@ export async function reportRoutes(app: FastifyInstance) {
         profit,
         roas: cost > 0 ? revenue / cost : null,
         roi: cost > 0 ? (profit / cost) * 100 : null,
+        revenueChangePct: prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null,
       }
     })
 

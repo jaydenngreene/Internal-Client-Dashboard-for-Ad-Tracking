@@ -53,6 +53,23 @@ export interface BofReport {
   aovBySource: AovBySourceRow[];
 }
 
+export interface TofReport {
+  from: string;
+  to: string;
+  totalLeads: number;
+  cpl: number | null;
+}
+
+export interface MofReport {
+  from: string;
+  to: string;
+  totalSessions: number;
+  totalPageviews: number;
+  engagedSessions: number;
+  avgPageviewsPerSession: number | null;
+  engagementRate: number | null;
+}
+
 export interface LtvCampaignRow {
   campaign_name: string;
   customers: number;
@@ -100,6 +117,7 @@ export interface AgencyClientRow {
   profit: number;
   roas: number | null;
   roi: number | null;
+  revenueChangePct: number | null;
 }
 
 export interface AgencyOverviewReport {
@@ -133,6 +151,14 @@ export function getOverview(clientId: string, range?: DateRange): Promise<Overvi
 
 export function getBof(clientId: string, range?: DateRange): Promise<BofReport> {
   return fetchJson<BofReport>(`/clients/${clientId}/reports/bof${rangeQuery(range)}`);
+}
+
+export function getTof(clientId: string, range?: DateRange): Promise<TofReport> {
+  return fetchJson<TofReport>(`/clients/${clientId}/reports/leads${rangeQuery(range)}`);
+}
+
+export function getMof(clientId: string, range?: DateRange): Promise<MofReport> {
+  return fetchJson<MofReport>(`/clients/${clientId}/reports/mof${rangeQuery(range)}`);
 }
 
 export function getLtv(clientId: string, range?: DateRange): Promise<LtvReport> {

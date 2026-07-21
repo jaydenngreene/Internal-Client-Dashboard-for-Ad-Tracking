@@ -7,6 +7,8 @@ import { getAgencyOverview, AgencyClientRow } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { formatCurrency, formatRoas, formatPercent } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
+import { DeltaBadge } from "@/components/delta-badge";
+import { useRecentClientIds } from "@/lib/recent-clients";
 import {
   Table,
   TableBody,
@@ -22,9 +24,10 @@ import { cn } from "@/lib/utils";
 type SortKey = keyof Pick<AgencyClientRow, "name" | "cost" | "revenue" | "profit" | "roas" | "roi">;
 
 export default function AgencyOverviewPage() {
-  const [preset, setPreset] = useState<RangePreset>("30d");
+  const [preset, setPreset] = useState<RangePreset>("7d");
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
+  const recentIds = useRecentClientIds();
   const range = resolveRange(preset);
 
   const { data, isLoading, isError } = useQuery({
@@ -54,6 +57,12 @@ export default function AgencyOverviewPage() {
         const cmp = an - bn;
         return sortDesc ? -cmp : cmp;
       })
+    : [];
+
+  const recentClients = data
+    ? recentIds
+        .map((id) => data.clients.find((c) => c.id === id))
+        .filter((c): c is AgencyClientRow => c !== undefined)
     : [];
 
   function toggleSort(key: SortKey) {
@@ -124,6 +133,32 @@ export default function AgencyOverviewPage() {
             </Card>
           </div>
 
+          {recentClients.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Recently Viewed
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {recentClients.map((client) => (
+                  <Link key={client.id} href={`/clients/${client.id}/overview`}>
+                    <Card className="px-4 transition-colors hover:bg-secondary/40">
+                      <CardContent className="px-0">
+                        <p className="truncate text-sm font-medium">{client.name}</p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums text-chart-1">
+                          {formatCurrency(client.revenue)}
+                        </p>
+                        <div className="mt-0.5">
+                          <DeltaBadge pct={client.revenueChangePct} />
+                          <span className="ml-1 text-xs text-muted-foreground">vs prior period</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Card className="px-0">
             <CardHeader className="px-4">
               <CardTitle>Clients</CardTitle>
@@ -148,6 +183,9 @@ export default function AgencyOverviewPage() {
                           {sortKey === col.key && (sortDesc ? " ↓" : " ↑")}
                         </TableHead>
                       ))}
+                      <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Revenue Δ
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -175,6 +213,9 @@ export default function AgencyOverviewPage() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{formatRoas(client.roas)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatPercent(client.roi)}</TableCell>
+                        <TableCell className="text-right">
+                          <DeltaBadge pct={client.revenueChangePct} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

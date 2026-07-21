@@ -15,18 +15,21 @@ const BREAKDOWN_OPTIONS: { value: FunnelBreakdown; label: string }[] = [
   { value: "campaign", label: "Campaign" },
   { value: "source", label: "Source" },
   { value: "keyword", label: "Keyword" },
+  { value: "creative", label: "Creative" },
 ];
 
 const BREAKDOWN_TITLE: Record<FunnelBreakdown, string> = {
   campaign: "Campaigns",
   source: "Traffic Sources",
   keyword: "Keywords",
+  creative: "Creatives",
 };
 
 const BREAKDOWN_COLUMN_LABEL: Record<FunnelBreakdown, string> = {
   campaign: "Campaign",
   source: "Source",
   keyword: "Keyword",
+  creative: "Creative",
 };
 
 export function CampaignsClient({ clientId }: { clientId: string }) {
@@ -45,7 +48,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
         <div>
           <h1 className="text-lg font-semibold">Campaigns</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Cost → leads → sales → revenue → ROAS, broken down by campaign or traffic source
+            Cost → leads → sales → revenue → ROAS, broken down by campaign, source, keyword, or individual creative
           </p>
         </div>
         <div className="flex items-center gap-3">

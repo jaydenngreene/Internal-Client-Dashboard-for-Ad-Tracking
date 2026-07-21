@@ -70,7 +70,7 @@ interface CallsQuery {
 interface FunnelQuery {
   from?: string
   to?: string
-  breakdown?: 'campaign' | 'source' | 'keyword'
+  breakdown?: 'campaign' | 'source' | 'keyword' | 'creative'
 }
 
 interface AgencyOverviewQuery {
@@ -240,6 +240,56 @@ function getRevenueByKeyword(clientId: string, from: string, to: string) {
   )
 }
 
+// Creative/ad-level breakdown — the ad_costs table has carried ad_id/ad_name since
+// Step 1, but no report ever grouped by it (only campaign/platform roll-ups). Spend
+// keys off ad_id (a real unique id per platform, unlike campaign_name which can
+// collide) with ad_name as the display label; leads/revenue match against
+// sessions.utm_content (captured since Step 1, never surfaced — same situation
+// utm_term was in before the Step 27 keyword breakdown), normalized the same way
+// source/keyword already are since both sides are marketer-set labels, not a shared id.
+function getSpendByCreative(clientId: string, from: string, to: string) {
+  return db.query<{ ad_id: string; ad_name: string | null; platform: string; cost: string; impressions: string; clicks: string }>(
+    `SELECT ad_id, ad_name, platform,
+            SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks
+     FROM ad_costs
+     WHERE client_id = $1 AND date BETWEEN $2 AND $3
+     GROUP BY ad_id, ad_name, platform`,
+    [clientId, from, to]
+  )
+}
+
+function getLeadsByCreative(clientId: string, from: string, to: string) {
+  return db.query<{ utm_content: string | null; leads: string }>(
+    `SELECT s.utm_content, COUNT(DISTINCT l.id) AS leads
+     FROM leads l
+     JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
+     JOIN LATERAL (
+       SELECT utm_content FROM sessions
+       WHERE visitor_id = i.visitor_id
+         AND started_at <= l.created_at
+         AND started_at >= l.created_at - INTERVAL '90 days'
+       ORDER BY started_at ASC
+       LIMIT 1
+     ) s ON true
+     WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_content`,
+    [clientId, from, to]
+  )
+}
+
+function getRevenueByCreative(clientId: string, from: string, to: string) {
+  return db.query<{ utm_content: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_content, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+     FROM attributions a
+     JOIN sessions s ON s.id = a.session_id
+     JOIN purchases p ON p.id = a.purchase_id
+     WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_content`,
+    [clientId, from, to]
+  )
+}
+
+const normalizeCreative = (name: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeKeyword = (name: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeCampaignName = (name: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeSource = (name: string | null) => (name ?? '').trim().toLowerCase().replace(/_ads$/, '')
@@ -826,7 +876,13 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
       const breakdown =
-        req.query.breakdown === 'source' ? 'source' : req.query.breakdown === 'keyword' ? 'keyword' : 'campaign'
+        req.query.breakdown === 'source'
+          ? 'source'
+          : req.query.breakdown === 'keyword'
+            ? 'keyword'
+            : req.query.breakdown === 'creative'
+              ? 'creative'
+              : 'campaign'
 
       const [spendRows, leadRows, revenueRows] =
         breakdown === 'source'
@@ -841,19 +897,33 @@ export async function reportRoutes(app: FastifyInstance) {
                 getLeadsByKeyword(clientId, from, to),
                 getRevenueByKeyword(clientId, from, to),
               ])
-            : await Promise.all([
-                getSpendByCampaign(clientId, from, to),
-                getLeadsByCampaign(clientId, from, to),
-                getRevenueByCampaign(clientId, from, to),
-              ])
+            : breakdown === 'creative'
+              ? await Promise.all([
+                  getSpendByCreative(clientId, from, to),
+                  getLeadsByCreative(clientId, from, to),
+                  getRevenueByCreative(clientId, from, to),
+                ])
+              : await Promise.all([
+                  getSpendByCampaign(clientId, from, to),
+                  getLeadsByCampaign(clientId, from, to),
+                  getRevenueByCampaign(clientId, from, to),
+                ])
 
       const normalize =
-        breakdown === 'source' ? normalizeSource : breakdown === 'keyword' ? normalizeKeyword : normalizeCampaignName
+        breakdown === 'source'
+          ? normalizeSource
+          : breakdown === 'keyword'
+            ? normalizeKeyword
+            : breakdown === 'creative'
+              ? normalizeCreative
+              : normalizeCampaignName
 
       interface Row {
         name: string
         platform: string | null
         cost: number
+        impressions: number
+        clicks: number
         leads: number
         sales: number
         revenue: number
@@ -864,19 +934,26 @@ export async function reportRoutes(app: FastifyInstance) {
       const getOrCreate = (key: string, fallbackName: string): Row => {
         let row = rows.get(key)
         if (!row) {
-          row = { name: fallbackName, platform: null, cost: 0, leads: 0, sales: 0, revenue: 0 }
+          row = { name: fallbackName, platform: null, cost: 0, impressions: 0, clicks: 0, leads: 0, sales: 0, revenue: 0 }
           rows.set(key, row)
         }
         return row
       }
 
       for (const r of spendRows.rows) {
-        const name = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).campaign_name
+        const name =
+          breakdown === 'source'
+            ? (r as { platform: string }).platform
+            : breakdown === 'creative'
+              ? (r as { ad_name: string | null }).ad_name
+              : (r as SpendRow).campaign_name
         const platform = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).platform
         const key = normalize(name)
-        const row = getOrCreate(key, name ?? '(unnamed campaign)')
+        const row = getOrCreate(key, name ?? (breakdown === 'creative' ? '(unnamed creative)' : '(unnamed campaign)'))
         row.platform = platform
         row.cost = parseFloat(r.cost)
+        row.impressions = parseInt((r as { impressions: string }).impressions ?? '0', 10)
+        row.clicks = parseInt((r as { clicks: string }).clicks ?? '0', 10)
       }
 
       const fieldFor = (r: unknown): string | null =>
@@ -884,9 +961,17 @@ export async function reportRoutes(app: FastifyInstance) {
           ? (r as { utm_source: string | null }).utm_source
           : breakdown === 'keyword'
             ? (r as { utm_term: string | null }).utm_term
-            : (r as { utm_campaign: string | null }).utm_campaign
+            : breakdown === 'creative'
+              ? (r as { utm_content: string | null }).utm_content
+              : (r as { utm_campaign: string | null }).utm_campaign
       const fallbackFor = () =>
-        breakdown === 'source' ? '(no utm_source)' : breakdown === 'keyword' ? '(no utm_term)' : '(no utm_campaign)'
+        breakdown === 'source'
+          ? '(no utm_source)'
+          : breakdown === 'keyword'
+            ? '(no utm_term)'
+            : breakdown === 'creative'
+              ? '(no utm_content)'
+              : '(no utm_campaign)'
 
       for (const r of leadRows.rows) {
         const name = fieldFor(r)
@@ -905,13 +990,17 @@ export async function reportRoutes(app: FastifyInstance) {
 
       // "matched" means real ad-platform spend backs this row — the anchor dimension
       // here is spend, so a row assembled only from leads/revenue with no cost is the
-      // UTM-tagging-mismatch signal worth flagging rather than hiding.
+      // UTM-tagging-mismatch signal worth flagging rather than hiding. CTR/CPC surface
+      // here for every breakdown (not creative-only) since ad_costs already carries
+      // impressions/clicks for campaign/source too — just never exposed before.
       const rowsOut = Array.from(rows.values())
         .map((r) => ({
           ...r,
           cpl: r.leads > 0 ? r.cost / r.leads : null,
           profit: r.revenue - r.cost,
           roas: r.cost > 0 ? r.revenue / r.cost : null,
+          ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,
+          cpc: r.clicks > 0 ? r.cost / r.clicks : null,
           matched: r.cost > 0,
         }))
         .sort((a, b) => b.revenue - a.revenue)

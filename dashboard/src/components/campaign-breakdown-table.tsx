@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { FunnelRow } from "@/lib/api";
-import { formatCurrency, formatNumber, formatRoas } from "@/lib/format";
+import { formatCurrency, formatNumber, formatRoas, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortKey = "name" | "cost" | "leads" | "cpl" | "sales" | "revenue" | "profit" | "roas";
+type SortKey = "name" | "cost" | "ctr" | "cpc" | "leads" | "cpl" | "sales" | "revenue" | "profit" | "roas";
 
 export function CampaignBreakdownTable({
   rows,
@@ -29,6 +29,8 @@ export function CampaignBreakdownTable({
   const columns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "name", label: nameColumnLabel },
     { key: "cost", label: "Cost", align: "right" },
+    { key: "ctr", label: "CTR", align: "right" },
+    { key: "cpc", label: "CPC", align: "right" },
     { key: "leads", label: "Leads", align: "right" },
     { key: "cpl", label: "CPL", align: "right" },
     { key: "sales", label: "Sales", align: "right" },
@@ -101,6 +103,8 @@ export function CampaignBreakdownTable({
                 </div>
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatCurrency(row.cost)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.ctr === null ? "—" : formatPercent(row.ctr)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.cpc === null ? "—" : formatCurrency(row.cpc)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatNumber(row.leads)}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {row.cpl === null ? "—" : formatCurrency(row.cpl)}

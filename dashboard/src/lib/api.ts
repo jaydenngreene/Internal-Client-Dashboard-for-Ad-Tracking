@@ -118,18 +118,22 @@ export interface LtvReport {
   campaigns: LtvCampaignRow[];
 }
 
-export type FunnelBreakdown = "campaign" | "source" | "keyword";
+export type FunnelBreakdown = "campaign" | "source" | "keyword" | "creative";
 
 export interface FunnelRow {
   name: string;
   platform: string | null;
   cost: number;
+  impressions: number;
+  clicks: number;
   leads: number;
   cpl: number | null;
   sales: number;
   revenue: number;
   profit: number;
   roas: number | null;
+  ctr: number | null;
+  cpc: number | null;
   matched: boolean;
 }
 

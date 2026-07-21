@@ -891,11 +891,12 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [totalsRow, campaignRows] = await Promise.all([
-        db.query<{ total: string; qualified: string; avg_duration: string | null }>(
+      const [totalsRow, campaignRows, dispositionRows] = await Promise.all([
+        db.query<{ total: string; qualified: string; avg_duration: string | null; avg_score: string | null }>(
           `SELECT COUNT(*) AS total,
                   COUNT(*) FILTER (WHERE qualified) AS qualified,
-                  AVG(duration_seconds) AS avg_duration
+                  AVG(duration_seconds) AS avg_duration,
+                  AVG(qualification_score) AS avg_score
            FROM calls WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
           [clientId, from, to]
         ),
@@ -905,6 +906,15 @@ export async function reportRoutes(app: FastifyInstance) {
            JOIN sessions s ON s.id = c.session_id
            WHERE c.client_id = $1 AND c.started_at::date BETWEEN $2 AND $3
            GROUP BY s.utm_campaign
+           ORDER BY COUNT(*) DESC`,
+          [clientId, from, to]
+        ),
+        // Step 23 — disposition breakdown. NULL disposition (calls never manually
+        // tagged) surfaces as '(untagged)' rather than being silently dropped.
+        db.query<{ disposition: string | null; calls: string }>(
+          `SELECT disposition, COUNT(*) AS calls
+           FROM calls WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3
+           GROUP BY disposition
            ORDER BY COUNT(*) DESC`,
           [clientId, from, to]
         ),
@@ -921,8 +931,14 @@ export async function reportRoutes(app: FastifyInstance) {
         qualifiedRate: totalCalls > 0 ? (qualifiedCalls / totalCalls) * 100 : null,
         avgDurationSeconds:
           totalsRow.rows[0].avg_duration !== null ? parseFloat(totalsRow.rows[0].avg_duration) : null,
+        avgQualificationScore:
+          totalsRow.rows[0].avg_score !== null ? parseFloat(totalsRow.rows[0].avg_score) : null,
         byCampaign: campaignRows.rows.map((r) => ({
           campaign_name: r.utm_campaign ?? '(untracked)',
+          calls: parseInt(r.calls, 10),
+        })),
+        byDisposition: dispositionRows.rows.map((r) => ({
+          disposition: r.disposition ?? '(untagged)',
           calls: parseInt(r.calls, 10),
         })),
       })

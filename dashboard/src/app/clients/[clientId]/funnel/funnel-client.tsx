@@ -277,7 +277,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
           {isCallBased && calls.data && (
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Calls</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <Card className="px-4">
                   <CardContent className="px-0">
                     <p className="text-xs font-medium text-muted-foreground">Total Calls</p>
@@ -292,6 +292,16 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatNumber(calls.data.qualifiedCalls)} of {formatNumber(calls.data.totalCalls)} calls
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Avg Qualification Score</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {calls.data.avgQualificationScore === null
+                        ? "—"
+                        : calls.data.avgQualificationScore.toFixed(2)}
                     </p>
                   </CardContent>
                 </Card>

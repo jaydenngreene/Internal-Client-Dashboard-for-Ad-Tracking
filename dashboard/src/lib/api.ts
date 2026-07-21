@@ -84,6 +84,11 @@ export interface CallsByCampaignRow {
   calls: number;
 }
 
+export interface CallsByDispositionRow {
+  disposition: string;
+  calls: number;
+}
+
 export interface CallsReport {
   from: string;
   to: string;
@@ -91,7 +96,9 @@ export interface CallsReport {
   qualifiedCalls: number;
   qualifiedRate: number | null;
   avgDurationSeconds: number | null;
+  avgQualificationScore: number | null;
   byCampaign: CallsByCampaignRow[];
+  byDisposition: CallsByDispositionRow[];
 }
 
 export interface LtvCampaignRow {

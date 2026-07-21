@@ -2,11 +2,14 @@ import { db } from '../../db'
 import { fetchFacebookAdCosts } from './facebook'
 import { fetchGoogleAdCosts } from './google'
 import { fetchBingAdCosts } from './bing'
+import { fetchTikTokAdCosts } from './tiktok'
+import { fetchSnapchatAdCosts } from './snapchat'
+import { fetchPinterestAdCosts } from './pinterest'
 import { upsertAdCosts } from './upsert'
 
 interface ClientIntegration {
   client_id: string
-  platform: 'facebook_ads' | 'google_ads' | 'bing_ads'
+  platform: 'facebook_ads' | 'google_ads' | 'bing_ads' | 'tiktok_ads' | 'snapchat_ads' | 'pinterest_ads'
   config: Record<string, string>
 }
 
@@ -28,7 +31,7 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
   const { rows: integrations } = await db.query<ClientIntegration>(
     `SELECT client_id, platform, config
      FROM client_integrations
-     WHERE platform IN ('facebook_ads', 'google_ads', 'bing_ads')`
+     WHERE platform IN ('facebook_ads', 'google_ads', 'bing_ads', 'tiktok_ads', 'snapchat_ads', 'pinterest_ads')`
   )
 
   console.log(`Syncing ad costs for ${integrations.length} integration(s), ${sinceStr} → ${untilStr}`)
@@ -53,7 +56,7 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
           sinceStr,
           untilStr
         )
-      } else {
+      } else if (integration.platform === 'bing_ads') {
         rows = await fetchBingAdCosts(
           {
             customer_id: integration.config.customer_id,
@@ -63,6 +66,12 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
           sinceStr,
           untilStr
         )
+      } else if (integration.platform === 'tiktok_ads') {
+        rows = await fetchTikTokAdCosts(integration.config.access_token, integration.config.advertiser_id, sinceStr, untilStr)
+      } else if (integration.platform === 'snapchat_ads') {
+        rows = await fetchSnapchatAdCosts(integration.config.access_token, integration.config.ad_account_id, sinceStr, untilStr)
+      } else {
+        rows = await fetchPinterestAdCosts(integration.config.access_token, integration.config.ad_account_id, sinceStr, untilStr)
       }
 
       await upsertAdCosts(integration.client_id, integration.platform, rows)

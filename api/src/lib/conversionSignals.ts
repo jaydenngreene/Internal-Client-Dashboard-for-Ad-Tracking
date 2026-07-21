@@ -41,6 +41,26 @@ interface SnapchatCapiConfig {
   access_token: string
 }
 
+interface PinterestConversionConfig {
+  access_token: string
+  ad_account_id: string
+}
+
+// LinkedIn's Conversions API is a conversion-matching feature like Google Enhanced
+// Conversions, not a full funnel-stage vocabulary — needs a pre-created "conversion"
+// object per outcome type in Campaign Manager, so separate purchase/lead ids
+// (mirrors GoogleAdsSignalConfig's conversion_action_purchase/lead split).
+interface LinkedInConversionConfig {
+  access_token: string
+  conversion_id_purchase?: string
+  conversion_id_lead?: string
+}
+
+interface RedditConversionConfig {
+  access_token: string
+  account_id: string
+}
+
 function sha256(value: string): string {
   return crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex')
 }
@@ -208,6 +228,117 @@ async function sendSnapchatCapi(config: SnapchatCapiConfig, payload: SignalPaylo
   }
 }
 
+const PINTEREST_EVENT_NAME: Record<SignalEventType, string> = {
+  Purchase: 'checkout',
+  Lead: 'lead',
+  ViewContent: 'page_visit',
+  AddToCart: 'add_to_cart',
+  InitiateCheckout: 'custom',
+}
+
+async function sendPinterestConversion(config: PinterestConversionConfig, payload: SignalPayload): Promise<void> {
+  const body = {
+    data: [
+      {
+        event_name: PINTEREST_EVENT_NAME[payload.eventType],
+        action_source: 'web',
+        event_time: Math.floor(payload.eventTime.getTime() / 1000),
+        event_id: crypto.randomUUID(),
+        user_data: {
+          em: payload.email ? [sha256(payload.email)] : undefined,
+          client_ip_address: payload.ip ?? undefined,
+          client_user_agent: payload.userAgent ?? undefined,
+        },
+        custom_data: {
+          value: payload.value ?? undefined,
+          currency: payload.currency ?? 'USD',
+        },
+      },
+    ],
+  }
+
+  const res = await fetch(`https://api.pinterest.com/v5/ad_accounts/${config.ad_account_id}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.access_token}` },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Pinterest Conversions API request failed (${res.status}): ${text}`)
+  }
+}
+
+// Purchase/Lead only, same reason Google Enhanced Conversions is gated that way —
+// this is conversion-matching, not general funnel-stage signals.
+async function sendLinkedInConversion(config: LinkedInConversionConfig, payload: SignalPayload): Promise<void> {
+  const conversionId =
+    payload.eventType === 'Purchase' ? config.conversion_id_purchase : config.conversion_id_lead
+  if (!conversionId || !payload.email) return
+
+  const body = {
+    conversion: `urn:lla:llaPartnerConversion:${conversionId}`,
+    conversionHappenedAt: payload.eventTime.getTime(),
+    user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: sha256(payload.email) }] },
+    conversionValue: payload.value
+      ? { currencyCode: payload.currency ?? 'USD', amount: String(payload.value) }
+      : undefined,
+  }
+
+  const res = await fetch('https://api.linkedin.com/rest/conversionEvents', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.access_token}`,
+      'LinkedIn-Version': '202501',
+      'X-Restli-Protocol-Version': '2.0.0',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`LinkedIn Conversions API request failed (${res.status}): ${text}`)
+  }
+}
+
+const REDDIT_EVENT_TYPE: Record<SignalEventType, string> = {
+  Purchase: 'Purchase',
+  Lead: 'Lead',
+  ViewContent: 'ViewContent',
+  AddToCart: 'AddToCart',
+  InitiateCheckout: 'Custom',
+}
+
+async function sendRedditConversion(config: RedditConversionConfig, payload: SignalPayload): Promise<void> {
+  const body = {
+    test_mode: false,
+    events: [
+      {
+        event_at: payload.eventTime.toISOString(),
+        event_type: { tracking_type: REDDIT_EVENT_TYPE[payload.eventType] },
+        event_metadata: {
+          currency: payload.currency ?? 'USD',
+          value_decimal: payload.value ?? undefined,
+        },
+        user: {
+          email: payload.email ? sha256(payload.email) : undefined,
+          ip_address: payload.ip ?? undefined,
+          user_agent: payload.userAgent ?? undefined,
+        },
+      },
+    ],
+  }
+
+  const res = await fetch(`https://ads-api.reddit.com/api/v2.0/conversions/events/${config.account_id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.access_token}` },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Reddit Conversions API request failed (${res.status}): ${text}`)
+  }
+}
+
 // Fires the given event to every ad-platform integration the client has configured.
 // Never throws — a failed/missing integration must never block the purchase, lead, or
 // event flow that triggered it, same philosophy as jobs/adCosts/run.ts's per-client
@@ -215,7 +346,10 @@ async function sendSnapchatCapi(config: SnapchatCapiConfig, payload: SignalPaylo
 export async function sendConversionSignals(clientId: string, payload: SignalPayload): Promise<void> {
   const { rows } = await db.query<{ platform: string; config: Record<string, string> }>(
     `SELECT platform, config FROM client_integrations
-     WHERE client_id = $1 AND platform IN ('facebook_capi', 'google_ads', 'tiktok_ads', 'snapchat_ads')`,
+     WHERE client_id = $1 AND platform IN (
+       'facebook_capi', 'google_ads', 'tiktok_ads', 'snapchat_ads',
+       'pinterest_ads', 'linkedin_ads', 'reddit_ads'
+     )`,
     [clientId]
   )
 
@@ -225,6 +359,13 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
   const googleConfig = rows.find((r) => r.platform === 'google_ads')?.config as GoogleAdsSignalConfig | undefined
   const tiktokConfig = rows.find((r) => r.platform === 'tiktok_ads')?.config as TikTokEventsConfig | undefined
   const snapchatConfig = rows.find((r) => r.platform === 'snapchat_ads')?.config as SnapchatCapiConfig | undefined
+  const pinterestConfig = rows.find((r) => r.platform === 'pinterest_ads')?.config as
+    | PinterestConversionConfig
+    | undefined
+  const linkedinConfig = rows.find((r) => r.platform === 'linkedin_ads')?.config as
+    | LinkedInConversionConfig
+    | undefined
+  const redditConfig = rows.find((r) => r.platform === 'reddit_ads')?.config as RedditConversionConfig | undefined
 
   const tasks: Promise<void>[] = []
 
@@ -265,6 +406,36 @@ export async function sendConversionSignals(clientId: string, payload: SignalPay
           `[conversionSignals] Google Enhanced Conversion failed for client=${clientId}:`,
           (err as Error).message
         )
+      })
+    )
+  }
+
+  if (pinterestConfig?.access_token && pinterestConfig?.ad_account_id) {
+    tasks.push(
+      sendPinterestConversion(pinterestConfig, payload).catch((err) => {
+        console.error(
+          `[conversionSignals] Pinterest Conversions API failed for client=${clientId}:`,
+          (err as Error).message
+        )
+      })
+    )
+  }
+
+  if (linkedinConfig?.access_token && (payload.eventType === 'Purchase' || payload.eventType === 'Lead')) {
+    tasks.push(
+      sendLinkedInConversion(linkedinConfig, payload).catch((err) => {
+        console.error(
+          `[conversionSignals] LinkedIn Conversions API failed for client=${clientId}:`,
+          (err as Error).message
+        )
+      })
+    )
+  }
+
+  if (redditConfig?.access_token && redditConfig?.account_id) {
+    tasks.push(
+      sendRedditConversion(redditConfig, payload).catch((err) => {
+        console.error(`[conversionSignals] Reddit Conversions API failed for client=${clientId}:`, (err as Error).message)
       })
     )
   }

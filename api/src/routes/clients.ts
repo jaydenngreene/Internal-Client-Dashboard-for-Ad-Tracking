@@ -367,6 +367,50 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id }))
   })
 
+  // Save or update a Pinterest Ads integration — Step 17 (signals) / Step 19 (cost sync).
+  app.post<{
+    Params: { id: string }
+    Body: { access_token: string; ad_account_id: string }
+  }>('/clients/:id/integrations/pinterest-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, ad_account_id } = req.body
+    if (!access_token || !ad_account_id) {
+      return reply.code(400).send({ error: 'access_token and ad_account_id required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id }))
+  })
+
+  // Save or update a LinkedIn Ads integration — Step 17. conversion_id_purchase/lead
+  // are LinkedIn Campaign Manager "conversion" object ids, optional until created
+  // (mirrors Google Ads' conversion_action_purchase/lead — same reason: this is
+  // conversion-matching, not a general funnel-stage vocabulary).
+  app.post<{
+    Params: { id: string }
+    Body: { access_token: string; conversion_id_purchase?: string; conversion_id_lead?: string }
+  }>('/clients/:id/integrations/linkedin-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, conversion_id_purchase, conversion_id_lead } = req.body
+    if (!access_token) {
+      return reply.code(400).send({ error: 'access_token required' })
+    }
+    return reply
+      .code(200)
+      .send(await upsertIntegration(id, 'linkedin_ads', { access_token, conversion_id_purchase, conversion_id_lead }))
+  })
+
+  // Save or update a Reddit Ads integration — Step 17 (signals) / Step 20 (cost sync).
+  app.post<{
+    Params: { id: string }
+    Body: { access_token: string; account_id: string }
+  }>('/clients/:id/integrations/reddit-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, account_id } = req.body
+    if (!access_token || !account_id) {
+      return reply.code(400).send({ error: 'access_token and account_id required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'reddit_ads', { access_token, account_id }))
+  })
+
   // Save or update a Customers.ai integration — Step 12. See routes/webhooks/customersAi.ts
   // for why this is a shared secret rather than a real signature (same reason as GoHighLevel).
   app.post<{

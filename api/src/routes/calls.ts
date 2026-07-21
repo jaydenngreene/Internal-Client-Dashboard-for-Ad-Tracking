@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { dispatchEvent } from '../lib/outboundWebhooks'
 
 const DISPOSITIONS = ['new_lead', 'qualified', 'unqualified', 'existing_customer', 'wrong_number', 'voicemail', 'spam']
 
@@ -50,6 +51,16 @@ export async function callRoutes(app: FastifyInstance) {
       [qualification_score ?? null, disposition ?? null, req.params.id]
     )
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
-    return reply.send(rows[0])
+    const call = rows[0]
+
+    // Step 29 — notify any of the client's own systems subscribed to this event.
+    await dispatchEvent(call.client_id, 'call.qualified', {
+      call_id: call.id,
+      qualified: call.qualified,
+      qualification_score: call.qualification_score,
+      disposition: call.disposition,
+    })
+
+    return reply.send(call)
   })
 }

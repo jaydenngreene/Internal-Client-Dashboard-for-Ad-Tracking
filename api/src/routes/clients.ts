@@ -492,6 +492,49 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows)
   })
 
+  // Step 29 — outbound webhook subscriptions. Dedicated CRUD, not upsertIntegration()
+  // — a client can want multiple target URLs with different event filters, a real
+  // one-to-many shape client_integrations' one-row-per-platform design doesn't fit.
+  app.post<{
+    Params: { id: string }
+    Body: { target_url: string; event_types: string[] }
+  }>('/clients/:id/webhook-subscriptions', async (req, reply) => {
+    const { id } = req.params
+    const { target_url, event_types } = req.body
+    if (!target_url || !Array.isArray(event_types) || event_types.length === 0) {
+      return reply.code(400).send({ error: 'target_url and a non-empty event_types array required' })
+    }
+    const validEvents = ['sale.attributed', 'lead.opted.in', 'call.qualified']
+    const invalid = event_types.filter((e) => !validEvents.includes(e))
+    if (invalid.length > 0) {
+      return reply.code(400).send({ error: `Invalid event_types: ${invalid.join(', ')}. Valid: ${validEvents.join(', ')}` })
+    }
+    const signingSecret = uuidv4()
+    const { rows } = await db.query(
+      `INSERT INTO outbound_webhook_subscriptions (client_id, target_url, event_types, signing_secret)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [id, target_url, event_types, signingSecret]
+    )
+    return reply.code(201).send(rows[0])
+  })
+
+  app.get<{ Params: { id: string } }>('/clients/:id/webhook-subscriptions', async (req, reply) => {
+    const { rows } = await db.query(
+      `SELECT id, client_id, target_url, event_types, active, created_at
+       FROM outbound_webhook_subscriptions WHERE client_id = $1 ORDER BY created_at DESC`,
+      [req.params.id]
+    )
+    return reply.send(rows)
+  })
+
+  app.delete<{ Params: { subId: string } }>('/webhook-subscriptions/:subId', async (req, reply) => {
+    const { rows } = await db.query('DELETE FROM outbound_webhook_subscriptions WHERE id = $1 RETURNING id', [
+      req.params.subId,
+    ])
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.code(204).send()
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(

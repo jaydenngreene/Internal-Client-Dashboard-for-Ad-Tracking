@@ -3,6 +3,7 @@ import { db } from '../db'
 import { sendConversionSignals } from '../lib/conversionSignals'
 import { lookupVisitorId } from '../lib/visitorResolution'
 import { autoLinkByPhone, autoLinkByIp } from '../lib/identityLinking'
+import { dispatchEvent } from '../lib/outboundWebhooks'
 
 interface IdentifyBody {
   pixel_key: string
@@ -83,6 +84,9 @@ export async function identifyRoutes(app: FastifyInstance) {
       msclkid: sessionRows[0]?.msclkid ?? null,
       eventTime: new Date(),
     })
+
+    // Step 29 — notify any of the client's own systems subscribed to this event.
+    await dispatchEvent(clientId, 'lead.opted.in', { email: normalizedEmail, lead_type, page: page ?? null })
 
     return reply.code(200).send({ ok: true })
   })

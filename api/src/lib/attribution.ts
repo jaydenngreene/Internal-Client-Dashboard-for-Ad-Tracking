@@ -1,5 +1,6 @@
 import { db } from '../db'
 import { sendConversionSignals } from './conversionSignals'
+import { dispatchEvent } from './outboundWebhooks'
 
 export interface NormalizedConversion {
   email: string
@@ -106,6 +107,16 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     gclid: lastSession.gclid,
     msclkid: lastSession.msclkid,
     eventTime: new Date(),
+  })
+
+  // Step 29 — notify any of the client's own systems subscribed to this event.
+  await dispatchEvent(clientId, 'sale.attributed', {
+    email,
+    revenue: conv.revenue,
+    product: conv.product ?? null,
+    order_id: conv.order_id ?? null,
+    processor: conv.processor,
+    attribution_model: model,
   })
 }
 

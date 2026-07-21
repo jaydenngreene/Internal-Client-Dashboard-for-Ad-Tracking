@@ -1,0 +1,26 @@
+{% comment %}
+  Ad Tracking Pixel — add to theme.liquid just before </body>
+  Replace YOUR_API_URL and YOUR_PIXEL_KEY with actual values per client.
+{% endcomment %}
+
+<script>
+  window.ADT_CONFIG = {
+    apiUrl: 'YOUR_API_URL',
+    pixelKey: 'YOUR_PIXEL_KEY'
+  };
+</script>
+<script src="YOUR_API_URL/pixel.js" async></script>
+
+{% comment %}
+  If the customer is logged in, identify them automatically.
+  This links returning customers to their ad history without waiting for checkout.
+{% endcomment %}
+{% if customer %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.ADT) {
+      ADT.identify('{{ customer.email | escape }}', { lead_type: 'logged_in' });
+    }
+  });
+</script>
+{% endif %}

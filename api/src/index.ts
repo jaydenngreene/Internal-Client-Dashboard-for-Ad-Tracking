@@ -8,6 +8,8 @@ import { pageviewRoutes } from './routes/pageview'
 import { identifyRoutes } from './routes/identify'
 import { conversionRoutes } from './routes/conversion'
 import { webhookRoutes } from './routes/webhooks'
+import { shopifyWebhookRoutes } from './routes/webhooks/shopify'
+import { clientRoutes } from './routes/clients'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -34,6 +36,8 @@ app.register(pageviewRoutes)
 app.register(identifyRoutes)
 app.register(conversionRoutes)
 app.register(webhookRoutes)
+app.register(shopifyWebhookRoutes)
+app.register(clientRoutes)
 
 const start = async () => {
   try {

@@ -1,0 +1,64 @@
+{% comment %}
+  Checkout & Order Status Tracking
+  Add this in: Shopify Admin → Settings → Checkout → Order status page → Additional scripts
+  Replace YOUR_API_URL and YOUR_PIXEL_KEY with actual values per client.
+{% endcomment %}
+
+<script>
+  (function() {
+    var API_URL = 'YOUR_API_URL';
+    var PIXEL_KEY = 'YOUR_PIXEL_KEY';
+
+    function getCookie(name) {
+      return document.cookie.split('; ').reduce(function(acc, pair) {
+        var parts = pair.split('=');
+        return parts[0] === name ? parts[1] : acc;
+      }, null);
+    }
+
+    function send(endpoint, data) {
+      var payload = JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY }, data));
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(API_URL + endpoint, new Blob([payload], { type: 'application/json' }));
+      } else {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API_URL + endpoint, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(payload);
+      }
+    }
+
+    var visitorId = getCookie('_adt_vid');
+
+    {% if checkout %}
+      var email = '{{ checkout.email | escape }}';
+      var orderId = '{{ checkout.order_id }}';
+      var revenue = {{ checkout.total_price | money_without_currency | remove: ',' }};
+      var productName = '{{ checkout.line_items.first.title | escape }}';
+
+      // Fire identify event — links this email to their ad click history
+      if (email) {
+        send('/track/identify', {
+          anonymous_id: visitorId,
+          email: email,
+          lead_type: 'checkout',
+          page: window.location.href
+        });
+      }
+
+      // Fire conversion event on thank you page only
+      {% if first_time_accessed %}
+        if (email && revenue > 0) {
+          send('/track/conversion', {
+            anonymous_id: visitorId,
+            email: email,
+            revenue: revenue,
+            product: productName,
+            order_id: String(orderId),
+            processor: 'shopify'
+          });
+        }
+      {% endif %}
+    {% endif %}
+  })();
+</script>

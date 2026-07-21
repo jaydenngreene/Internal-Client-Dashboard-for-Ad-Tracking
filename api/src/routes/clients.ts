@@ -380,22 +380,36 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id }))
   })
 
-  // Save or update a LinkedIn Ads integration — Step 17. conversion_id_purchase/lead
-  // are LinkedIn Campaign Manager "conversion" object ids, optional until created
-  // (mirrors Google Ads' conversion_action_purchase/lead — same reason: this is
-  // conversion-matching, not a general funnel-stage vocabulary).
+  // Save or update a LinkedIn Ads integration — Step 17 (signals, conversion_id_*)
+  // and Step 20 (cost sync, account_id). conversion_id_purchase/lead are LinkedIn
+  // Campaign Manager "conversion" object ids, optional until created (mirrors
+  // Google Ads' conversion_action_purchase/lead — same reason: conversion-matching,
+  // not a general funnel-stage vocabulary). account_id is the sponsored ad account
+  // id cost-sync reports against — optional until Step 20 needs it.
   app.post<{
     Params: { id: string }
-    Body: { access_token: string; conversion_id_purchase?: string; conversion_id_lead?: string }
+    Body: {
+      access_token: string
+      account_id?: string
+      conversion_id_purchase?: string
+      conversion_id_lead?: string
+    }
   }>('/clients/:id/integrations/linkedin-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, conversion_id_purchase, conversion_id_lead } = req.body
+    const { access_token, account_id, conversion_id_purchase, conversion_id_lead } = req.body
     if (!access_token) {
       return reply.code(400).send({ error: 'access_token required' })
     }
     return reply
       .code(200)
-      .send(await upsertIntegration(id, 'linkedin_ads', { access_token, conversion_id_purchase, conversion_id_lead }))
+      .send(
+        await upsertIntegration(id, 'linkedin_ads', {
+          access_token,
+          account_id,
+          conversion_id_purchase,
+          conversion_id_lead,
+        })
+      )
   })
 
   // Save or update a Reddit Ads integration — Step 17 (signals) / Step 20 (cost sync).

@@ -78,6 +78,10 @@ interface AgencyOverviewQuery {
   to?: string
 }
 
+interface CohortsQuery {
+  months?: string
+}
+
 interface SpendRow {
   campaign_id: string | null
   campaign_name: string | null
@@ -589,6 +593,62 @@ export async function reportRoutes(app: FastifyInstance) {
         to,
         campaigns: rows.map((r) => ({
           campaign_name: r.acquisition_campaign ?? '(unknown)',
+          customers: parseInt(r.customers, 10),
+          avgLtv30d: parseFloat(r.avg_30d),
+          avgLtv60d: parseFloat(r.avg_60d),
+          avgLtv90d: parseFloat(r.avg_90d),
+          avgLtv180d: parseFloat(r.avg_180d),
+          avgLtvLifetime: parseFloat(r.avg_lifetime),
+          totalLtvLifetime: parseFloat(r.total_lifetime),
+        })),
+      })
+    }
+  )
+
+  // Cohorts (Step 30): customer_ltv already carries every revenue-window snapshot
+  // needed here — this is pure re-aggregation by acquisition month, no new data
+  // collection. Deliberately not using defaultRange()/from-to like other reports:
+  // a 30-day default window would show at most one partial cohort, which defeats
+  // the point of a month-over-month cohort comparison — `months` controls how many
+  // acquisition months back to include instead.
+  app.get<{ Params: { id: string }; Querystring: CohortsQuery }>(
+    '/clients/:id/reports/cohorts',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const months = Math.max(1, parseInt(req.query.months ?? '12', 10) || 12)
+
+      const { rows } = await db.query<{
+        cohort_month: string
+        customers: string
+        avg_30d: string
+        avg_60d: string
+        avg_90d: string
+        avg_180d: string
+        avg_lifetime: string
+        total_lifetime: string
+      }>(
+        `SELECT
+           DATE_TRUNC('month', first_purchase_date)::date::text AS cohort_month,
+           COUNT(*) AS customers,
+           AVG(revenue_30d) AS avg_30d,
+           AVG(revenue_60d) AS avg_60d,
+           AVG(revenue_90d) AS avg_90d,
+           AVG(revenue_180d) AS avg_180d,
+           AVG(revenue_lifetime) AS avg_lifetime,
+           SUM(revenue_lifetime) AS total_lifetime
+         FROM customer_ltv
+         WHERE client_id = $1
+           AND first_purchase_date IS NOT NULL
+           AND first_purchase_date >= DATE_TRUNC('month', NOW()) - ($2 || ' months')::interval
+         GROUP BY cohort_month
+         ORDER BY cohort_month DESC`,
+        [clientId, months]
+      )
+
+      return reply.send({
+        months,
+        cohorts: rows.map((r) => ({
+          cohortMonth: r.cohort_month,
           customers: parseInt(r.customers, 10),
           avgLtv30d: parseFloat(r.avg_30d),
           avgLtv60d: parseFloat(r.avg_60d),

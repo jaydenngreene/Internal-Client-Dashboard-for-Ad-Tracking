@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { slug: "funnel", label: "Funnel", enabled: true },
   { slug: "ltv", label: "LTV", enabled: true },
   { slug: "remarketing", label: "Remarketing", enabled: true },
-  { slug: "cohorts", label: "Cohorts", enabled: false },
+  { slug: "cohorts", label: "Cohorts", enabled: true },
 ];
 
 export function Sidebar() {

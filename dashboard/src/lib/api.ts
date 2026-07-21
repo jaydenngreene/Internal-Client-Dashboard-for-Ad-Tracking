@@ -253,3 +253,25 @@ export function approveRemarketingCandidate(id: string): Promise<RemarketingCand
 export function rejectRemarketingCandidate(id: string): Promise<RemarketingCandidate> {
   return mutateJson<RemarketingCandidate>(`/remarketing/${id}/reject`, "PATCH");
 }
+
+// Step 30 — Cohorts. Pure re-aggregation of customer_ltv by acquisition month;
+// no new data collection. `months` (not a DateRange) controls how far back to look.
+export interface CohortRow {
+  cohortMonth: string;
+  customers: number;
+  avgLtv30d: number;
+  avgLtv60d: number;
+  avgLtv90d: number;
+  avgLtv180d: number;
+  avgLtvLifetime: number;
+  totalLtvLifetime: number;
+}
+
+export interface CohortsReport {
+  months: number;
+  cohorts: CohortRow[];
+}
+
+export function getCohorts(clientId: string, months = 12): Promise<CohortsReport> {
+  return fetchJson<CohortsReport>(`/clients/${clientId}/reports/cohorts?months=${months}`);
+}

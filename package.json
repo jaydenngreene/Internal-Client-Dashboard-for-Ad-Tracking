@@ -14,6 +14,7 @@
     "build": "npm run build --workspaces",
     "setup:shopify": "tsx scripts/setup-shopify-client.ts",
     "setup:stripe": "tsx scripts/setup-stripe-client.ts",
+    "setup:generic": "tsx scripts/setup-generic-client.ts",
     "migrate": "npm run migrate --workspace=api",
     "sync:ad-costs": "npm run sync:ad-costs --workspace=api",
     "refresh:ltv": "npm run refresh:ltv --workspace=api"

@@ -4,6 +4,18 @@ import { v4 as uuidv4 } from 'uuid'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 
+async function upsertIntegration(clientId: string, platform: string, config: Record<string, unknown>) {
+  const { rows } = await db.query(
+    `INSERT INTO client_integrations (client_id, platform, config)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (client_id, platform)
+     DO UPDATE SET config = EXCLUDED.config
+     RETURNING *`,
+    [clientId, platform, JSON.stringify(config)]
+  )
+  return rows[0]
+}
+
 export async function clientRoutes(app: FastifyInstance) {
   // Create a new client
   app.post<{
@@ -224,11 +236,53 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(rows[0])
   })
 
+  // Save or update a PayPal integration — Step 9. client_id/client_secret authenticate
+  // to PayPal's own webhook-signature-verification API; webhook_id identifies which
+  // registered webhook this is (PayPal ties signature verification to it).
+  app.post<{
+    Params: { id: string }
+    Body: { client_id: string; client_secret: string; webhook_id: string; sandbox?: boolean }
+  }>('/clients/:id/integrations/paypal', async (req, reply) => {
+    const { id } = req.params
+    const { client_id, client_secret, webhook_id, sandbox } = req.body
+    if (!client_id || !client_secret || !webhook_id) {
+      return reply.code(400).send({ error: 'client_id, client_secret, and webhook_id required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'paypal', { client_id, client_secret, webhook_id, sandbox }))
+  })
+
+  // Save or update a Square integration — Step 9.
+  app.post<{
+    Params: { id: string }
+    Body: { signature_key: string; notification_url: string }
+  }>('/clients/:id/integrations/square', async (req, reply) => {
+    const { id } = req.params
+    const { signature_key, notification_url } = req.body
+    if (!signature_key || !notification_url) {
+      return reply.code(400).send({ error: 'signature_key and notification_url required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'square', { signature_key, notification_url }))
+  })
+
+  // Save or update a GoHighLevel integration — Step 9. See routes/webhooks/gohighlevel.ts
+  // for why this is a shared secret rather than a real signature.
+  app.post<{
+    Params: { id: string }
+    Body: { webhook_secret: string }
+  }>('/clients/:id/integrations/gohighlevel', async (req, reply) => {
+    const { id } = req.params
+    const { webhook_secret } = req.body
+    if (!webhook_secret) {
+      return reply.code(400).send({ error: 'webhook_secret required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', { webhook_secret }))
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(
       `SELECT platform, created_at,
-              config - 'webhook_secret' - 'access_token' - 'refresh_token' AS config  -- strip secrets from response
+              config - 'webhook_secret' - 'access_token' - 'refresh_token' - 'client_secret' - 'signature_key' AS config
        FROM client_integrations WHERE client_id = $1`,
       [req.params.id]
     )

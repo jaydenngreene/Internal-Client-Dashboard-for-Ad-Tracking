@@ -11,6 +11,9 @@ import { eventRoutes } from './routes/event'
 import { webhookRoutes } from './routes/webhooks'
 import { shopifyWebhookRoutes } from './routes/webhooks/shopify'
 import { stripeWebhookRoutes } from './routes/webhooks/stripe'
+import { paypalWebhookRoutes } from './routes/webhooks/paypal'
+import { squareWebhookRoutes } from './routes/webhooks/square'
+import { goHighLevelWebhookRoutes } from './routes/webhooks/gohighlevel'
 import { clientRoutes } from './routes/clients'
 import { reportRoutes } from './routes/reports'
 
@@ -42,6 +45,9 @@ app.register(eventRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
 app.register(stripeWebhookRoutes)
+app.register(paypalWebhookRoutes)
+app.register(squareWebhookRoutes)
+app.register(goHighLevelWebhookRoutes)
 app.register(clientRoutes)
 app.register(reportRoutes)
 

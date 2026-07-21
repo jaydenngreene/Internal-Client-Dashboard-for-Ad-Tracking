@@ -1,0 +1,12 @@
+{
+  "name": "@internal-ad-tracking/pixel",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node build.js --watch",
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  }
+}

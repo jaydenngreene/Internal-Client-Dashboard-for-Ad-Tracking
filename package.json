@@ -1,0 +1,15 @@
+{
+  "name": "internal-ad-tracking",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "api",
+    "pixel",
+    "dashboard"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=api",
+    "dev:pixel": "npm run dev --workspace=pixel",
+    "build": "npm run build --workspaces"
+  }
+}

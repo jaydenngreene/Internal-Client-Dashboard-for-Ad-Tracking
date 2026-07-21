@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { lookupVisitorId } from '../lib/visitorResolution'
 
 interface DniBody {
   pixel_key: string
@@ -24,14 +25,12 @@ export async function dniRoutes(app: FastifyInstance) {
     }
     const clientId = clientRows[0].id
 
-    const { rows: visitorRows } = await db.query('SELECT id FROM visitors WHERE client_id = $1 AND anonymous_id = $2', [
-      clientId,
-      anonymous_id,
-    ])
-    if (visitorRows.length === 0) {
+    // Checks visitor_aliases first (Step 14) so a fingerprint-matched
+    // cleared-cookie visitor doesn't 404 here.
+    const visitorId = await lookupVisitorId(clientId, anonymous_id)
+    if (!visitorId) {
       return reply.code(404).send({ error: 'Visitor not found — call after the pixel has tracked a pageview' })
     }
-    const visitorId = visitorRows[0].id
 
     // Already has a live assignment — keep it sticky rather than swapping numbers
     // on every page load.

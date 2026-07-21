@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { recordPurchase } from '../lib/attribution'
+import { lookupVisitorId } from '../lib/visitorResolution'
 
 interface ConversionBody {
   pixel_key: string
@@ -41,16 +42,15 @@ export async function conversionRoutes(app: FastifyInstance) {
         [clientId, normalizedEmail]
       )
       if (identityRows.length === 0) {
-        const { rows: visitorRows } = await db.query(
-          'SELECT id FROM visitors WHERE client_id = $1 AND anonymous_id = $2',
-          [clientId, anonymous_id]
-        )
-        if (visitorRows.length > 0) {
+        // Checks visitor_aliases first (Step 14) so a fingerprint-matched
+        // cleared-cookie visitor's purchase still backfills correctly.
+        const visitorId = await lookupVisitorId(clientId, anonymous_id)
+        if (visitorId) {
           await db.query(
             `INSERT INTO identities (client_id, email, visitor_id)
              VALUES ($1, $2, $3)
              ON CONFLICT (client_id, email) DO NOTHING`,
-            [clientId, normalizedEmail, visitorRows[0].id]
+            [clientId, normalizedEmail, visitorId]
           )
         }
       }

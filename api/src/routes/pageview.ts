@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { resolveSession } from '../lib/session'
+import { resolveVisitor } from '../lib/visitorResolution'
 
 interface PageviewBody {
   pixel_key: string
@@ -56,30 +57,17 @@ export async function pageviewRoutes(app: FastifyInstance) {
     const ip = req.ip
     const userAgent = req.headers['user-agent'] ?? null
 
-    // Upsert visitor. fingerprint_hash/components only overwrite when actually
-    // provided (COALESCE against the existing value) — older pixel installs that
-    // haven't picked up Step 13 yet, or a page load where fingerprinting failed
-    // silently, shouldn't blank out a hash captured on an earlier visit.
-    const { rows: visitorRows } = await db.query(
-      `INSERT INTO visitors (client_id, anonymous_id, ip, user_agent, fingerprint_hash, fingerprint_components)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (client_id, anonymous_id)
-       DO UPDATE SET
-         last_seen = NOW(),
-         ip = EXCLUDED.ip,
-         fingerprint_hash = COALESCE(EXCLUDED.fingerprint_hash, visitors.fingerprint_hash),
-         fingerprint_components = COALESCE(EXCLUDED.fingerprint_components, visitors.fingerprint_components)
-       RETURNING id`,
-      [
-        clientId,
-        anonymous_id,
-        ip,
-        userAgent,
-        fingerprint_hash ?? null,
-        fingerprint_components ? JSON.stringify(fingerprint_components) : null,
-      ]
-    )
-    const visitorId = visitorRows[0].id
+    // Step 14 — resolves via visitor_aliases/fingerprint match before falling back
+    // to creating a new visitor, so a cleared cookie doesn't fragment one person's
+    // history across two visitor rows (see lib/visitorResolution.ts).
+    const visitorId = await resolveVisitor({
+      clientId,
+      anonymousId: anonymous_id,
+      ip,
+      userAgent,
+      fingerprintHash: fingerprint_hash,
+      fingerprintComponents: fingerprint_components,
+    })
 
     const sessionId = await resolveSession(clientId, visitorId, url, {
       fbclid,

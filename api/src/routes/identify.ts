@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { sendConversionSignals } from '../lib/conversionSignals'
+import { lookupVisitorId } from '../lib/visitorResolution'
 
 interface IdentifyBody {
   pixel_key: string
@@ -30,15 +31,12 @@ export async function identifyRoutes(app: FastifyInstance) {
     }
     const clientId = clientRows[0].id
 
-    // Get visitor record
-    const { rows: visitorRows } = await db.query(
-      'SELECT id FROM visitors WHERE client_id = $1 AND anonymous_id = $2',
-      [clientId, anonymous_id]
-    )
-    if (visitorRows.length === 0) {
+    // Get visitor record — checks visitor_aliases first (Step 14) so a
+    // fingerprint-matched cleared-cookie visitor doesn't 404 here.
+    const visitorId = await lookupVisitorId(clientId, anonymous_id)
+    if (!visitorId) {
       return reply.code(404).send({ error: 'Visitor not found' })
     }
-    const visitorId = visitorRows[0].id
 
     // Link email to visitor (upsert — if email seen before, update visitor link)
     await db.query(

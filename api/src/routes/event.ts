@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { resolveSession } from '../lib/session'
 import { sendConversionSignals, SignalEventType } from '../lib/conversionSignals'
+import { lookupVisitorId } from '../lib/visitorResolution'
 
 type CartEventType = 'view_item' | 'add_to_cart' | 'begin_checkout'
 
@@ -38,13 +39,16 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     const clientId = clientRows[0].id
 
-    const { rows: visitorRows } = await db.query<{ id: string; ip: string | null; user_agent: string | null }>(
-      'SELECT id, ip, user_agent FROM visitors WHERE client_id = $1 AND anonymous_id = $2',
-      [clientId, anonymous_id]
-    )
-    if (visitorRows.length === 0) {
+    // Checks visitor_aliases first (Step 14) so a fingerprint-matched
+    // cleared-cookie visitor doesn't 404 here.
+    const visitorId = await lookupVisitorId(clientId, anonymous_id)
+    if (!visitorId) {
       return reply.code(404).send({ error: 'Visitor not found' })
     }
+    const { rows: visitorRows } = await db.query<{ id: string; ip: string | null; user_agent: string | null }>(
+      'SELECT id, ip, user_agent FROM visitors WHERE id = $1',
+      [visitorId]
+    )
     const visitor = visitorRows[0]
 
     const sessionId = await resolveSession(clientId, visitor.id, url)

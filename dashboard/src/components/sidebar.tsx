@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const NAV_ITEMS = [
   { slug: "overview", label: "Overview", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
-  { slug: "leads", label: "Leads", enabled: false },
+  { slug: "leads", label: "Leads", enabled: true },
   { slug: "ltv", label: "LTV", enabled: false },
   { slug: "cohorts", label: "Cohorts", enabled: false },
 ];

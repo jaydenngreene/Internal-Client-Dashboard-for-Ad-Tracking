@@ -53,6 +53,23 @@ export interface CampaignsReport {
   campaigns: CampaignRow[];
 }
 
+export interface LeadCampaignRow {
+  campaign_name: string;
+  platform: string | null;
+  cost: number;
+  leads: number;
+  cpl: number | null;
+  matched: boolean;
+}
+
+export interface LeadsReport {
+  from: string;
+  to: string;
+  totalLeads: number;
+  cpl: number | null;
+  campaigns: LeadCampaignRow[];
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) {
@@ -76,4 +93,8 @@ export function getOverview(clientId: string, range?: DateRange): Promise<Overvi
 
 export function getCampaigns(clientId: string, range?: DateRange): Promise<CampaignsReport> {
   return fetchJson<CampaignsReport>(`/clients/${clientId}/reports/campaigns${rangeQuery(range)}`);
+}
+
+export function getLeads(clientId: string, range?: DateRange): Promise<LeadsReport> {
+  return fetchJson<LeadsReport>(`/clients/${clientId}/reports/leads${rangeQuery(range)}`);
 }

@@ -236,6 +236,21 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(rows[0])
   })
 
+  // Save or update a Bing/Microsoft Advertising integration for a client — Step 11.
+  // Same shape as Google Ads: shared app credentials (BING_ADS_CLIENT_ID/SECRET/
+  // DEVELOPER_TOKEN) in .env, per-client customer_id/account_id/refresh_token here.
+  app.post<{
+    Params: { id: string }
+    Body: { customer_id: string; account_id: string; refresh_token: string }
+  }>('/clients/:id/integrations/bing-ads', async (req, reply) => {
+    const { id } = req.params
+    const { customer_id, account_id, refresh_token } = req.body
+    if (!customer_id || !account_id || !refresh_token) {
+      return reply.code(400).send({ error: 'customer_id, account_id, and refresh_token required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token }))
+  })
+
   // Save or update a PayPal integration — Step 9. client_id/client_secret authenticate
   // to PayPal's own webhook-signature-verification API; webhook_id identifies which
   // registered webhook this is (PayPal ties signature verification to it).

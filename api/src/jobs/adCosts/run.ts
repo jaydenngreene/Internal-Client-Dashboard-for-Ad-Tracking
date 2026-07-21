@@ -1,11 +1,12 @@
 import { db } from '../../db'
 import { fetchFacebookAdCosts } from './facebook'
 import { fetchGoogleAdCosts } from './google'
+import { fetchBingAdCosts } from './bing'
 import { upsertAdCosts } from './upsert'
 
 interface ClientIntegration {
   client_id: string
-  platform: 'facebook_ads' | 'google_ads'
+  platform: 'facebook_ads' | 'google_ads' | 'bing_ads'
   config: Record<string, string>
 }
 
@@ -27,7 +28,7 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
   const { rows: integrations } = await db.query<ClientIntegration>(
     `SELECT client_id, platform, config
      FROM client_integrations
-     WHERE platform IN ('facebook_ads', 'google_ads')`
+     WHERE platform IN ('facebook_ads', 'google_ads', 'bing_ads')`
   )
 
   console.log(`Syncing ad costs for ${integrations.length} integration(s), ${sinceStr} → ${untilStr}`)
@@ -42,11 +43,21 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
           sinceStr,
           untilStr
         )
-      } else {
+      } else if (integration.platform === 'google_ads') {
         rows = await fetchGoogleAdCosts(
           {
             customer_id: integration.config.customer_id,
             login_customer_id: integration.config.login_customer_id,
+            refresh_token: integration.config.refresh_token,
+          },
+          sinceStr,
+          untilStr
+        )
+      } else {
+        rows = await fetchBingAdCosts(
+          {
+            customer_id: integration.config.customer_id,
+            account_id: integration.config.account_id,
             refresh_token: integration.config.refresh_token,
           },
           sinceStr,

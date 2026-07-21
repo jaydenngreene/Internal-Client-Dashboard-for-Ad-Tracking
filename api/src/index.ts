@@ -51,6 +51,23 @@ app.register(goHighLevelWebhookRoutes)
 app.register(clientRoutes)
 app.register(reportRoutes)
 
+// Public Attribution API (Step 11) — the same report routes, mounted again under
+// /api/v1 with bearer-token auth, so this data can feed other tools without going
+// through the (unauthenticated, internal-only) dashboard surface above.
+app.register(
+  async (instance) => {
+    instance.addHook('onRequest', async (req, reply) => {
+      const expected = process.env.API_SECRET
+      const header = req.headers.authorization
+      if (!expected || header !== `Bearer ${expected}`) {
+        return reply.code(401).send({ error: 'Unauthorized' })
+      }
+    })
+    instance.register(reportRoutes)
+  },
+  { prefix: '/api/v1' }
+)
+
 const start = async () => {
   try {
     const port = Number(process.env.PORT ?? 3001)

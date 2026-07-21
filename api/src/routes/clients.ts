@@ -59,6 +59,31 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(rows[0])
   })
 
+  // Save or update a Stripe integration for a client
+  app.post<{
+    Params: { id: string }
+    Body: {
+      webhook_secret: string
+    }
+  }>('/clients/:id/integrations/stripe', async (req, reply) => {
+    const { id } = req.params
+    const { webhook_secret } = req.body
+
+    if (!webhook_secret) {
+      return reply.code(400).send({ error: 'webhook_secret required' })
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO client_integrations (client_id, platform, config)
+       VALUES ($1, 'stripe', $2)
+       ON CONFLICT (client_id, platform)
+       DO UPDATE SET config = EXCLUDED.config
+       RETURNING *`,
+      [id, JSON.stringify({ webhook_secret })]
+    )
+    return reply.code(200).send(rows[0])
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(

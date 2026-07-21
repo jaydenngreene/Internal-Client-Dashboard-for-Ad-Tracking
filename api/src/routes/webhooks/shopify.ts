@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import * as crypto from 'crypto'
 import { db } from '../../db'
+import { recordPurchase, recordRefund } from '../../lib/attribution'
 
 interface ShopifyOrder {
   id: number
@@ -73,68 +74,6 @@ function verifyShopifyHmac(rawBody: Buffer, hmacHeader: string, secret: string):
   }
 }
 
-async function attributeAndRecord(
-  clientId: string,
-  email: string,
-  revenue: number,
-  orderId: string,
-  productName: string | null,
-  processor: string
-) {
-  const normalizedEmail = email.toLowerCase().trim()
-
-  const { rows: purchaseRows } = await db.query(
-    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [clientId, normalizedEmail, revenue, productName, orderId, processor]
-  )
-  if (purchaseRows.length === 0) return // duplicate
-
-  const purchaseId = purchaseRows[0].id
-
-  // Find identity → visitor → session
-  const { rows: identityRows } = await db.query(
-    'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
-    [clientId, normalizedEmail]
-  )
-  if (identityRows.length === 0) return
-
-  const visitorId = identityRows[0].visitor_id
-
-  const { rows: sessionRows } = await db.query(
-    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid
-     FROM sessions
-     WHERE visitor_id = $1
-       AND started_at >= NOW() - INTERVAL '90 days'
-     ORDER BY started_at ASC
-     LIMIT 1`,
-    [visitorId]
-  )
-  if (sessionRows.length === 0) return
-
-  const session = sessionRows[0]
-
-  await db.query(
-    `INSERT INTO attributions (client_id, purchase_id, session_id, model, credit_fraction, attributed_revenue)
-     VALUES ($1, $2, $3, 'first_click', 1.0, $4)`,
-    [clientId, purchaseId, session.id, revenue]
-  )
-
-  await db.query(
-    `INSERT INTO customer_ltv
-       (client_id, email, acquisition_campaign, acquisition_ad, acquisition_source, first_purchase_date, revenue_lifetime, purchase_count)
-     VALUES ($1, $2, $3, $4, $5, NOW(), $6, 1)
-     ON CONFLICT (client_id, email)
-     DO UPDATE SET
-       revenue_lifetime = customer_ltv.revenue_lifetime + EXCLUDED.revenue_lifetime,
-       purchase_count   = customer_ltv.purchase_count + 1,
-       last_updated     = NOW()`,
-    [clientId, normalizedEmail, session.utm_campaign, session.utm_content, session.utm_source, revenue]
-  )
-}
-
 export async function shopifyWebhookRoutes(app: FastifyInstance) {
   // Disable body parsing for these routes — we need the raw body for HMAC verification
   app.addContentTypeParser(
@@ -173,7 +112,13 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
       const productName = order.line_items?.[0]?.title ?? null
       const orderId = String(order.id)
 
-      await attributeAndRecord(client_id, email, revenue, orderId, productName, 'shopify')
+      await recordPurchase(client_id, {
+        email,
+        revenue,
+        product: productName,
+        order_id: orderId,
+        processor: 'shopify',
+      })
 
       return reply.code(200).send({ received: true })
     }
@@ -200,42 +145,7 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
         .filter((t) => t.status === 'success' && t.kind === 'refund')
         .reduce((sum, t) => sum + parseFloat(t.amount), 0)
 
-      if (refundAmount <= 0) return reply.code(200).send({ received: true })
-
-      // Mark purchase as refunded and deduct from LTV
-      const { rows: purchaseRows } = await db.query(
-        `UPDATE purchases
-         SET refunded = TRUE, refunded_at = NOW()
-         WHERE client_id = $1 AND order_id = $2
-         RETURNING email, revenue`,
-        [client_id, orderId]
-      )
-      if (purchaseRows.length === 0) return reply.code(200).send({ received: true })
-
-      const { email, revenue } = purchaseRows[0]
-
-      await db.query(
-        `UPDATE customer_ltv
-         SET revenue_lifetime = GREATEST(0, revenue_lifetime - $3),
-             purchase_count   = GREATEST(0, purchase_count - 1),
-             last_updated     = NOW()
-         WHERE client_id = $1 AND email = $2`,
-        [client_id, email.toLowerCase(), refundAmount]
-      )
-
-      // Also update attribution
-      const { rows: purchaseForAttr } = await db.query(
-        'SELECT id FROM purchases WHERE client_id = $1 AND order_id = $2',
-        [client_id, orderId]
-      )
-      if (purchaseForAttr.length > 0) {
-        await db.query(
-          `UPDATE attributions
-           SET attributed_revenue = GREATEST(0, attributed_revenue - $2)
-           WHERE purchase_id = $1`,
-          [purchaseForAttr[0].id, refundAmount]
-        )
-      }
+      await recordRefund(client_id, orderId, refundAmount)
 
       return reply.code(200).send({ received: true })
     }

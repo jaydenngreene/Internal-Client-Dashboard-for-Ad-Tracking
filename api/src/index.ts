@@ -9,6 +9,7 @@ import { identifyRoutes } from './routes/identify'
 import { conversionRoutes } from './routes/conversion'
 import { webhookRoutes } from './routes/webhooks'
 import { shopifyWebhookRoutes } from './routes/webhooks/shopify'
+import { stripeWebhookRoutes } from './routes/webhooks/stripe'
 import { clientRoutes } from './routes/clients'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
@@ -37,6 +38,7 @@ app.register(identifyRoutes)
 app.register(conversionRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
+app.register(stripeWebhookRoutes)
 app.register(clientRoutes)
 
 const start = async () => {

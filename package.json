@@ -12,6 +12,7 @@
     "dev:pixel": "npm run dev --workspace=pixel",
     "build": "npm run build --workspaces",
     "setup:shopify": "tsx scripts/setup-shopify-client.ts",
+    "setup:stripe": "tsx scripts/setup-stripe-client.ts",
     "migrate": "npm run migrate --workspace=api"
   },
   "devDependencies": {

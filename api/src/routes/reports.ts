@@ -45,6 +45,11 @@ interface LtvQuery {
   to?: string
 }
 
+interface FunnelQuery {
+  from?: string
+  to?: string
+}
+
 interface SpendRow {
   campaign_id: string | null
   campaign_name: string | null
@@ -61,6 +66,41 @@ function getSpendByCampaign(clientId: string, from: string, to: string) {
      FROM ad_costs
      WHERE client_id = $1 AND date BETWEEN $2 AND $3
      GROUP BY campaign_id, campaign_name, platform`,
+    [clientId, from, to]
+  )
+}
+
+// Attributes each lead to the visitor's most recent session at-or-before the lead
+// was created (first-touch-per-lead, same acquisition convention as customer_ltv) —
+// independent of the client's purchase attribution_model, since a lead isn't
+// revenue to split, just a single acquisition event.
+function getLeadsByCampaign(clientId: string, from: string, to: string) {
+  return db.query<{ utm_campaign: string | null; leads: string }>(
+    `SELECT s.utm_campaign, COUNT(DISTINCT l.id) AS leads
+     FROM leads l
+     JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
+     JOIN LATERAL (
+       SELECT utm_campaign FROM sessions
+       WHERE visitor_id = i.visitor_id
+         AND started_at <= l.created_at
+         AND started_at >= l.created_at - INTERVAL '90 days'
+       ORDER BY started_at ASC
+       LIMIT 1
+     ) s ON true
+     WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_campaign`,
+    [clientId, from, to]
+  )
+}
+
+function getRevenueByCampaign(clientId: string, from: string, to: string) {
+  return db.query<{ utm_campaign: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_campaign, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+     FROM attributions a
+     JOIN sessions s ON s.id = a.session_id
+     JOIN purchases p ON p.id = a.purchase_id
+     WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+     GROUP BY s.utm_campaign`,
     [clientId, from, to]
   )
 }
@@ -146,15 +186,7 @@ export async function reportRoutes(app: FastifyInstance) {
 
       const [spendRows, revenueRows] = await Promise.all([
         getSpendByCampaign(clientId, from, to),
-        db.query<{ utm_campaign: string | null; revenue: string; sales: string }>(
-          `SELECT s.utm_campaign, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
-           FROM attributions a
-           JOIN sessions s ON s.id = a.session_id
-           JOIN purchases p ON p.id = a.purchase_id
-           WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
-           GROUP BY s.utm_campaign`,
-          [clientId, from, to]
-        ),
+        getRevenueByCampaign(clientId, from, to),
       ])
 
       const normalize = normalizeCampaignName
@@ -231,26 +263,7 @@ export async function reportRoutes(app: FastifyInstance) {
           [clientId, from, to]
         ),
         getSpendByCampaign(clientId, from, to),
-        // Attribute each lead to the visitor's most recent session at-or-before the
-        // lead was created (first-touch-per-lead), the same acquisition convention
-        // customer_ltv uses — independent of the client's purchase attribution_model,
-        // since a lead isn't revenue to split, just a single acquisition event.
-        db.query<{ utm_campaign: string | null; leads: string }>(
-          `SELECT s.utm_campaign, COUNT(DISTINCT l.id) AS leads
-           FROM leads l
-           JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
-           JOIN LATERAL (
-             SELECT utm_campaign FROM sessions
-             WHERE visitor_id = i.visitor_id
-               AND started_at <= l.created_at
-               AND started_at >= l.created_at - INTERVAL '90 days'
-             ORDER BY started_at ASC
-             LIMIT 1
-           ) s ON true
-           WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
-           GROUP BY s.utm_campaign`,
-          [clientId, from, to]
-        ),
+        getLeadsByCampaign(clientId, from, to),
       ])
 
       const totalLeads = parseInt(totalRow.rows[0].total, 10)
@@ -435,6 +448,75 @@ export async function reportRoutes(app: FastifyInstance) {
           totalLtvLifetime: parseFloat(r.total_lifetime),
         })),
       })
+    }
+  )
+
+  app.get<{ Params: { id: string }; Querystring: FunnelQuery }>(
+    '/clients/:id/reports/funnel',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [spendRows, leadsByCampaign, revenueByCampaign] = await Promise.all([
+        getSpendByCampaign(clientId, from, to),
+        getLeadsByCampaign(clientId, from, to),
+        getRevenueByCampaign(clientId, from, to),
+      ])
+
+      interface Row {
+        campaign_name: string
+        platform: string | null
+        cost: number
+        leads: number
+        sales: number
+        revenue: number
+      }
+
+      const rows = new Map<string, Row>()
+
+      const getOrCreate = (key: string, fallbackName: string): Row => {
+        let row = rows.get(key)
+        if (!row) {
+          row = { campaign_name: fallbackName, platform: null, cost: 0, leads: 0, sales: 0, revenue: 0 }
+          rows.set(key, row)
+        }
+        return row
+      }
+
+      for (const r of spendRows.rows) {
+        const key = normalizeCampaignName(r.campaign_name)
+        const row = getOrCreate(key, r.campaign_name ?? '(unnamed campaign)')
+        row.platform = r.platform
+        row.cost = parseFloat(r.cost)
+      }
+
+      for (const r of leadsByCampaign.rows) {
+        const key = normalizeCampaignName(r.utm_campaign)
+        const row = getOrCreate(key, r.utm_campaign ?? '(no utm_campaign)')
+        row.leads = parseInt(r.leads, 10)
+      }
+
+      for (const r of revenueByCampaign.rows) {
+        const key = normalizeCampaignName(r.utm_campaign)
+        const row = getOrCreate(key, r.utm_campaign ?? '(no utm_campaign)')
+        row.revenue = parseFloat(r.revenue)
+        row.sales = parseInt(r.sales, 10)
+      }
+
+      // Here "matched" specifically means real ad-platform spend backs this campaign
+      // name — the funnel table's anchor dimension is spend, so a row assembled only
+      // from leads/revenue with no cost is the UTM-mismatch signal worth flagging.
+      const campaigns = Array.from(rows.values())
+        .map((r) => ({
+          ...r,
+          cpl: r.leads > 0 ? r.cost / r.leads : null,
+          profit: r.revenue - r.cost,
+          roas: r.cost > 0 ? r.revenue / r.cost : null,
+          matched: r.cost > 0,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+
+      return reply.send({ from, to, campaigns })
     }
   )
 }

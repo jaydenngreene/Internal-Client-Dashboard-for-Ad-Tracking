@@ -106,6 +106,25 @@ export interface LtvReport {
   campaigns: LtvCampaignRow[];
 }
 
+export interface FunnelCampaignRow {
+  campaign_name: string;
+  platform: string | null;
+  cost: number;
+  leads: number;
+  cpl: number | null;
+  sales: number;
+  revenue: number;
+  profit: number;
+  roas: number | null;
+  matched: boolean;
+}
+
+export interface FunnelReport {
+  from: string;
+  to: string;
+  campaigns: FunnelCampaignRow[];
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) {
@@ -141,4 +160,8 @@ export function getBof(clientId: string, range?: DateRange): Promise<BofReport> 
 
 export function getLtv(clientId: string, range?: DateRange): Promise<LtvReport> {
   return fetchJson<LtvReport>(`/clients/${clientId}/reports/ltv${rangeQuery(range)}`);
+}
+
+export function getFunnel(clientId: string, range?: DateRange): Promise<FunnelReport> {
+  return fetchJson<FunnelReport>(`/clients/${clientId}/reports/funnel${rangeQuery(range)}`);
 }

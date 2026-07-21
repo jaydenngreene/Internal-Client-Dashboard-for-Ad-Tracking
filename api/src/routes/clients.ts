@@ -84,11 +84,66 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(rows[0])
   })
 
+  // Save or update a Facebook Ads integration for a client
+  app.post<{
+    Params: { id: string }
+    Body: {
+      access_token: string
+      ad_account_id: string
+    }
+  }>('/clients/:id/integrations/facebook-ads', async (req, reply) => {
+    const { id } = req.params
+    const { access_token, ad_account_id } = req.body
+
+    if (!access_token || !ad_account_id) {
+      return reply.code(400).send({ error: 'access_token and ad_account_id required' })
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO client_integrations (client_id, platform, config)
+       VALUES ($1, 'facebook_ads', $2)
+       ON CONFLICT (client_id, platform)
+       DO UPDATE SET config = EXCLUDED.config
+       RETURNING *`,
+      [id, JSON.stringify({ access_token, ad_account_id })]
+    )
+    return reply.code(200).send(rows[0])
+  })
+
+  // Save or update a Google Ads integration for a client.
+  // login_customer_id / refresh_token are optional — they fall back to the shared
+  // agency MCC credentials in .env when the client's account sits under that manager account.
+  app.post<{
+    Params: { id: string }
+    Body: {
+      customer_id: string
+      login_customer_id?: string
+      refresh_token?: string
+    }
+  }>('/clients/:id/integrations/google-ads', async (req, reply) => {
+    const { id } = req.params
+    const { customer_id, login_customer_id, refresh_token } = req.body
+
+    if (!customer_id) {
+      return reply.code(400).send({ error: 'customer_id required' })
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO client_integrations (client_id, platform, config)
+       VALUES ($1, 'google_ads', $2)
+       ON CONFLICT (client_id, platform)
+       DO UPDATE SET config = EXCLUDED.config
+       RETURNING *`,
+      [id, JSON.stringify({ customer_id, login_customer_id, refresh_token })]
+    )
+    return reply.code(200).send(rows[0])
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(
       `SELECT platform, created_at,
-              config - 'webhook_secret' AS config  -- strip secrets from response
+              config - 'webhook_secret' - 'access_token' - 'refresh_token' AS config  -- strip secrets from response
        FROM client_integrations WHERE client_id = $1`,
       [req.params.id]
     )

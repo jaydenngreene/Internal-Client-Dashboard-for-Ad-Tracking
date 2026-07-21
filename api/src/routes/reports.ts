@@ -35,6 +35,11 @@ interface LeadsQuery {
   to?: string
 }
 
+interface BofQuery {
+  from?: string
+  to?: string
+}
+
 interface SpendRow {
   campaign_id: string | null
   campaign_name: string | null
@@ -290,6 +295,89 @@ export async function reportRoutes(app: FastifyInstance) {
         .sort((a, b) => b.leads - a.leads)
 
       return reply.send({ from, to, totalLeads, cpl, campaigns })
+    }
+  )
+
+  app.get<{ Params: { id: string }; Querystring: BofQuery }>(
+    '/clients/:id/reports/bof',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [conversionRow, orderRow, aovBySource] = await Promise.all([
+        // For each lead in range, find their first purchase at or after the lead —
+        // gives lead->buyer rate and avg time-to-convert regardless of when the
+        // purchase itself landed.
+        db.query<{ total_leads: string; converted_leads: string; avg_days: string | null }>(
+          `WITH lead_conversions AS (
+             SELECT l.id,
+                    l.created_at AS lead_at,
+                    (SELECT MIN(p.purchased_at) FROM purchases p
+                     WHERE p.client_id = l.client_id AND p.email = l.email AND p.purchased_at >= l.created_at
+                    ) AS first_purchase_at
+             FROM leads l
+             WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+           )
+           SELECT
+             COUNT(*) AS total_leads,
+             COUNT(first_purchase_at) AS converted_leads,
+             AVG(EXTRACT(EPOCH FROM (first_purchase_at - lead_at)) / 86400)
+               FILTER (WHERE first_purchase_at IS NOT NULL) AS avg_days
+           FROM lead_conversions`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string; refunded: string }>(
+          `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE refunded) AS refunded
+           FROM purchases
+           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        // AOV by source uses each purchase's first-touch session (same acquisition
+        // convention as customer_ltv), not the attributions table — under the linear
+        // model a purchase can have several attribution rows, which would fragment
+        // and double-count order value here.
+        db.query<{ utm_source: string | null; aov: string; sales: string }>(
+          `SELECT src.utm_source, AVG(p.revenue) AS aov, COUNT(*) AS sales
+           FROM purchases p
+           JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
+           JOIN LATERAL (
+             SELECT utm_source FROM sessions
+             WHERE visitor_id = i.visitor_id AND started_at <= p.purchased_at
+             ORDER BY started_at ASC
+             LIMIT 1
+           ) src ON true
+           WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded
+           GROUP BY src.utm_source
+           ORDER BY COUNT(*) DESC`,
+          [clientId, from, to]
+        ),
+      ])
+
+      const totalLeads = parseInt(conversionRow.rows[0].total_leads, 10)
+      const convertedLeads = parseInt(conversionRow.rows[0].converted_leads, 10)
+      const leadToBuyerRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : null
+      const avgDaysToConvert = conversionRow.rows[0].avg_days !== null ? parseFloat(conversionRow.rows[0].avg_days) : null
+
+      const totalOrders = parseInt(orderRow.rows[0].total, 10)
+      const refundedOrders = parseInt(orderRow.rows[0].refunded, 10)
+      const refundRate = totalOrders > 0 ? (refundedOrders / totalOrders) * 100 : null
+
+      return reply.send({
+        from,
+        to,
+        totalLeads,
+        convertedLeads,
+        leadToBuyerRate,
+        avgDaysToConvert,
+        totalOrders,
+        refundedOrders,
+        refundRate,
+        aovBySource: aovBySource.rows.map((r) => ({
+          source: r.utm_source ?? '(unknown)',
+          aov: parseFloat(r.aov),
+          sales: parseInt(r.sales, 10),
+        })),
+      })
     }
   )
 }

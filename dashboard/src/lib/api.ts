@@ -70,6 +70,25 @@ export interface LeadsReport {
   campaigns: LeadCampaignRow[];
 }
 
+export interface AovBySourceRow {
+  source: string;
+  aov: number;
+  sales: number;
+}
+
+export interface BofReport {
+  from: string;
+  to: string;
+  totalLeads: number;
+  convertedLeads: number;
+  leadToBuyerRate: number | null;
+  avgDaysToConvert: number | null;
+  totalOrders: number;
+  refundedOrders: number;
+  refundRate: number | null;
+  aovBySource: AovBySourceRow[];
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
   if (!res.ok) {
@@ -97,4 +116,8 @@ export function getCampaigns(clientId: string, range?: DateRange): Promise<Campa
 
 export function getLeads(clientId: string, range?: DateRange): Promise<LeadsReport> {
   return fetchJson<LeadsReport>(`/clients/${clientId}/reports/leads${rangeQuery(range)}`);
+}
+
+export function getBof(clientId: string, range?: DateRange): Promise<BofReport> {
+  return fetchJson<BofReport>(`/clients/${clientId}/reports/bof${rangeQuery(range)}`);
 }

@@ -2,11 +2,13 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { sendConversionSignals } from '../lib/conversionSignals'
 import { lookupVisitorId } from '../lib/visitorResolution'
+import { autoLinkByPhone, autoLinkByIp } from '../lib/identityLinking'
 
 interface IdentifyBody {
   pixel_key: string
   anonymous_id: string
   email: string
+  phone?: string
   lead_type?: string
   page?: string
   metadata?: Record<string, unknown>
@@ -14,7 +16,7 @@ interface IdentifyBody {
 
 export async function identifyRoutes(app: FastifyInstance) {
   app.post<{ Body: IdentifyBody }>('/track/identify', async (req, reply) => {
-    const { pixel_key, anonymous_id, email, lead_type = 'optin', page, metadata } = req.body
+    const { pixel_key, anonymous_id, email, phone, lead_type = 'optin', page, metadata } = req.body
 
     if (!pixel_key || !anonymous_id || !email) {
       return reply.code(400).send({ error: 'Missing required fields' })
@@ -38,14 +40,29 @@ export async function identifyRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: 'Visitor not found' })
     }
 
-    // Link email to visitor (upsert — if email seen before, update visitor link)
+    // Link email to visitor (upsert — if email seen before, update visitor link).
+    // phone only overwrites when actually provided (COALESCE), same "don't blank out
+    // data from an earlier, richer call" convention as the Step 13 fingerprint upsert.
     await db.query(
-      `INSERT INTO identities (client_id, email, visitor_id, identified_on_page)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO identities (client_id, email, visitor_id, identified_on_page, phone)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (client_id, email)
-       DO UPDATE SET visitor_id = EXCLUDED.visitor_id, identified_at = NOW(), identified_on_page = EXCLUDED.identified_on_page`,
-      [clientId, normalizedEmail, visitorId, page]
+       DO UPDATE SET
+         visitor_id = EXCLUDED.visitor_id,
+         identified_at = NOW(),
+         identified_on_page = EXCLUDED.identified_on_page,
+         phone = COALESCE(EXCLUDED.phone, identities.phone)`,
+      [clientId, normalizedEmail, visitorId, page, phone ?? null]
     )
+
+    // Step 15 — cross-device stitching. Never let a linking failure block the
+    // identify flow itself (same never-block philosophy as sendConversionSignals).
+    try {
+      if (phone) await autoLinkByPhone(clientId, normalizedEmail, phone)
+      await autoLinkByIp(clientId, normalizedEmail, visitorId)
+    } catch (err) {
+      console.error(`[identityLinking] failed for client=${clientId}:`, (err as Error).message)
+    }
 
     // Record the lead event
     await db.query(

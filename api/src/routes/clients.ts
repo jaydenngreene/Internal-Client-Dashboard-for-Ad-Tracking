@@ -368,6 +368,44 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'klaviyo', { api_key, list_id }))
   })
 
+  // Step 15 — manual identity-link override. Not upsertIntegration() — identity
+  // links aren't a client_integrations row, they're a dedicated many-to-many table.
+  app.post<{
+    Params: { id: string }
+    Body: { primary_identity_id: string; linked_identity_id: string }
+  }>('/clients/:id/identity-links', async (req, reply) => {
+    const { id } = req.params
+    const { primary_identity_id, linked_identity_id } = req.body
+    if (!primary_identity_id || !linked_identity_id) {
+      return reply.code(400).send({ error: 'primary_identity_id and linked_identity_id required' })
+    }
+    if (primary_identity_id === linked_identity_id) {
+      return reply.code(400).send({ error: 'Cannot link an identity to itself' })
+    }
+    const [a, b] = [primary_identity_id, linked_identity_id].sort()
+    const { rows } = await db.query(
+      `INSERT INTO identity_links (client_id, primary_identity_id, linked_identity_id, mechanism, confidence)
+       VALUES ($1, $2, $3, 'manual', 1.0)
+       ON CONFLICT (client_id, primary_identity_id, linked_identity_id, mechanism) DO NOTHING
+       RETURNING *`,
+      [id, a, b]
+    )
+    return reply.code(200).send(rows[0] ?? { message: 'Link already exists' })
+  })
+
+  app.get<{ Params: { id: string } }>('/clients/:id/identity-links', async (req, reply) => {
+    const { rows } = await db.query(
+      `SELECT l.*, pi.email AS primary_email, li.email AS linked_email
+       FROM identity_links l
+       JOIN identities pi ON pi.id = l.primary_identity_id
+       JOIN identities li ON li.id = l.linked_identity_id
+       WHERE l.client_id = $1
+       ORDER BY l.created_at DESC`,
+      [req.params.id]
+    )
+    return reply.send(rows)
+  })
+
   // Get all integrations for a client
   app.get<{ Params: { id: string } }>('/clients/:id/integrations', async (req, reply) => {
     const { rows } = await db.query(

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../../db'
 import { recordPurchase, recordRefund } from '../../lib/attribution'
+import { autoLinkByPhone } from '../../lib/identityLinking'
 
 interface GoHighLevelConfig {
   webhook_secret: string
@@ -23,8 +24,9 @@ async function getIntegration(clientId: string): Promise<GoHighLevelConfig | nul
 interface GoHighLevelPayload {
   secret?: string
   event: 'charge' | 'refund'
-  contact?: { email?: string }
+  contact?: { email?: string; phone?: string }
   email?: string
+  phone?: string
   amount?: number
   transaction_id?: string
   order_id?: string
@@ -43,6 +45,7 @@ export async function goHighLevelWebhookRoutes(app: FastifyInstance) {
       }
 
       const email = body.contact?.email ?? body.email
+      const phone = body.contact?.phone ?? body.phone
       const orderId = body.transaction_id ?? body.order_id
       const amount = body.amount ?? 0
 
@@ -58,6 +61,23 @@ export async function goHighLevelWebhookRoutes(app: FastifyInstance) {
             order_id: orderId,
             processor: 'gohighlevel',
           })
+        }
+      }
+
+      // Step 15 — if this email already has an identity (from the normal opt-in/
+      // pixel flow) and GHL also gave us a phone, persist it and look for other
+      // identities sharing that phone. GHL isn't itself an attribution capture
+      // point, so this only does anything when an identities row already exists —
+      // never blocks the purchase/refund flow above on failure.
+      if (email && phone) {
+        try {
+          await db.query(
+            `UPDATE identities SET phone = COALESCE(phone, $1) WHERE client_id = $2 AND email = $3`,
+            [phone, client_id, email.toLowerCase().trim()]
+          )
+          await autoLinkByPhone(client_id, email.toLowerCase().trim(), phone)
+        } catch (err) {
+          console.error(`[identityLinking] GoHighLevel failed for client=${client_id}:`, (err as Error).message)
         }
       }
 

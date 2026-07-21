@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { sendConversionSignals } from '../lib/conversionSignals'
 
 interface IdentifyBody {
   pixel_key: string
@@ -54,6 +55,18 @@ export async function identifyRoutes(app: FastifyInstance) {
        VALUES ($1, $2, $3, $4, $5)`,
       [clientId, normalizedEmail, lead_type, page, metadata ? JSON.stringify(metadata) : null]
     )
+
+    const { rows: sessionRows } = await db.query<{ fbclid: string | null; gclid: string | null }>(
+      `SELECT fbclid, gclid FROM sessions WHERE visitor_id = $1 ORDER BY started_at DESC LIMIT 1`,
+      [visitorId]
+    )
+    await sendConversionSignals(clientId, {
+      eventType: 'Lead',
+      email: normalizedEmail,
+      fbclid: sessionRows[0]?.fbclid ?? null,
+      gclid: sessionRows[0]?.gclid ?? null,
+      eventTime: new Date(),
+    })
 
     return reply.code(200).send({ ok: true })
   })

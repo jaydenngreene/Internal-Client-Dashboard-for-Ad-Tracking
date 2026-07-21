@@ -477,7 +477,7 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [sessionsRow, pageviewsRow, engagedRow] = await Promise.all([
+      const [sessionsRow, pageviewsRow, engagedRow, cartCountsRow, abandonedRow] = await Promise.all([
         db.query<{ total: string }>(
           `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
           [clientId, from, to]
@@ -492,11 +492,39 @@ export async function reportRoutes(app: FastifyInstance) {
            WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3`,
           [clientId, from, to]
         ),
+        db.query<{ event_type: string; total: string }>(
+          `SELECT event_type, COUNT(*) AS total FROM cart_events
+           WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3
+           GROUP BY event_type`,
+          [clientId, from, to]
+        ),
+        // A cart is "abandoned" if there's an add_to_cart with no purchase by that
+        // visitor's identified email afterward. No background job/state needed — this
+        // is computed live at report time, same style as the BOF lead-conversion query.
+        db.query<{ total: string; value: string }>(
+          `SELECT COUNT(*) AS total, COALESCE(SUM(ce.value), 0) AS value
+           FROM cart_events ce
+           JOIN sessions s ON s.id = ce.session_id
+           WHERE ce.client_id = $1 AND ce.event_type = 'add_to_cart' AND ce.created_at::date BETWEEN $2 AND $3
+             AND NOT EXISTS (
+               SELECT 1 FROM identities i
+               JOIN purchases p ON p.client_id = i.client_id AND p.email = i.email
+               WHERE i.client_id = ce.client_id AND i.visitor_id = s.visitor_id
+                 AND p.purchased_at >= ce.created_at
+             )`,
+          [clientId, from, to]
+        ),
       ])
 
       const totalSessions = parseInt(sessionsRow.rows[0].total, 10)
       const totalPageviews = parseInt(pageviewsRow.rows[0].total, 10)
       const engagedSessions = parseInt(engagedRow.rows[0].total, 10)
+
+      const cartCounts = Object.fromEntries(cartCountsRow.rows.map((r) => [r.event_type, parseInt(r.total, 10)]))
+      const viewContentCount = cartCounts.view_item ?? 0
+      const addToCartCount = cartCounts.add_to_cart ?? 0
+      const initiateCheckoutCount = cartCounts.begin_checkout ?? 0
+      const abandonedCartCount = parseInt(abandonedRow.rows[0].total, 10)
 
       return reply.send({
         from,
@@ -506,6 +534,12 @@ export async function reportRoutes(app: FastifyInstance) {
         engagedSessions,
         avgPageviewsPerSession: totalSessions > 0 ? totalPageviews / totalSessions : null,
         engagementRate: totalSessions > 0 ? (engagedSessions / totalSessions) * 100 : null,
+        viewContentCount,
+        addToCartCount,
+        initiateCheckoutCount,
+        abandonedCartCount,
+        abandonedCartValue: parseFloat(abandonedRow.rows[0].value),
+        cartAbandonmentRate: addToCartCount > 0 ? (abandonedCartCount / addToCartCount) * 100 : null,
       })
     }
   )

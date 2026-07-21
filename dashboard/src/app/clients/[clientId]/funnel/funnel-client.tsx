@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTof, getMof, getBof } from "@/lib/api";
+import { getTof, getMof, getBof, getClients } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
@@ -55,6 +55,9 @@ export function FunnelClient({ clientId }: { clientId: string }) {
 
   const active = stage === "tof" ? tof : stage === "mof" ? mof : bof;
 
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
+  const isEcommerce = clients?.find((c) => c.id === clientId)?.niche === "ecommerce";
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
@@ -100,39 +103,86 @@ export function FunnelClient({ clientId }: { clientId: string }) {
       )}
 
       {stage === "mof" && mof.data && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="px-4">
-            <CardContent className="px-0">
-              <p className="text-xs font-medium text-muted-foreground">Sessions</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalSessions)}</p>
-            </CardContent>
-          </Card>
-          <Card className="px-4">
-            <CardContent className="px-0">
-              <p className="text-xs font-medium text-muted-foreground">Pageviews</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalPageviews)}</p>
-            </CardContent>
-          </Card>
-          <Card className="px-4">
-            <CardContent className="px-0">
-              <p className="text-xs font-medium text-muted-foreground">Avg Pageviews / Session</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {mof.data.avgPageviewsPerSession === null ? "—" : mof.data.avgPageviewsPerSession.toFixed(1)}
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="px-4">
+              <CardContent className="px-0">
+                <p className="text-xs font-medium text-muted-foreground">Sessions</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalSessions)}</p>
+              </CardContent>
+            </Card>
+            <Card className="px-4">
+              <CardContent className="px-0">
+                <p className="text-xs font-medium text-muted-foreground">Pageviews</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalPageviews)}</p>
+              </CardContent>
+            </Card>
+            <Card className="px-4">
+              <CardContent className="px-0">
+                <p className="text-xs font-medium text-muted-foreground">Avg Pageviews / Session</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">
+                  {mof.data.avgPageviewsPerSession === null ? "—" : mof.data.avgPageviewsPerSession.toFixed(1)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="px-4">
+              <CardContent className="px-0">
+                <p className="text-xs font-medium text-muted-foreground">Engagement Rate</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-1">
+                  {formatPercent(mof.data.engagementRate)}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatNumber(mof.data.engagedSessions)} sessions with a pageview
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {isEcommerce && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Ecommerce
               </p>
-            </CardContent>
-          </Card>
-          <Card className="px-4">
-            <CardContent className="px-0">
-              <p className="text-xs font-medium text-muted-foreground">Engagement Rate</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-1">
-                {formatPercent(mof.data.engagementRate)}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {formatNumber(mof.data.engagedSessions)} sessions with a pageview
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Product Views</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {formatNumber(mof.data.viewContentCount)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Add to Cart</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {formatNumber(mof.data.addToCartCount)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Checkout Initiated</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {formatNumber(mof.data.initiateCheckoutCount)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Cart Abandonment</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-2">
+                      {formatPercent(mof.data.cartAbandonmentRate)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatNumber(mof.data.abandonedCartCount)} carts, {formatCurrency(mof.data.abandonedCartValue)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {stage === "bof" && bof.data && (

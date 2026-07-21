@@ -1,11 +1,14 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+export type Niche = "ecommerce" | "call" | "lead_gen" | "saas" | "info_product" | "other";
+
 export interface Client {
   id: string;
   name: string;
   pixel_key: string;
   timezone: string;
   attribution_model: "first_click" | "last_click" | "linear";
+  niche: Niche;
   created_at: string;
 }
 
@@ -68,6 +71,12 @@ export interface MofReport {
   engagedSessions: number;
   avgPageviewsPerSession: number | null;
   engagementRate: number | null;
+  viewContentCount: number;
+  addToCartCount: number;
+  initiateCheckoutCount: number;
+  abandonedCartCount: number;
+  abandonedCartValue: number;
+  cartAbandonmentRate: number | null;
 }
 
 export interface LtvCampaignRow {

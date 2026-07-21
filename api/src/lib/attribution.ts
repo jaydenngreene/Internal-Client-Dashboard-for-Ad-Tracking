@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { sendConversionSignals } from './conversionSignals'
 
 export interface NormalizedConversion {
   email: string
@@ -15,6 +16,8 @@ interface TouchSession {
   utm_campaign: string | null
   utm_content: string | null
   utm_source: string | null
+  fbclid: string | null
+  gclid: string | null
 }
 
 // Insert a purchase, walk back through the customer's ad sessions, split revenue
@@ -44,7 +47,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   const visitorId = identityRows[0].visitor_id
 
   const { rows: sessionRows } = await db.query<TouchSession>(
-    `SELECT id, utm_campaign, utm_content, utm_source
+    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid
      FROM sessions
      WHERE visitor_id = $1
        AND started_at >= NOW() - INTERVAL '90 days'
@@ -89,6 +92,19 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
        last_updated     = NOW()`,
     [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, conv.revenue]
   )
+
+  // Signal the ad platforms using whichever click is most recently "live" for this
+  // visitor (the last touch), matching how the platforms' own pixels behave — their
+  // click-id cookies get overwritten by the most recent click, not the first one.
+  const lastSession = sessionRows[sessionRows.length - 1]
+  await sendConversionSignals(clientId, {
+    eventType: 'Purchase',
+    email,
+    value: conv.revenue,
+    fbclid: lastSession.fbclid,
+    gclid: lastSession.gclid,
+    eventTime: new Date(),
+  })
 }
 
 // Deduct a refund from the matching purchase, its attribution record(s), and customer_ltv.

@@ -12,6 +12,18 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const ask = (q: string): Promise<string> =>
   new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())))
 
+const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
+
+async function askNiche(): Promise<string> {
+  const answer = await ask(`Niche (${NICHES.join(' / ')}) [other]: `)
+  const niche = answer.toLowerCase() || 'other'
+  if (!NICHES.includes(niche)) {
+    console.log(`  "${niche}" isn't one of the options, defaulting to "other".`)
+    return 'other'
+  }
+  return niche
+}
+
 function box(title: string, lines: string[]) {
   const width = Math.max(title.length, ...lines.map((l) => l.length)) + 4
   const hr = '─'.repeat(width)
@@ -28,12 +40,13 @@ async function main() {
   const clientName = await ask('Client name: ')
   const apiUrl = await ask('Your API URL (e.g. https://api.yourdomain.com): ')
   const timezone = await ask('Timezone (default: America/New_York): ') || 'America/New_York'
+  const niche = await askNiche()
 
   // Create client in DB
   const pixelKey = uuidv4()
   const { rows: clientRows } = await db.query(
-    `INSERT INTO clients (name, pixel_key, timezone) VALUES ($1, $2, $3) RETURNING id, pixel_key`,
-    [clientName, pixelKey, timezone]
+    `INSERT INTO clients (name, pixel_key, timezone, niche) VALUES ($1, $2, $3, $4) RETURNING id, pixel_key`,
+    [clientName, pixelKey, timezone, niche]
   )
   const { id: clientId, pixel_key } = clientRows[0]
 
@@ -74,6 +87,7 @@ async function main() {
   box('Client Summary', [
     `Name:       ${clientName}`,
     `Client ID:  ${clientId}`,
+    `Niche:      ${niche}`,
     `Pixel Key:  ${pixel_key}`,
     `API URL:    ${apiUrl}`,
     `Webhook:    ${webhookUrl}`,

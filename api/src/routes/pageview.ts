@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { resolveSession } from '../lib/session'
 
 interface PageviewBody {
   pixel_key: string
@@ -62,38 +63,18 @@ export async function pageviewRoutes(app: FastifyInstance) {
     )
     const visitorId = visitorRows[0].id
 
-    // Only create a new session if this pageview carries ad click data OR is the first pageview
-    const hasAdData = fbclid || gclid || ttclid || utm_source
-    let sessionId: string
-
-    if (hasAdData) {
-      // New ad session
-      const { rows: sessionRows } = await db.query(
-        `INSERT INTO sessions
-         (client_id, visitor_id, fbclid, gclid, ttclid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING id`,
-        [clientId, visitorId, fbclid, gclid, ttclid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page ?? url, referrer]
-      )
-      sessionId = sessionRows[0].id
-    } else {
-      // Attach to most recent session for this visitor
-      const { rows: sessionRows } = await db.query(
-        `SELECT id FROM sessions WHERE visitor_id = $1 ORDER BY started_at DESC LIMIT 1`,
-        [visitorId]
-      )
-      if (sessionRows.length === 0) {
-        // Organic / direct — create a baseline session
-        const { rows: newSession } = await db.query(
-          `INSERT INTO sessions (client_id, visitor_id, landing_page, referrer)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [clientId, visitorId, url, referrer]
-        )
-        sessionId = newSession[0].id
-      } else {
-        sessionId = sessionRows[0].id
-      }
-    }
+    const sessionId = await resolveSession(clientId, visitorId, url, {
+      fbclid,
+      gclid,
+      ttclid,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      landing_page,
+      referrer,
+    })
 
     // Record pageview
     await db.query(

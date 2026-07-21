@@ -114,6 +114,30 @@
     })
   }
 
+  function trackCartEvent(eventType, product, value) {
+    product = product || {}
+    send('/track/event', {
+      anonymous_id: getVisitorId(),
+      event_type: eventType,
+      url: window.location.href,
+      product_id: product.id != null ? String(product.id) : null,
+      product_name: product.name || null,
+      value: value != null ? value : null,
+    })
+  }
+
+  ADT.trackViewContent = function (product, value) {
+    trackCartEvent('view_item', product, value)
+  }
+
+  ADT.trackAddToCart = function (product, value) {
+    trackCartEvent('add_to_cart', product, value)
+  }
+
+  ADT.trackInitiateCheckout = function (value) {
+    trackCartEvent('begin_checkout', null, value)
+  }
+
   window.ADT = ADT
 
   // ── Auto pageview ───────────────────────────────────────────────────────────

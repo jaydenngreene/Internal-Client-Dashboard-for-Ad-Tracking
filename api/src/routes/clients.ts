@@ -2,18 +2,23 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { v4 as uuidv4 } from 'uuid'
 
+const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
+
 export async function clientRoutes(app: FastifyInstance) {
   // Create a new client
   app.post<{
-    Body: { name: string; timezone?: string }
+    Body: { name: string; timezone?: string; niche?: string }
   }>('/clients', async (req, reply) => {
-    const { name, timezone = 'America/New_York' } = req.body
+    const { name, timezone = 'America/New_York', niche = 'other' } = req.body
     if (!name) return reply.code(400).send({ error: 'name required' })
+    if (!NICHES.includes(niche)) {
+      return reply.code(400).send({ error: `niche must be one of: ${NICHES.join(', ')}` })
+    }
 
     const pixelKey = uuidv4()
     const { rows } = await db.query(
-      `INSERT INTO clients (name, pixel_key, timezone) VALUES ($1, $2, $3) RETURNING *`,
-      [name, pixelKey, timezone]
+      `INSERT INTO clients (name, pixel_key, timezone, niche) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, pixelKey, timezone, niche]
     )
     return reply.code(201).send(rows[0])
   })
@@ -21,7 +26,7 @@ export async function clientRoutes(app: FastifyInstance) {
   // List all clients
   app.get('/clients', async (_req, reply) => {
     const { rows } = await db.query(
-      'SELECT id, name, pixel_key, timezone, created_at FROM clients ORDER BY created_at DESC'
+      'SELECT id, name, pixel_key, timezone, niche, created_at FROM clients ORDER BY created_at DESC'
     )
     return reply.send(rows)
   })
@@ -49,6 +54,24 @@ export async function clientRoutes(app: FastifyInstance) {
       'UPDATE clients SET attribution_model = $1 WHERE id = $2 RETURNING *',
       [attribution_model, id]
     )
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
+  // Change a client's niche/business type — the dashboard uses this to show/hide
+  // niche-specific metrics (e.g. cart/ATC cards only make sense for 'ecommerce').
+  app.patch<{
+    Params: { id: string }
+    Body: { niche: string }
+  }>('/clients/:id/niche', async (req, reply) => {
+    const { id } = req.params
+    const { niche } = req.body
+
+    if (!NICHES.includes(niche)) {
+      return reply.code(400).send({ error: `niche must be one of: ${NICHES.join(', ')}` })
+    }
+
+    const { rows } = await db.query('UPDATE clients SET niche = $1 WHERE id = $2 RETURNING *', [niche, id])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])
   })
@@ -133,16 +156,21 @@ export async function clientRoutes(app: FastifyInstance) {
   // Save or update a Google Ads integration for a client.
   // login_customer_id / refresh_token are optional — they fall back to the shared
   // agency MCC credentials in .env when the client's account sits under that manager account.
+  // conversion_action_purchase/lead are Google Ads conversion-action resource names,
+  // needed for Enhanced Conversions uploads (Step 8) — optional until that's set up.
   app.post<{
     Params: { id: string }
     Body: {
       customer_id: string
       login_customer_id?: string
       refresh_token?: string
+      conversion_action_purchase?: string
+      conversion_action_lead?: string
     }
   }>('/clients/:id/integrations/google-ads', async (req, reply) => {
     const { id } = req.params
-    const { customer_id, login_customer_id, refresh_token } = req.body
+    const { customer_id, login_customer_id, refresh_token, conversion_action_purchase, conversion_action_lead } =
+      req.body
 
     if (!customer_id) {
       return reply.code(400).send({ error: 'customer_id required' })
@@ -154,7 +182,44 @@ export async function clientRoutes(app: FastifyInstance) {
        ON CONFLICT (client_id, platform)
        DO UPDATE SET config = EXCLUDED.config
        RETURNING *`,
-      [id, JSON.stringify({ customer_id, login_customer_id, refresh_token })]
+      [
+        id,
+        JSON.stringify({
+          customer_id,
+          login_customer_id,
+          refresh_token,
+          conversion_action_purchase,
+          conversion_action_lead,
+        }),
+      ]
+    )
+    return reply.code(200).send(rows[0])
+  })
+
+  // Save or update a Facebook Conversions API (CAPI) integration for a client — Step 8.
+  // Distinct from the facebook-ads integration: CAPI needs a pixel_id and a token with
+  // business/pixel-management permission, not the ads_read token used for cost sync.
+  app.post<{
+    Params: { id: string }
+    Body: {
+      pixel_id: string
+      access_token: string
+    }
+  }>('/clients/:id/integrations/facebook-capi', async (req, reply) => {
+    const { id } = req.params
+    const { pixel_id, access_token } = req.body
+
+    if (!pixel_id || !access_token) {
+      return reply.code(400).send({ error: 'pixel_id and access_token required' })
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO client_integrations (client_id, platform, config)
+       VALUES ($1, 'facebook_capi', $2)
+       ON CONFLICT (client_id, platform)
+       DO UPDATE SET config = EXCLUDED.config
+       RETURNING *`,
+      [id, JSON.stringify({ pixel_id, access_token })]
     )
     return reply.code(200).send(rows[0])
   })

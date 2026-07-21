@@ -24,3 +24,52 @@
   });
 </script>
 {% endif %}
+
+{% comment %}
+  Product page view — fires ADT.trackViewContent with the product Shopify already
+  knows about, rather than trying to infer it from the URL.
+{% endcomment %}
+{% if template contains 'product' %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.ADT) {
+      ADT.trackViewContent(
+        { id: '{{ product.id }}', name: '{{ product.title | escape }}' },
+        {{ product.price | money_without_currency | remove: ',' | default: 0 }}
+      );
+    }
+  });
+</script>
+{% endif %}
+
+{% comment %}
+  Add to cart — listens for Shopify's standard cart form submit (action="/cart/add"),
+  which virtually every theme uses even when the visual "Add to cart" button differs.
+{% endcomment %}
+<script>
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (form && form.action && form.action.indexOf('/cart/add') !== -1 && window.ADT) {
+      var qty = form.querySelector('[name="quantity"]');
+      ADT.trackAddToCart(
+        { id: form.querySelector('[name="id"]') ? form.querySelector('[name="id"]').value : null },
+        null
+      );
+    }
+  });
+</script>
+
+{% comment %}
+  Checkout initiation — fired from the cart page's "checkout" click, not from inside
+  checkout itself. Shopify's hosted checkout is locked down for script injection on
+  non-Plus stores (the same reason checkout-tracking.liquid only targets the order
+  status page), so this is the last point we can reliably hook.
+{% endcomment %}
+<script>
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('a[href*="/checkout"], [name="checkout"], [href="/checkout"]');
+    if (el && window.ADT) {
+      ADT.trackInitiateCheckout(null);
+    }
+  });
+</script>

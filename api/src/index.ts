@@ -7,6 +7,7 @@ import * as path from 'path'
 import { pageviewRoutes } from './routes/pageview'
 import { identifyRoutes } from './routes/identify'
 import { conversionRoutes } from './routes/conversion'
+import { eventRoutes } from './routes/event'
 import { webhookRoutes } from './routes/webhooks'
 import { shopifyWebhookRoutes } from './routes/webhooks/shopify'
 import { stripeWebhookRoutes } from './routes/webhooks/stripe'
@@ -37,6 +38,7 @@ app.get('/health', async () => ({ status: 'ok' }))
 app.register(pageviewRoutes)
 app.register(identifyRoutes)
 app.register(conversionRoutes)
+app.register(eventRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
 app.register(stripeWebhookRoutes)

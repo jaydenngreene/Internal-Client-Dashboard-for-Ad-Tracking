@@ -38,10 +38,10 @@ async function main() {
   const apiUrl = await ask('Your API URL (e.g. https://api.yourdomain.com): ')
   const timezone = await ask('Timezone (default: America/New_York): ') || 'America/New_York'
 
-  // Create client in DB
+  // Create client in DB — always 'ecommerce' niche, since this script is Shopify-only
   const pixelKey = uuidv4()
   const { rows: clientRows } = await db.query(
-    `INSERT INTO clients (name, pixel_key, timezone) VALUES ($1, $2, $3) RETURNING id, pixel_key`,
+    `INSERT INTO clients (name, pixel_key, timezone, niche) VALUES ($1, $2, $3, 'ecommerce') RETURNING id, pixel_key`,
     [clientName, pixelKey, timezone]
   )
   const { id: clientId, pixel_key } = clientRows[0]

@@ -16,6 +16,8 @@ interface PageviewBody {
   landing_page?: string
   referrer?: string
   url: string
+  fingerprint_hash?: string
+  fingerprint_components?: Record<string, unknown>
 }
 
 export async function pageviewRoutes(app: FastifyInstance) {
@@ -34,6 +36,8 @@ export async function pageviewRoutes(app: FastifyInstance) {
       landing_page,
       referrer,
       url,
+      fingerprint_hash,
+      fingerprint_components,
     } = req.body
 
     if (!pixel_key || !anonymous_id || !url) {
@@ -52,14 +56,28 @@ export async function pageviewRoutes(app: FastifyInstance) {
     const ip = req.ip
     const userAgent = req.headers['user-agent'] ?? null
 
-    // Upsert visitor
+    // Upsert visitor. fingerprint_hash/components only overwrite when actually
+    // provided (COALESCE against the existing value) — older pixel installs that
+    // haven't picked up Step 13 yet, or a page load where fingerprinting failed
+    // silently, shouldn't blank out a hash captured on an earlier visit.
     const { rows: visitorRows } = await db.query(
-      `INSERT INTO visitors (client_id, anonymous_id, ip, user_agent)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO visitors (client_id, anonymous_id, ip, user_agent, fingerprint_hash, fingerprint_components)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (client_id, anonymous_id)
-       DO UPDATE SET last_seen = NOW(), ip = EXCLUDED.ip
+       DO UPDATE SET
+         last_seen = NOW(),
+         ip = EXCLUDED.ip,
+         fingerprint_hash = COALESCE(EXCLUDED.fingerprint_hash, visitors.fingerprint_hash),
+         fingerprint_components = COALESCE(EXCLUDED.fingerprint_components, visitors.fingerprint_components)
        RETURNING id`,
-      [clientId, anonymous_id, ip, userAgent]
+      [
+        clientId,
+        anonymous_id,
+        ip,
+        userAgent,
+        fingerprint_hash ?? null,
+        fingerprint_components ? JSON.stringify(fingerprint_components) : null,
+      ]
     )
     const visitorId = visitorRows[0].id
 

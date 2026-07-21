@@ -37,6 +37,142 @@
     return id
   }
 
+  // ── Device fingerprint (Step 13) ─────────────────────────────────────────────
+  // A composite signal that survives cookie clearing/incognito/private windows,
+  // unlike the cookie-based visitor id above — Hyros calls this "Print Tracking."
+  // Collection only; server-side matching on this hash is Step 14, not here.
+  // Computed once per browser session (cached in sessionStorage) since none of
+  // these signals change mid-session and canvas/audio rendering isn't free.
+
+  function canvasSignal() {
+    try {
+      var canvas = document.createElement('canvas')
+      var ctx = canvas.getContext('2d')
+      if (!ctx) return ''
+      canvas.width = 220
+      canvas.height = 30
+      ctx.textBaseline = 'top'
+      ctx.font = '14px Arial'
+      ctx.fillStyle = '#f60'
+      ctx.fillRect(0, 0, 100, 20)
+      ctx.fillStyle = '#069'
+      ctx.fillText('adt-fingerprint 🔒 v1', 2, 2)
+      return canvas.toDataURL()
+    } catch (e) {
+      return ''
+    }
+  }
+
+  function webglSignal() {
+    try {
+      var canvas = document.createElement('canvas')
+      var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      if (!gl) return ''
+      var info = gl.getExtension('WEBGL_debug_renderer_info')
+      if (!info) return ''
+      var vendor = gl.getParameter(info.UNMASKED_VENDOR_WEBGL)
+      var renderer = gl.getParameter(info.UNMASKED_RENDERER_WEBGL)
+      return vendor + '~' + renderer
+    } catch (e) {
+      return ''
+    }
+  }
+
+  // OfflineAudioContext rendering is async — resolves with a summed-sample signal
+  // derived from a fixed oscillator, which varies by audio stack/hardware.
+  function audioSignal() {
+    return new Promise(function (resolve) {
+      try {
+        var AudioCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext
+        if (!AudioCtx) return resolve('')
+        var ctx = new AudioCtx(1, 5000, 44100)
+        var oscillator = ctx.createOscillator()
+        oscillator.type = 'triangle'
+        oscillator.frequency.value = 10000
+        var compressor = ctx.createDynamicsCompressor()
+        oscillator.connect(compressor)
+        compressor.connect(ctx.destination)
+        oscillator.start(0)
+        ctx.oncomplete = function (event) {
+          var buffer = event.renderedBuffer.getChannelData(0)
+          var sum = 0
+          for (var i = 0; i < buffer.length; i += 100) sum += Math.abs(buffer[i])
+          resolve(String(sum))
+        }
+        ctx.startRendering()
+        // Some browsers can hang here (autoplay policy, etc) — never block the
+        // pixel's core job on this.
+        setTimeout(function () { resolve('') }, 800)
+      } catch (e) {
+        resolve('')
+      }
+    })
+  }
+
+  function fnv1a(str) {
+    var hash = 0x811c9dc5
+    for (var i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i)
+      hash = (hash * 0x01000193) >>> 0
+    }
+    return hash.toString(16)
+  }
+
+  function sha256Hex(str) {
+    if (window.crypto && window.crypto.subtle && window.isSecureContext) {
+      var data = new TextEncoder().encode(str)
+      return window.crypto.subtle.digest('SHA-256', data).then(function (buf) {
+        var bytes = new Uint8Array(buf)
+        var hex = ''
+        for (var i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0')
+        return hex
+      }).catch(function () {
+        return fnv1a(str)
+      })
+    }
+    // Non-HTTPS embeds (crypto.subtle requires a secure context) fall back to a
+    // fast synchronous hash — lower collision resistance, still usable as a match key.
+    return Promise.resolve(fnv1a(str))
+  }
+
+  var fingerprintPromise = null
+
+  function getFingerprint() {
+    if (fingerprintPromise) return fingerprintPromise
+
+    var cached = null
+    try {
+      cached = JSON.parse(sessionStorage.getItem('_adt_fp') || 'null')
+    } catch (e) {}
+    if (cached && cached.hash) {
+      fingerprintPromise = Promise.resolve(cached)
+      return fingerprintPromise
+    }
+
+    fingerprintPromise = audioSignal().then(function (audio) {
+      var components = {
+        canvas: canvasSignal(),
+        webgl: webglSignal(),
+        audio: audio,
+        ua: navigator.userAgent,
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        lang: navigator.language || '',
+        screen: screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+        cores: navigator.hardwareConcurrency || 0,
+      }
+      var raw = Object.keys(components).sort().map(function (k) { return k + ':' + components[k] }).join('|')
+      return sha256Hex(raw).then(function (hash) {
+        var result = { hash: hash, components: components }
+        try {
+          sessionStorage.setItem('_adt_fp', JSON.stringify(result))
+        } catch (e) {}
+        return result
+      })
+    })
+
+    return fingerprintPromise
+  }
+
   // ── URL Params ──────────────────────────────────────────────────────────────
 
   function getParams() {
@@ -170,17 +306,25 @@
 
   // ── Auto pageview ───────────────────────────────────────────────────────────
 
+  // Async now (waits on the fingerprint) — still fires as early as DOMContentLoaded,
+  // just no longer synchronous. The fingerprint promise is cached across the whole
+  // session (see getFingerprint), so only the very first pageview pays the real
+  // collection cost; later navigations resolve instantly from sessionStorage.
   function trackPageview() {
     var urlParams = getParams()
     storeAdParams(urlParams)
     var adParams = getStoredAdParams() || urlParams
 
-    send('/track/pageview', Object.assign({
-      anonymous_id: getVisitorId(),
-      url: window.location.href,
-      referrer: document.referrer || null,
-      landing_page: window.location.href,
-    }, adParams))
+    getFingerprint().then(function (fp) {
+      send('/track/pageview', Object.assign({
+        anonymous_id: getVisitorId(),
+        url: window.location.href,
+        referrer: document.referrer || null,
+        landing_page: window.location.href,
+        fingerprint_hash: fp.hash,
+        fingerprint_components: fp.components,
+      }, adParams))
+    })
   }
 
   // Fire on load

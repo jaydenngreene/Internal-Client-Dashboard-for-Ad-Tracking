@@ -98,7 +98,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
             <CardTitle>{VIEW_TITLE[view]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0 overflow-x-auto">
-            <LtvTable campaigns={ltvQuery.data.campaigns} />
+            <LtvTable campaigns={ltvQuery.data.campaigns} predictiveLtvAvailable={ltvQuery.data.predictiveLtvAvailable} />
           </CardContent>
         </Card>
       )}

@@ -569,11 +569,17 @@ export interface LtvCampaignRow {
   avgLtv180d: number;
   avgLtvLifetime: number;
   totalLtvLifetime: number;
+  // Step 37 — cohort-curve extrapolation from this client's own matured customers,
+  // null per-row if there weren't enough predicted values in that campaign, or
+  // account-wide if the client doesn't have enough history yet (see
+  // predictiveLtvAvailable below).
+  predictedAvgLtv: number | null;
 }
 
 export interface LtvReport {
   from: string;
   to: string;
+  predictiveLtvAvailable: boolean;
   campaigns: LtvCampaignRow[];
 }
 

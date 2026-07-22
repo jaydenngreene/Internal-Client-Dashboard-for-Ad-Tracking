@@ -13,7 +13,15 @@ import { LtvCampaignRow } from "@/lib/api";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type SortKey = "campaign_name" | "customers" | "avgLtv30d" | "avgLtv60d" | "avgLtv90d" | "avgLtv180d" | "avgLtvLifetime";
+type SortKey =
+  | "campaign_name"
+  | "customers"
+  | "avgLtv30d"
+  | "avgLtv60d"
+  | "avgLtv90d"
+  | "avgLtv180d"
+  | "avgLtvLifetime"
+  | "predictedAvgLtv";
 
 const COLUMNS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "campaign_name", label: "Campaign" },
@@ -23,9 +31,10 @@ const COLUMNS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "avgLtv90d", label: "LTV 90d", align: "right" },
   { key: "avgLtv180d", label: "LTV 180d", align: "right" },
   { key: "avgLtvLifetime", label: "LTV Lifetime", align: "right" },
+  { key: "predictedAvgLtv", label: "Predicted LTV", align: "right" },
 ];
 
-export function LtvTable({ campaigns }: { campaigns: LtvCampaignRow[] }) {
+export function LtvTable({ campaigns, predictiveLtvAvailable }: { campaigns: LtvCampaignRow[]; predictiveLtvAvailable: boolean }) {
   const [sortKey, setSortKey] = useState<SortKey>("avgLtvLifetime");
   const [sortDesc, setSortDesc] = useState(true);
 
@@ -36,6 +45,10 @@ export function LtvTable({ campaigns }: { campaigns: LtvCampaignRow[] }) {
       const cmp = String(av).localeCompare(String(bv));
       return sortDesc ? -cmp : cmp;
     }
+    // null (no prediction available for that cohort) always sorts last regardless
+    // of sort direction — it's "unknown," not "zero."
+    if (av === null) return bv === null ? 0 : 1;
+    if (bv === null) return -1;
     const cmp = av - bv;
     return sortDesc ? -cmp : cmp;
   });
@@ -58,7 +71,14 @@ export function LtvTable({ campaigns }: { campaigns: LtvCampaignRow[] }) {
   }
 
   return (
-    <Table>
+    <>
+      {!predictiveLtvAvailable && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground">
+          Predicted LTV needs more purchase history to build a reliable projection curve — it'll fill in once enough
+          customers have aged past 180 days.
+        </p>
+      )}
+      <Table>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {COLUMNS.map((col) => (
@@ -88,9 +108,13 @@ export function LtvTable({ campaigns }: { campaigns: LtvCampaignRow[] }) {
             <TableCell className="text-right tabular-nums text-chart-1">
               {formatCurrency(row.avgLtvLifetime)}
             </TableCell>
+            <TableCell className="text-right tabular-nums text-muted-foreground">
+              {row.predictedAvgLtv === null ? "-" : formatCurrency(row.predictedAvgLtv)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
+import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
 
 function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -656,19 +657,59 @@ export async function reportRoutes(app: FastifyInstance) {
         [clientId, from, to]
       )
 
+      // Predictive LTV (Step 37) — cohort-curve extrapolation from this client's own
+      // matured customers (see lib/predictiveLtv.ts), not a trained model. The curve
+      // itself is computed from the client's WHOLE history, not just this date range,
+      // for the largest sample; per-customer predictions are then averaged per campaign.
+      const curve = await computeMaturityCurve(clientId)
+      const { rows: customerRows } = await db.query<{
+        acquisition_campaign: string | null
+        revenue_30d: string
+        revenue_180d: string
+        revenue_lifetime: string
+        first_purchase_date: string
+      }>(
+        `SELECT acquisition_campaign, revenue_30d, revenue_180d, revenue_lifetime, first_purchase_date
+         FROM customer_ltv WHERE client_id = $1 AND first_purchase_date::date BETWEEN $2 AND $3`,
+        [clientId, from, to]
+      )
+      const predictedByCampaign = new Map<string, number[]>()
+      for (const c of customerRows) {
+        const key = c.acquisition_campaign ?? '(unknown)'
+        const predicted = predictLifetimeValue(curve, {
+          revenue_30d: parseFloat(c.revenue_30d),
+          revenue_180d: parseFloat(c.revenue_180d),
+          revenue_lifetime: parseFloat(c.revenue_lifetime),
+          first_purchase_date: c.first_purchase_date,
+        })
+        if (predicted === null) continue
+        if (!predictedByCampaign.has(key)) predictedByCampaign.set(key, [])
+        predictedByCampaign.get(key)!.push(predicted)
+      }
+      const avgPredicted = (key: string): number | null => {
+        const values = predictedByCampaign.get(key)
+        if (!values || values.length === 0) return null
+        return values.reduce((a, b) => a + b, 0) / values.length
+      }
+
       return reply.send({
         from,
         to,
-        campaigns: rows.map((r) => ({
-          campaign_name: r.acquisition_campaign ?? '(unknown)',
-          customers: parseInt(r.customers, 10),
-          avgLtv30d: parseFloat(r.avg_30d),
-          avgLtv60d: parseFloat(r.avg_60d),
-          avgLtv90d: parseFloat(r.avg_90d),
-          avgLtv180d: parseFloat(r.avg_180d),
-          avgLtvLifetime: parseFloat(r.avg_lifetime),
-          totalLtvLifetime: parseFloat(r.total_lifetime),
-        })),
+        predictiveLtvAvailable: curve.multiplier180From30 !== null && curve.multiplierLifetimeFrom180 !== null,
+        campaigns: rows.map((r) => {
+          const key = r.acquisition_campaign ?? '(unknown)'
+          return {
+            campaign_name: key,
+            customers: parseInt(r.customers, 10),
+            avgLtv30d: parseFloat(r.avg_30d),
+            avgLtv60d: parseFloat(r.avg_60d),
+            avgLtv90d: parseFloat(r.avg_90d),
+            avgLtv180d: parseFloat(r.avg_180d),
+            avgLtvLifetime: parseFloat(r.avg_lifetime),
+            totalLtvLifetime: parseFloat(r.total_lifetime),
+            predictedAvgLtv: avgPredicted(key),
+          }
+        }),
       })
     }
   )

@@ -37,6 +37,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/integrations/facebook-capi': 'client',
   '/clients/:id/integrations/bing-ads': 'client',
   '/clients/:id/integrations/twilio': 'client',
+  '/clients/:id/integrations/alerts': 'client',
   '/clients/:id/integrations/paypal': 'client',
   '/clients/:id/integrations/square': 'client',
   '/clients/:id/integrations/gohighlevel': 'client',

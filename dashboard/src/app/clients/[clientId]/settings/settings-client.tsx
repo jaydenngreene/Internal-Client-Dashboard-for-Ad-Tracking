@@ -302,6 +302,11 @@ const INTEGRATIONS: IntegrationDef[] = [
     { key: "api_key", label: "API key", type: "password" },
     { key: "list_id", label: "List ID" },
   ] },
+  { platform: "alerts", label: "Alerts (Slack / Email / SMS)", category: "Alerts", fields: [
+    { key: "slack_webhook_url", label: "Slack incoming webhook URL", optional: true },
+    { key: "alert_email", label: "Alert email", optional: true },
+    { key: "alert_phone", label: "Alert phone (SMS, needs Twilio + a tracking number above)", optional: true },
+  ] },
 ];
 
 function IntegrationRow({

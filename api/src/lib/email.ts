@@ -9,7 +9,7 @@ function getClient(): Resend | null {
   return apiKey ? new Resend(apiKey) : null
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const client = getClient()
   const from = process.env.EMAIL_FROM
   if (!client || !from) {

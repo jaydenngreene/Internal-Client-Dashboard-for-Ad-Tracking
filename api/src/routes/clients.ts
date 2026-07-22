@@ -343,6 +343,29 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'twilio', { account_sid, auth_token }))
   })
 
+  // Alert delivery config (Step 32) — any subset of Slack/email/SMS. SMS reuses
+  // this client's own Twilio integration + one of its registered tracking numbers
+  // (see lib/alerts.ts), so no separate SMS credential lives here.
+  app.post<{
+    Params: { id: string }
+    Body: { slack_webhook_url?: string; alert_email?: string; alert_phone?: string }
+  }>('/clients/:id/integrations/alerts', async (req, reply) => {
+    const { id } = req.params
+    const { slack_webhook_url, alert_email, alert_phone } = req.body
+    if (!slack_webhook_url && !alert_email && !alert_phone) {
+      return reply.code(400).send({ error: 'at least one of slack_webhook_url, alert_email, alert_phone required' })
+    }
+    if (alert_email && !isValidEmail(alert_email)) {
+      return reply.code(400).send({ error: 'alert_email must be a valid email' })
+    }
+    if (slack_webhook_url && !isValidUrl(slack_webhook_url)) {
+      return reply.code(400).send({ error: 'slack_webhook_url must be a valid URL' })
+    }
+    return reply
+      .code(200)
+      .send(await upsertIntegration(id, 'alerts', { slack_webhook_url, alert_email, alert_phone }))
+  })
+
   // Register a tracking number the client already purchased in their own Twilio
   // account — this app never buys numbers or touches billing on anyone's behalf.
   app.post<{

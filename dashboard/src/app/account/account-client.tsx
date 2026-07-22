@@ -16,6 +16,7 @@ const JOB_LABEL: Record<string, string> = {
   ad_cost_sync: "Ad cost sync",
   ltv_refresh: "LTV refresh",
   audience_sync: "Audience sync",
+  anomaly_detection: "Anomaly detection alerts",
 };
 
 function formatDateTime(iso: string): string {

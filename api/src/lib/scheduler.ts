@@ -3,6 +3,7 @@ import { db } from '../db'
 import { runAdCostSync } from '../jobs/adCosts/run'
 import { refreshCustomerLtv } from '../jobs/ltv/run'
 import { runAudienceSyncs } from '../jobs/audienceSync/run'
+import { detectAnomalies } from '../jobs/anomalyDetection/run'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -52,6 +53,14 @@ export function startScheduledJobs(): void {
   cron.schedule('0 3 * * *', () => {
     console.log('[scheduler] running audience syncs')
     runAndRecord('audience_sync', runAudienceSyncs)
+  })
+
+  // Runs after the 6-hourly ad-cost sync has a chance to land yesterday's finalized
+  // spend — checking anomalies against yesterday's own not-yet-synced numbers would
+  // just compare zeros. 7am covers "something broke overnight" before the workday.
+  cron.schedule('0 7 * * *', () => {
+    console.log('[scheduler] running anomaly detection')
+    runAndRecord('anomaly_detection', detectAnomalies)
   })
 
   // Run once immediately on startup too, so data isn't stale from a cold start

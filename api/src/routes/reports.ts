@@ -1004,6 +1004,7 @@ export async function reportRoutes(app: FastifyInstance) {
          GROUP BY a.client_id
        ) prev_rev ON prev_rev.client_id = c.id
        WHERE c.owner_user_id = $5
+          OR c.id IN (SELECT client_id FROM client_collaborators WHERE user_id = $5)
        ORDER BY c.name`,
       [from, to, prevFrom, prevTo, req.userId]
     )

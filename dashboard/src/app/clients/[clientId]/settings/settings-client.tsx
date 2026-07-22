@@ -19,6 +19,9 @@ import {
   getIdentityLinks,
   createIdentityLink,
   deleteClient,
+  getCollaborators,
+  addCollaborator,
+  removeCollaborator,
   OUTBOUND_WEBHOOK_EVENT_TYPES,
   Client,
   Niche,
@@ -648,6 +651,107 @@ function IdentityLinksSection({ clientId }: { clientId: string }) {
   );
 }
 
+// Sharing (migration 028) — a collaborator gets the exact same data access as the
+// owner everywhere else in the dashboard; this section is the one place that
+// distinction actually shows up. Anyone with access can see who else has it
+// (transparency about who can see this client's data); only the owner sees the add/
+// remove controls, matching the backend's own owner-only enforcement on those two
+// actions.
+function CollaboratorsSection({ clientId, isOwner }: { clientId: string; isOwner: boolean }) {
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
+
+  const { data: collaborators, isLoading } = useQuery({
+    queryKey: ["collaborators", clientId],
+    queryFn: () => getCollaborators(clientId),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: () => addCollaborator(clientId, email.trim().toLowerCase()),
+    onSuccess: () => {
+      setEmail("");
+      queryClient.invalidateQueries({ queryKey: ["collaborators", clientId] });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) => removeCollaborator(clientId, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["collaborators", clientId] }),
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Sharing</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          {isOwner
+            ? "Give another login full access to this client's data. They must already have a login created with npm run create:user - there's no invite-by-email signup."
+            : "Everyone who currently has access to this client."}
+        </p>
+
+        {isLoading && <Skeleton className="h-10 w-full" />}
+
+        {collaborators && collaborators.length === 0 && (
+          <p className="text-sm text-muted-foreground">Not shared with anyone else yet.</p>
+        )}
+
+        {collaborators && collaborators.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {collaborators.map((c) => (
+              <div key={c.user_id} className="flex items-center justify-between rounded-lg border border-border p-2.5 text-sm">
+                <div>
+                  <p className="font-medium">{c.email}</p>
+                  <p className="text-xs text-muted-foreground">{c.agency_name}</p>
+                </div>
+                {isOwner && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={removeMutation.isPending}
+                    onClick={() => removeMutation.mutate(c.user_id)}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isOwner && (
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addMutation.mutate();
+            }}
+          >
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Share with (email)</FieldLabel>
+              <Input
+                className="w-64"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="teammate@example.com"
+                required
+              />
+            </div>
+            <Button type="submit" size="sm" disabled={addMutation.isPending || !email.trim()}>
+              {addMutation.isPending ? "Sharing…" : "Share"}
+            </Button>
+          </form>
+        )}
+        {addMutation.isError && (
+          <p className="text-xs text-status-critical">{(addMutation.error as Error).message}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DangerZoneSection({ clientId, clientName }: { clientId: string; clientName: string }) {
   const [confirmText, setConfirmText] = useState("");
   const router = useRouter();
@@ -678,7 +782,9 @@ function DangerZoneSection({ clientId, clientName }: { clientId: string; clientN
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder={clientName}
         />
-        {mutation.isError && <p className="text-xs text-status-critical">Failed to delete client.</p>}
+        {mutation.isError && (
+          <p className="text-xs text-status-critical">{(mutation.error as Error).message}</p>
+        )}
         <div>
           <Button
             variant="destructive"
@@ -716,7 +822,8 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <TagWebhookSection clientId={clientId} />
           <OutboundWebhooksSection clientId={clientId} />
           <IdentityLinksSection clientId={clientId} />
-          <DangerZoneSection clientId={clientId} clientName={client.name} />
+          <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
+          {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
         </>
       )}
     </div>

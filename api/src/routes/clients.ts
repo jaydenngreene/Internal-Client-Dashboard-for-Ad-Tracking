@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { v4 as uuidv4 } from 'uuid'
-import { isValidUrl } from '../lib/validation'
+import { isValidUrl, isValidEmail } from '../lib/validation'
+import { isClientOwner } from '../lib/ownership'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 const CLIENT_NAME_MAX_LENGTH = 200
@@ -40,11 +41,17 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(201).send(rows[0])
   })
 
-  // List all clients belonging to the authenticated user — every other user's
-  // clients are invisible here, not just inaccessible by direct id.
+  // List every client this user can access — either owned outright, or shared with
+  // them via client_collaborators (migration 028). Every other user's clients (and
+  // clients not shared with this one) stay invisible here, not just inaccessible by
+  // direct id. is_owner tells the dashboard whether to show owner-only controls
+  // (collaborator management, delete) for that client.
   app.get('/clients', async (req, reply) => {
     const { rows } = await db.query(
-      'SELECT id, name, pixel_key, timezone, niche, created_at FROM clients WHERE owner_user_id = $1 ORDER BY created_at DESC',
+      `SELECT id, name, pixel_key, timezone, niche, created_at, (owner_user_id = $1) AS is_owner
+       FROM clients
+       WHERE owner_user_id = $1 OR id IN (SELECT client_id FROM client_collaborators WHERE user_id = $1)
+       ORDER BY created_at DESC`,
       [req.userId]
     )
     return reply.send(rows)
@@ -52,7 +59,10 @@ export async function clientRoutes(app: FastifyInstance) {
 
   // Get a single client
   app.get<{ Params: { id: string } }>('/clients/:id', async (req, reply) => {
-    const { rows } = await db.query('SELECT * FROM clients WHERE id = $1', [req.params.id])
+    const { rows } = await db.query('SELECT *, (owner_user_id = $2) AS is_owner FROM clients WHERE id = $1', [
+      req.params.id,
+      req.userId,
+    ])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])
   })
@@ -76,11 +86,18 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
-  // Delete a client. Every table referencing clients(id) does so with ON DELETE
-  // CASCADE (verified across every migration), so this one statement is sufficient —
+  // Delete a client. Owner-only — a collaborator has full access to a client's data
+  // (see hasClientAccess in lib/ownership.ts) but can't destroy the client itself,
+  // same restriction as managing who else has access (see the collaborators routes
+  // below). Every table referencing clients(id) does so with ON DELETE CASCADE
+  // (verified across every migration), so the DELETE statement itself is sufficient —
   // no manual cleanup of sessions/leads/purchases/etc. needed.
   app.delete<{ Params: { id: string } }>('/clients/:id', async (req, reply) => {
-    const { rows } = await db.query('DELETE FROM clients WHERE id = $1 RETURNING id', [req.params.id])
+    const { id } = req.params
+    if (!(await isClientOwner(id, req.userId!))) {
+      return reply.code(403).send({ error: 'Only the owner can delete this client' })
+    }
+    const { rows } = await db.query('DELETE FROM clients WHERE id = $1 RETURNING id', [id])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.code(204).send()
   })
@@ -614,5 +631,62 @@ export async function clientRoutes(app: FastifyInstance) {
       [req.params.id]
     )
     return reply.send(rows)
+  })
+
+  // Client sharing (migration 028) — a collaborator gets the exact same data access
+  // as the owner (see hasClientAccess in lib/ownership.ts, which the generic 'client'
+  // resolver already applies to every route below this file's own DELETE and these
+  // three). Anyone with access can see who else has it; only the owner can change it.
+  // Sharing is by email, same identifier every other feature in this app uses — and
+  // since self-registration is gone, that email must already belong to a login
+  // someone created via `npm run create:user`.
+  app.get<{ Params: { id: string } }>('/clients/:id/collaborators', async (req, reply) => {
+    const { rows } = await db.query(
+      `SELECT u.id AS user_id, u.email, u.agency_name, cc.added_at
+       FROM client_collaborators cc
+       JOIN users u ON u.id = cc.user_id
+       WHERE cc.client_id = $1
+       ORDER BY cc.added_at ASC`,
+      [req.params.id]
+    )
+    return reply.send(rows)
+  })
+
+  app.post<{ Params: { id: string }; Body: { email: string } }>('/clients/:id/collaborators', async (req, reply) => {
+    const { id } = req.params
+    if (!(await isClientOwner(id, req.userId!))) {
+      return reply.code(403).send({ error: 'Only the owner can add collaborators' })
+    }
+    const email = req.body.email?.toLowerCase().trim()
+    if (!email || !isValidEmail(email)) {
+      return reply.code(400).send({ error: 'A valid email is required' })
+    }
+
+    const { rows: userRows } = await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])
+    if (userRows.length === 0) {
+      return reply.code(404).send({
+        error: `No account exists for ${email} — create one first with npm run create:user, then share this client with it`,
+      })
+    }
+    const collaboratorId = userRows[0].id
+    if (collaboratorId === req.userId) {
+      return reply.code(400).send({ error: 'You already own this client' })
+    }
+
+    await db.query(
+      `INSERT INTO client_collaborators (client_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (client_id, user_id) DO NOTHING`,
+      [id, collaboratorId]
+    )
+    return reply.code(201).send({ user_id: collaboratorId, email })
+  })
+
+  app.delete<{ Params: { id: string; userId: string } }>('/clients/:id/collaborators/:userId', async (req, reply) => {
+    const { id, userId } = req.params
+    if (!(await isClientOwner(id, req.userId!))) {
+      return reply.code(403).send({ error: 'Only the owner can remove collaborators' })
+    }
+    await db.query('DELETE FROM client_collaborators WHERE client_id = $1 AND user_id = $2', [id, userId])
+    return reply.code(204).send()
   })
 }

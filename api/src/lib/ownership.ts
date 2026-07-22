@@ -51,6 +51,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/integrations/reddit-ads': 'client',
   '/clients/:id/integrations/customers-ai': 'client',
   '/clients/:id/integrations/klaviyo': 'client',
+  '/clients/:id/integrations/bigquery': 'client',
   '/clients/:id/integrations/tag-webhook/generate': 'client',
   '/clients/:id/reports/overview': 'client',
   '/clients/:id/reports/bof': 'client',

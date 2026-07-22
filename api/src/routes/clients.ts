@@ -608,6 +608,26 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'customers_ai', { webhook_secret }))
   })
 
+  // Save or update a BigQuery warehouse-export integration — Step 44. The dataset
+  // itself must already exist in the client's own GCP project (this app never
+  // provisions GCP resources), created by whoever set up the service account.
+  app.post<{
+    Params: { id: string }
+    Body: { project_id: string; dataset_id: string; service_account_key: string }
+  }>('/clients/:id/integrations/bigquery', async (req, reply) => {
+    const { id } = req.params
+    const { project_id, dataset_id, service_account_key } = req.body
+    if (!project_id || !dataset_id || !service_account_key) {
+      return reply.code(400).send({ error: 'project_id, dataset_id, and service_account_key required' })
+    }
+    try {
+      JSON.parse(service_account_key)
+    } catch {
+      return reply.code(400).send({ error: 'service_account_key must be valid JSON (the full key file contents)' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'bigquery', { project_id, dataset_id, service_account_key }))
+  })
+
   // Save or update the Klaviyo integration used by the Step 12 remarketing agent's
   // (not-yet-auto-wired) dispatch step — see lib/klaviyoDispatch.ts. list_id is the
   // Klaviyo list the client's own flow/campaign is set up to react to.

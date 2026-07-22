@@ -19,6 +19,7 @@ const JOB_LABEL: Record<string, string> = {
   anomaly_detection: "Anomaly detection alerts",
   call_transcription: "Call transcription & AI scoring",
   webhook_retry: "Outbound webhook retries",
+  warehouse_export: "BigQuery warehouse export",
 };
 
 function formatDateTime(iso: string): string {

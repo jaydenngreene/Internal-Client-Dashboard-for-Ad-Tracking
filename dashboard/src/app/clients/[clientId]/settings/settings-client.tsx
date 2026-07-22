@@ -347,6 +347,11 @@ const INTEGRATIONS: IntegrationDef[] = [
     { key: "alert_email", label: "Alert email", optional: true },
     { key: "alert_phone", label: "Alert phone (SMS, needs Twilio + a tracking number above)", optional: true },
   ] },
+  { platform: "bigquery", label: "BigQuery Export", category: "Data Warehouse", fields: [
+    { key: "project_id", label: "GCP project ID" },
+    { key: "dataset_id", label: "Dataset ID (must already exist)" },
+    { key: "service_account_key", label: "Service account key (paste the full JSON key file)", type: "password" },
+  ] },
 ];
 
 function IntegrationRow({

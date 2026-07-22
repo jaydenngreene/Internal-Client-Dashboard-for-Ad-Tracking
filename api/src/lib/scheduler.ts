@@ -6,6 +6,7 @@ import { runAudienceSyncs } from '../jobs/audienceSync/run'
 import { detectAnomalies } from '../jobs/anomalyDetection/run'
 import { transcribeAndScoreCalls } from '../jobs/callTranscription/run'
 import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
+import { runWarehouseExports } from '../lib/bigqueryExport'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -55,6 +56,14 @@ export function startScheduledJobs(): void {
   cron.schedule('0 3 * * *', () => {
     console.log('[scheduler] running audience syncs')
     runAndRecord('audience_sync', runAudienceSyncs)
+  })
+
+  // Nightly, same slot family as LTV/audience sync — a full reload of each
+  // configured client's trailing window is cheap enough at this app's scale to
+  // not need more frequent runs.
+  cron.schedule('0 4 * * *', () => {
+    console.log('[scheduler] running BigQuery warehouse exports')
+    runAndRecord('warehouse_export', runWarehouseExports)
   })
 
   // Runs after the 6-hourly ad-cost sync has a chance to land yesterday's finalized

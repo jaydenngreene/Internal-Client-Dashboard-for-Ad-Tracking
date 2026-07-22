@@ -1,5 +1,14 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { computeTrueProfit, MarginConfig } from '../lib/margin'
+
+async function getMarginConfig(clientId: string): Promise<MarginConfig | null> {
+  const { rows } = await db.query<MarginConfig>(
+    `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
+    [clientId]
+  )
+  return rows[0] ?? null
+}
 
 function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -77,6 +86,8 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const leads = parseInt(leadRows[0].leads, 10)
       const revenue = parseFloat(revRows[0].revenue)
       const sales = parseInt(revRows[0].sales, 10)
+      const marginConfig = await getMarginConfig(clientId)
+      const { trueProfit } = computeTrueProfit(marginConfig, revenue, cost, sales)
 
       // Creative rows within this one campaign — spend side carries the real ad asset
       // columns (populated only where an ad-cost-sync fetcher pulls them; Facebook first,
@@ -208,6 +219,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           sales,
           revenue,
           profit: revenue - cost,
+          trueProfit,
           roas: cost > 0 ? revenue / cost : null,
           cpl: leads > 0 ? cost / leads : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
@@ -307,6 +319,8 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const leads = parseInt(leadRows[0].leads, 10)
       const revenue = parseFloat(revRows[0].revenue)
       const sales = parseInt(revRows[0].sales, 10)
+      const marginConfig = await getMarginConfig(clientId)
+      const { trueProfit } = computeTrueProfit(marginConfig, revenue, cost, sales)
 
       return reply.send({
         platform,
@@ -333,6 +347,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           sales,
           revenue,
           profit: revenue - cost,
+          trueProfit,
           roas: cost > 0 ? revenue / cost : null,
           cpl: leads > 0 ? cost / leads : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,

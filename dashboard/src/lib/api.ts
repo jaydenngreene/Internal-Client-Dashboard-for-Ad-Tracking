@@ -119,6 +119,12 @@ export interface Client {
   attribution_model: "first_click" | "last_click" | "linear";
   niche: Niche;
   created_at: string;
+  // True-profit inputs (Step 31) — % of revenue for cogs/payment_fee, flat $ per
+  // order for fulfillment. All null until a client's Settings page configures them,
+  // in which case every report's "profit" tile falls back to ad-cost-only profit.
+  cogs_percent: number | null;
+  payment_fee_percent: number | null;
+  fulfillment_cost_flat: number | null;
   // False for a client shared with this login rather than owned by it (migration
   // 028) — gates owner-only UI (collaborator management, delete) client-side; the
   // backend enforces the same restriction independently, this is just so the
@@ -214,6 +220,23 @@ export function updateAttributionModel(
     body: JSON.stringify({ attribution_model }),
   }).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function updateClientMargin(
+  clientId: string,
+  margin: { cogs_percent: number | null; payment_fee_percent: number | null; fulfillment_cost_flat: number | null }
+): Promise<Client> {
+  return apiRequest(`${API_URL}/clients/${clientId}/margin`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(margin),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
     return res.json();
   });
 }
@@ -451,6 +474,7 @@ export interface OverviewSeriesPoint {
   cost: number;
   revenue: number;
   profit: number;
+  trueProfit: number;
 }
 
 export interface OverviewReport {
@@ -461,6 +485,12 @@ export interface OverviewReport {
   profit: number;
   roas: number | null;
   roi: number | null;
+  // True profit (Step 31) — profit after cogs_percent/payment_fee_percent/
+  // fulfillment_cost_flat, falls back to equaling `profit` when a client hasn't
+  // configured any margin inputs (hasMarginConfig tells the UI which is showing).
+  trueProfit: number;
+  trueRoi: number | null;
+  hasMarginConfig: boolean;
   leads: number;
   sales: number;
   series: OverviewSeriesPoint[];
@@ -562,6 +592,7 @@ export interface FunnelRow {
   aov: number | null;
   revenue: number;
   profit: number;
+  trueProfit: number;
   roas: number | null;
   ctr: number | null;
   cpc: number | null;
@@ -581,6 +612,8 @@ export interface AgencyClientRow {
   cost: number;
   revenue: number;
   profit: number;
+  trueProfit: number;
+  trueRoi: number | null;
   roas: number | null;
   roi: number | null;
   revenueChangePct: number | null;
@@ -590,7 +623,7 @@ export interface AgencyOverviewReport {
   from: string;
   to: string;
   clients: AgencyClientRow[];
-  totals: { cost: number; revenue: number; profit: number };
+  totals: { cost: number; revenue: number; profit: number; trueProfit: number };
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
@@ -670,6 +703,7 @@ export interface CampaignDetailKpis {
   sales: number;
   revenue: number;
   profit: number;
+  trueProfit: number;
   roas: number | null;
   cpl: number | null;
   ctr: number | null;

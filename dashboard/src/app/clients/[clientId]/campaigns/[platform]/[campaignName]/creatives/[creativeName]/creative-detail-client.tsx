@@ -157,8 +157,8 @@ export function CreativeDetailClient({
             <StatTile label="Revenue" value={formatCurrency(data.kpis.revenue)} tone="positive" />
             <StatTile
               label="Profit"
-              value={formatCurrency(data.kpis.profit)}
-              tone={data.kpis.profit >= 0 ? "positive" : "negative"}
+              value={formatCurrency(data.kpis.trueProfit)}
+              tone={data.kpis.trueProfit >= 0 ? "positive" : "negative"}
             />
             <StatTile label="ROAS" value={formatRoas(data.kpis.roas)} />
             <StatTile label="Impressions" value={formatNumber(data.kpis.impressions)} />

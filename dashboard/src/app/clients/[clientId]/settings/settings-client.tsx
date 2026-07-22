@@ -8,6 +8,7 @@ import {
   updateClientName,
   updateClientNiche,
   updateAttributionModel,
+  updateClientMargin,
   getIntegrations,
   saveIntegration,
   generateTagWebhookSecret,
@@ -80,6 +81,19 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
     onSuccess: invalidateClient,
   });
 
+  const [cogsPercent, setCogsPercent] = useState(client.cogs_percent?.toString() ?? "");
+  const [paymentFeePercent, setPaymentFeePercent] = useState(client.payment_fee_percent?.toString() ?? "");
+  const [fulfillmentCostFlat, setFulfillmentCostFlat] = useState(client.fulfillment_cost_flat?.toString() ?? "");
+  const marginMutation = useMutation({
+    mutationFn: () =>
+      updateClientMargin(clientId, {
+        cogs_percent: cogsPercent.trim() === "" ? null : parseFloat(cogsPercent),
+        payment_fee_percent: paymentFeePercent.trim() === "" ? null : parseFloat(paymentFeePercent),
+        fulfillment_cost_flat: fulfillmentCostFlat.trim() === "" ? null : parseFloat(fulfillmentCostFlat),
+      }),
+    onSuccess: invalidateClient,
+  });
+
   return (
     <Card className="px-4">
       <CardHeader className="px-0">
@@ -142,6 +156,58 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
         <div className="flex flex-col gap-1">
           <FieldLabel>Pixel install</FieldLabel>
           <CodeBlock>{`Pixel key: ${client.pixel_key}\nAPI URL:   ${apiUrl}`}</CodeBlock>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <p className="text-sm font-medium">True profit margin</p>
+          <p className="text-xs text-muted-foreground">
+            Every report's "Profit" figure is revenue minus ad spend only unless these are set. Fill in what applies —
+            leave blank to skip.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Cost of goods (% of revenue)</FieldLabel>
+              <Input
+                className="w-40"
+                type="number"
+                min={0}
+                step="0.1"
+                placeholder="e.g. 30"
+                value={cogsPercent}
+                onChange={(e) => setCogsPercent(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Payment processing fee (%)</FieldLabel>
+              <Input
+                className="w-40"
+                type="number"
+                min={0}
+                step="0.1"
+                placeholder="e.g. 2.9"
+                value={paymentFeePercent}
+                onChange={(e) => setPaymentFeePercent(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Fulfillment cost ($ per order)</FieldLabel>
+              <Input
+                className="w-40"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="e.g. 4.50"
+                value={fulfillmentCostFlat}
+                onChange={(e) => setFulfillmentCostFlat(e.target.value)}
+              />
+            </div>
+            <Button size="sm" disabled={marginMutation.isPending} onClick={() => marginMutation.mutate()}>
+              Save margin
+            </Button>
+          </div>
+          {marginMutation.isError && (
+            <p className="text-xs text-status-critical">{(marginMutation.error as Error).message}</p>
+          )}
         </div>
       </CardContent>
     </Card>

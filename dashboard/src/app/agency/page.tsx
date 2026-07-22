@@ -123,10 +123,10 @@ export default function AgencyOverviewPage() {
                 <p
                   className={cn(
                     "mt-1 text-2xl font-semibold tabular-nums",
-                    data.totals.profit >= 0 ? "text-chart-1" : "text-chart-2"
+                    data.totals.trueProfit >= 0 ? "text-chart-1" : "text-chart-2"
                   )}
                 >
-                  {formatCurrency(data.totals.profit)}
+                  {formatCurrency(data.totals.trueProfit)}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">across {data.clients.length} client(s)</p>
               </CardContent>
@@ -206,10 +206,10 @@ export default function AgencyOverviewPage() {
                         <TableCell
                           className={cn(
                             "text-right tabular-nums",
-                            client.profit >= 0 ? "text-chart-1" : "text-chart-2"
+                            client.trueProfit >= 0 ? "text-chart-1" : "text-chart-2"
                           )}
                         >
-                          {formatCurrency(client.profit)}
+                          {formatCurrency(client.trueProfit)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{formatRoas(client.roas)}</TableCell>
                         <TableCell className="text-right tabular-nums">{formatPercent(client.roi)}</TableCell>

@@ -140,6 +140,31 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
+  // Set the true-profit margin assumptions (Step 31) — cogs_percent/payment_fee_percent
+  // are % of revenue, fulfillment_cost_flat is a flat $ per order. Any field omitted
+  // from the body clears back to NULL (0 impact), not left unchanged, so unchecking a
+  // field in the Settings form actually removes it rather than silently sticking.
+  app.patch<{
+    Params: { id: string }
+    Body: { cogs_percent?: number | null; payment_fee_percent?: number | null; fulfillment_cost_flat?: number | null }
+  }>('/clients/:id/margin', async (req, reply) => {
+    const { id } = req.params
+    const { cogs_percent = null, payment_fee_percent = null, fulfillment_cost_flat = null } = req.body
+
+    for (const [key, value] of Object.entries({ cogs_percent, payment_fee_percent, fulfillment_cost_flat })) {
+      if (value !== null && (typeof value !== 'number' || isNaN(value) || value < 0)) {
+        return reply.code(400).send({ error: `${key} must be a non-negative number or null` })
+      }
+    }
+
+    const { rows } = await db.query(
+      `UPDATE clients SET cogs_percent = $1, payment_fee_percent = $2, fulfillment_cost_flat = $3 WHERE id = $4 RETURNING *`,
+      [cogs_percent, payment_fee_percent, fulfillment_cost_flat, id]
+    )
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
   // Save or update a Shopify integration for a client
   app.post<{
     Params: { id: string }

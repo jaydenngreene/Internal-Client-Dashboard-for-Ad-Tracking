@@ -10,9 +10,10 @@ interface KpiTileProps {
   fromDate: string;
   color: string;
   sparkline: number[];
+  sublabel?: string;
 }
 
-export function KpiTile({ label, value, fromDate, color, sparkline }: KpiTileProps) {
+export function KpiTile({ label, value, fromDate, color, sparkline, sublabel }: KpiTileProps) {
   const data = sparkline.map((v, i) => ({ i, v }));
   const gradientId = `spark-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
@@ -21,7 +22,10 @@ export function KpiTile({ label, value, fromDate, color, sparkline }: KpiTilePro
       <div className="min-w-0">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">from {formatDateShort(fromDate)}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          from {formatDateShort(fromDate)}
+          {sublabel ? ` · ${sublabel}` : ""}
+        </p>
       </div>
       <div className="h-12 w-24 shrink-0">
         <ResponsiveContainer width="100%" height="100%">

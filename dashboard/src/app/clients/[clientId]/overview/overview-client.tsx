@@ -62,10 +62,11 @@ export function OverviewClient({ clientId }: { clientId: string }) {
             />
             <KpiTile
               label="Profit"
-              value={formatCurrency(data.profit)}
+              value={formatCurrency(data.trueProfit)}
               fromDate={data.from}
               color="var(--color-chart-3)"
-              sparkline={data.series.map((p) => p.profit)}
+              sparkline={data.series.map((p) => p.trueProfit)}
+              sublabel={data.hasMarginConfig ? "COGS-adjusted" : "ad cost only, no margin set"}
             />
             <KpiTile
               label="ROAS"
@@ -76,10 +77,11 @@ export function OverviewClient({ clientId }: { clientId: string }) {
             />
             <KpiTile
               label="ROI"
-              value={formatPercent(data.roi)}
+              value={formatPercent(data.hasMarginConfig ? data.trueRoi : data.roi)}
               fromDate={data.from}
               color="var(--color-chart-5)"
-              sparkline={data.series.map((p) => (p.cost > 0 ? (p.profit / p.cost) * 100 : 0))}
+              sparkline={data.series.map((p) => (p.cost > 0 ? (p.trueProfit / p.cost) * 100 : 0))}
+              sublabel={data.hasMarginConfig ? "COGS-adjusted" : undefined}
             />
           </div>
 

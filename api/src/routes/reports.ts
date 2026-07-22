@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { computeTrueProfit, MarginConfig } from '../lib/margin'
 
 function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -301,7 +302,11 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [costTotal, revenueTotal, leadsTotal, salesTotal, costByDay, revenueByDay] = await Promise.all([
+      const [marginConfig, costTotal, revenueTotal, leadsTotal, salesTotal, costByDay, revenueByDay, salesByDay] = await Promise.all([
+        db.query<MarginConfig>(
+          `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
+          [clientId]
+        ),
         db.query<{ total: string }>(
           `SELECT
              (SELECT COALESCE(SUM(spend), 0) FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3) +
@@ -340,21 +345,38 @@ export async function reportRoutes(app: FastifyInstance) {
            GROUP BY p.purchased_at::date`,
           [clientId, from, to]
         ),
+        db.query<{ date: string; total: string }>(
+          `SELECT purchased_at::date::text AS date, COUNT(*) AS total FROM purchases
+           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded
+           GROUP BY purchased_at::date`,
+          [clientId, from, to]
+        ),
       ])
 
       const cost = parseFloat(costTotal.rows[0].total)
       const revenue = parseFloat(revenueTotal.rows[0].total)
+      const sales = parseInt(salesTotal.rows[0].total, 10)
       const profit = revenue - cost
       const roas = cost > 0 ? revenue / cost : null
       const roi = cost > 0 ? (profit / cost) * 100 : null
+      const margin = marginConfig.rows[0] ?? null
+      const { trueProfit, trueRoi } = computeTrueProfit(margin, revenue, cost, sales)
 
       const costByDate = new Map(costByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
       const revenueByDate = new Map(revenueByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
+      const salesByDate = new Map(salesByDay.rows.map((r) => [r.date, parseInt(r.total, 10)]))
 
       const series = dateList(from, to).map((date) => {
         const dailyCost = costByDate.get(date) ?? 0
         const dailyRevenue = revenueByDate.get(date) ?? 0
-        return { date, cost: dailyCost, revenue: dailyRevenue, profit: dailyRevenue - dailyCost }
+        const dailySales = salesByDate.get(date) ?? 0
+        return {
+          date,
+          cost: dailyCost,
+          revenue: dailyRevenue,
+          profit: dailyRevenue - dailyCost,
+          trueProfit: computeTrueProfit(margin, dailyRevenue, dailyCost, dailySales).trueProfit,
+        }
       })
 
       return reply.send({
@@ -365,8 +387,11 @@ export async function reportRoutes(app: FastifyInstance) {
         profit,
         roas,
         roi,
+        trueProfit,
+        trueRoi,
+        hasMarginConfig: Boolean(margin && (margin.cogs_percent || margin.payment_fee_percent || margin.fulfillment_cost_flat)),
         leads: parseInt(leadsTotal.rows[0].total, 10),
-        sales: parseInt(salesTotal.rows[0].total, 10),
+        sales,
         series,
       })
     }
@@ -811,6 +836,12 @@ export async function reportRoutes(app: FastifyInstance) {
               ? 'creative'
               : 'campaign'
 
+      const marginConfigRow = await db.query<MarginConfig>(
+        `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
+        [clientId]
+      )
+      const marginConfig = marginConfigRow.rows[0] ?? null
+
       const [spendRows, leadRows, revenueRows] =
         breakdown === 'source'
           ? await Promise.all([
@@ -962,6 +993,7 @@ export async function reportRoutes(app: FastifyInstance) {
           ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,
           cpc: r.clicks > 0 ? r.cost / r.clicks : null,
           matched: r.cost > 0,
+          trueProfit: computeTrueProfit(marginConfig, r.revenue, r.cost, r.sales).trueProfit,
         }))
         .sort((a, b) => b.revenue - a.revenue)
 
@@ -979,12 +1011,20 @@ export async function reportRoutes(app: FastifyInstance) {
       cost: string
       revenue: string
       prev_revenue: string
+      sales: string
+      cogs_percent: string | null
+      payment_fee_percent: string | null
+      fulfillment_cost_flat: string | null
     }>(
       `SELECT
          c.id,
          c.name,
+         c.cogs_percent,
+         c.payment_fee_percent,
+         c.fulfillment_cost_flat,
          COALESCE(spend.total, 0) AS cost,
          COALESCE(rev.total, 0) AS revenue,
+         COALESCE(rev.sales, 0) AS sales,
          COALESCE(prev_rev.total, 0) AS prev_revenue
        FROM clients c
        LEFT JOIN (
@@ -992,7 +1032,7 @@ export async function reportRoutes(app: FastifyInstance) {
          WHERE date BETWEEN $1 AND $2 GROUP BY client_id
        ) spend ON spend.client_id = c.id
        LEFT JOIN (
-         SELECT a.client_id, SUM(a.attributed_revenue) AS total
+         SELECT a.client_id, SUM(a.attributed_revenue) AS total, COUNT(DISTINCT a.purchase_id) AS sales
          FROM attributions a JOIN purchases p ON p.id = a.purchase_id
          WHERE p.purchased_at::date BETWEEN $1 AND $2
          GROUP BY a.client_id
@@ -1013,7 +1053,9 @@ export async function reportRoutes(app: FastifyInstance) {
       const cost = parseFloat(r.cost)
       const revenue = parseFloat(r.revenue)
       const prevRevenue = parseFloat(r.prev_revenue)
+      const sales = parseInt(r.sales, 10)
       const profit = revenue - cost
+      const { trueProfit, trueRoi } = computeTrueProfit(r, revenue, cost, sales)
       return {
         id: r.id,
         name: r.name,
@@ -1022,13 +1064,20 @@ export async function reportRoutes(app: FastifyInstance) {
         profit,
         roas: cost > 0 ? revenue / cost : null,
         roi: cost > 0 ? (profit / cost) * 100 : null,
+        trueProfit,
+        trueRoi,
         revenueChangePct: prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null,
       }
     })
 
     const totals = clients.reduce(
-      (acc, c) => ({ cost: acc.cost + c.cost, revenue: acc.revenue + c.revenue, profit: acc.profit + c.profit }),
-      { cost: 0, revenue: 0, profit: 0 }
+      (acc, c) => ({
+        cost: acc.cost + c.cost,
+        revenue: acc.revenue + c.revenue,
+        profit: acc.profit + c.profit,
+        trueProfit: acc.trueProfit + c.trueProfit,
+      }),
+      { cost: 0, revenue: 0, profit: 0, trueProfit: 0 }
     )
 
     return reply.send({ from, to, clients, totals })

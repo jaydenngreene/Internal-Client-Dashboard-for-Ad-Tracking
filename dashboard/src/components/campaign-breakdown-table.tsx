@@ -200,9 +200,9 @@ export function CampaignBreakdownTable({
               )}
               <TableCell className="text-right tabular-nums text-chart-1">{formatCurrency(row.revenue)}</TableCell>
               <TableCell
-                className={cn("text-right tabular-nums", row.profit >= 0 ? "text-chart-1" : "text-chart-2")}
+                className={cn("text-right tabular-nums", row.trueProfit >= 0 ? "text-chart-1" : "text-chart-2")}
               >
-                {formatCurrency(row.profit)}
+                {formatCurrency(row.trueProfit)}
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatRoas(row.roas)}</TableCell>
             </TableRow>

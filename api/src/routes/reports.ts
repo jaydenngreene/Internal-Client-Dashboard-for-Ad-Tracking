@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
+import { projectSum } from '../lib/forecasting'
 
 export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -727,6 +728,80 @@ export async function reportRoutes(app: FastifyInstance) {
     )
 
     return reply.send({ campaigns, totals })
+  })
+
+  // Step 49 — revenue/ROAS/CAC forecasting via a simple linear trend (see
+  // lib/forecasting.ts) over the trailing 60 days, projected 7 and 30 days
+  // forward. Always the trailing 60 days, not the report's date-range presets —
+  // a forecast needs a fixed, sufficiently long lookback to fit a trend against.
+  app.get<{ Params: { id: string } }>('/clients/:id/reports/forecast', async (req, reply) => {
+    const clientId = req.params.id
+    const LOOKBACK_DAYS = 60
+    const until = new Date()
+    const since = new Date(until)
+    since.setUTCDate(since.getUTCDate() - (LOOKBACK_DAYS - 1))
+    const sinceStr = since.toISOString().slice(0, 10)
+    const untilStr = until.toISOString().slice(0, 10)
+
+    const [costByDay, revenueByDay, customersByDay] = await Promise.all([
+      db.query<{ date: string; total: string }>(
+        `SELECT date::text, SUM(spend) AS total FROM (
+           SELECT date, spend FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3
+           UNION ALL
+           SELECT date, spend FROM custom_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3
+         ) combined GROUP BY date`,
+        [clientId, sinceStr, untilStr]
+      ),
+      db.query<{ date: string; total: string }>(
+        `SELECT p.purchased_at::date::text AS date, SUM(a.attributed_revenue) AS total
+         FROM attributions a JOIN purchases p ON p.id = a.purchase_id
+         WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+         GROUP BY p.purchased_at::date`,
+        [clientId, sinceStr, untilStr]
+      ),
+      db.query<{ date: string; total: string }>(
+        `SELECT first_purchase_date::date::text AS date, COUNT(*) AS total
+         FROM customer_ltv WHERE client_id = $1 AND first_purchase_date::date BETWEEN $2 AND $3
+         GROUP BY first_purchase_date::date`,
+        [clientId, sinceStr, untilStr]
+      ),
+    ])
+
+    const costMap = new Map(costByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
+    const revenueMap = new Map(revenueByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
+    const customersMap = new Map(customersByDay.rows.map((r) => [r.date, parseInt(r.total, 10)]))
+
+    const dailyCost: number[] = []
+    const dailyRevenue: number[] = []
+    const dailyCustomers: number[] = []
+    for (let d = new Date(since); d <= until; d.setUTCDate(d.getUTCDate() + 1)) {
+      const key = d.toISOString().slice(0, 10)
+      dailyCost.push(costMap.get(key) ?? 0)
+      dailyRevenue.push(revenueMap.get(key) ?? 0)
+      dailyCustomers.push(customersMap.get(key) ?? 0)
+    }
+
+    const buildForecast = (daysAhead: number) => {
+      const cost = projectSum(dailyCost, daysAhead)
+      const revenue = projectSum(dailyRevenue, daysAhead)
+      const newCustomers = projectSum(dailyCustomers, daysAhead)
+      return {
+        days: daysAhead,
+        projectedRevenue: revenue,
+        projectedCost: cost,
+        projectedRoas: cost > 0 ? revenue / cost : null,
+        projectedNewCustomers: Math.round(newCustomers),
+        projectedCac: newCustomers > 0 ? cost / newCustomers : null,
+      }
+    }
+
+    return reply.send({
+      lookbackDays: LOOKBACK_DAYS,
+      from: sinceStr,
+      to: untilStr,
+      forecast7d: buildForecast(7),
+      forecast30d: buildForecast(30),
+    })
   })
 
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(

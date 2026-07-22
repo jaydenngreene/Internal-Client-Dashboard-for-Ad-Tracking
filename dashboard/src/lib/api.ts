@@ -293,6 +293,29 @@ export function getBudgetPacing(clientId: string): Promise<BudgetPacingReport> {
   return fetchJson<BudgetPacingReport>(`/clients/${clientId}/reports/budget-pacing`);
 }
 
+// Step 49 — revenue/ROAS/CAC forecasting via a simple linear trend over the
+// trailing 60 days, deliberately not a real time-series model.
+export interface ForecastWindow {
+  days: number;
+  projectedRevenue: number;
+  projectedCost: number;
+  projectedRoas: number | null;
+  projectedNewCustomers: number;
+  projectedCac: number | null;
+}
+
+export interface ForecastReport {
+  lookbackDays: number;
+  from: string;
+  to: string;
+  forecast7d: ForecastWindow;
+  forecast30d: ForecastWindow;
+}
+
+export function getForecast(clientId: string): Promise<ForecastReport> {
+  return fetchJson<ForecastReport>(`/clients/${clientId}/reports/forecast`);
+}
+
 // Step 45 — time-based pause/holdout incrementality testing. The user manually
 // pauses the campaign in their ad platform for the test window; this app only
 // defines the test and computes the before/after analysis.

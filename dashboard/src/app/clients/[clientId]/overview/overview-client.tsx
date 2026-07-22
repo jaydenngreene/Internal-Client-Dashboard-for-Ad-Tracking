@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getOverview, getBudgetPacing } from "@/lib/api";
+import { getOverview, getBudgetPacing, getForecast, ForecastWindow } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
@@ -65,6 +65,69 @@ function BudgetPacingCard({ clientId }: { clientId: string }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Step 49 — a simple linear-trend projection over the trailing 60 days, not a
+// real time-series model. Framed explicitly as a rough trend read, not a precise
+// prediction, matching how this app discloses every other simple-method estimate
+// (predictive LTV, creative fatigue).
+function ForecastWindowCard({ window, label }: { window: ForecastWindow; label: string }) {
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="text-sm">{label}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid grid-cols-2 gap-3 px-0 sm:grid-cols-5">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Revenue</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedRevenue)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Cost</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedCost)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">ROAS</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{formatRoas(window.projectedRoas)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">New Customers</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{formatNumber(window.projectedNewCustomers)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">CAC</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">
+            {window.projectedCac === null ? "-" : formatCurrency(window.projectedCac)}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ForecastSection({ clientId }: { clientId: string }) {
+  const { data } = useQuery({
+    queryKey: ["forecast", clientId],
+    queryFn: () => getForecast(clientId),
+  });
+
+  if (!data) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <p className="text-sm font-medium">Forecast</p>
+        <p className="text-xs text-muted-foreground">
+          A simple linear trend from the last {data.lookbackDays} days, not a precise prediction — read it as
+          direction and rough scale, not an exact number.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <ForecastWindowCard window={data.forecast7d} label="Next 7 days" />
+        <ForecastWindowCard window={data.forecast30d} label="Next 30 days" />
+      </div>
+    </div>
   );
 }
 
@@ -157,6 +220,8 @@ export function OverviewClient({ clientId }: { clientId: string }) {
           </div>
 
           <BudgetPacingCard clientId={clientId} />
+
+          <ForecastSection clientId={clientId} />
 
           <Card className="px-4">
             <CardHeader className="px-0">

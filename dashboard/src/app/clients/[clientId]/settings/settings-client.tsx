@@ -9,6 +9,7 @@ import {
   updateClientNiche,
   updateAttributionModel,
   updateClientMargin,
+  updateBudgetTarget,
   generateShareLink,
   revokeShareLink,
   getUtmMismatches,
@@ -96,6 +97,12 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
         payment_fee_percent: paymentFeePercent.trim() === "" ? null : parseFloat(paymentFeePercent),
         fulfillment_cost_flat: fulfillmentCostFlat.trim() === "" ? null : parseFloat(fulfillmentCostFlat),
       }),
+    onSuccess: invalidateClient,
+  });
+
+  const [budgetTarget, setBudgetTarget] = useState(client.monthly_budget_target?.toString() ?? "");
+  const budgetMutation = useMutation({
+    mutationFn: () => updateBudgetTarget(clientId, budgetTarget.trim() === "" ? null : parseFloat(budgetTarget)),
     onSuccess: invalidateClient,
   });
 
@@ -212,6 +219,33 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
           </div>
           {marginMutation.isError && (
             <p className="text-xs text-status-critical">{(marginMutation.error as Error).message}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <p className="text-sm font-medium">Monthly ad-spend budget</p>
+          <p className="text-xs text-muted-foreground">
+            Account-wide, not per campaign. Powers the Budget Pacing card on Overview.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Target ($ / month)</FieldLabel>
+              <Input
+                className="w-40"
+                type="number"
+                min={0}
+                step="1"
+                placeholder="e.g. 10000"
+                value={budgetTarget}
+                onChange={(e) => setBudgetTarget(e.target.value)}
+              />
+            </div>
+            <Button size="sm" disabled={budgetMutation.isPending} onClick={() => budgetMutation.mutate()}>
+              Save target
+            </Button>
+          </div>
+          {budgetMutation.isError && (
+            <p className="text-xs text-status-critical">{(budgetMutation.error as Error).message}</p>
           )}
         </div>
       </CardContent>

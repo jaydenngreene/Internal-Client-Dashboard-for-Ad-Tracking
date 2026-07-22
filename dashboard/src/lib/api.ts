@@ -128,6 +128,9 @@ export interface Client {
   // Step 40 — null until Settings generates one; regenerating overwrites/revokes
   // the previous link.
   public_share_token: string | null;
+  // Step 43 — account-wide, not per-campaign, matching this app's existing
+  // "one number per client" simplicity (same level as the margin fields above).
+  monthly_budget_target: number | null;
   // False for a client shared with this login rather than owned by it (migration
   // 028) — gates owner-only UI (collaborator management, delete) client-side; the
   // backend enforces the same restriction independently, this is just so the
@@ -242,6 +245,35 @@ export function updateClientMargin(
     }
     return res.json();
   });
+}
+
+export function updateBudgetTarget(clientId: string, monthly_budget_target: number | null): Promise<Client> {
+  return apiRequest(`${API_URL}/clients/${clientId}/budget-target`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ monthly_budget_target }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export interface BudgetPacingReport {
+  month: string;
+  daysInMonth: number;
+  dayOfMonth: number;
+  target: number | null;
+  spendToDate: number;
+  expectedSpendToDate: number | null;
+  projectedMonthEndSpend: number;
+  paceStatus: "over" | "under" | "on_track" | null;
+}
+
+export function getBudgetPacing(clientId: string): Promise<BudgetPacingReport> {
+  return fetchJson<BudgetPacingReport>(`/clients/${clientId}/reports/budget-pacing`);
 }
 
 export function generateShareLink(clientId: string): Promise<Client> {

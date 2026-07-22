@@ -622,6 +622,56 @@ export async function reportRoutes(app: FastifyInstance) {
     }
   )
 
+  // Step 43 — budget pacing. Always the CURRENT calendar month (not the report's
+  // usual date-range presets) — pacing is inherently "this month so far," a custom
+  // range wouldn't mean anything for it. Timezone: uses server-local calendar days
+  // via plain Date, matching how the rest of this app buckets spend by date already.
+  app.get<{ Params: { id: string } }>('/clients/:id/reports/budget-pacing', async (req, reply) => {
+    const clientId = req.params.id
+    const { rows: clientRows } = await db.query<{ monthly_budget_target: string | null }>(
+      `SELECT monthly_budget_target FROM clients WHERE id = $1`,
+      [clientId]
+    )
+    if (clientRows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    const target = clientRows[0].monthly_budget_target === null ? null : parseFloat(clientRows[0].monthly_budget_target)
+
+    const now = new Date()
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0))
+    const daysInMonth = monthEnd.getUTCDate()
+    const dayOfMonth = now.getUTCDate()
+
+    const { rows: spendRows } = await db.query<{ total: string }>(
+      `SELECT
+         (SELECT COALESCE(SUM(spend), 0) FROM ad_costs WHERE client_id = $1 AND date >= $2 AND date <= $3) +
+         (SELECT COALESCE(SUM(spend), 0) FROM custom_costs WHERE client_id = $1 AND date >= $2 AND date <= $3)
+         AS total`,
+      [clientId, monthStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10)]
+    )
+    const spendToDate = parseFloat(spendRows[0].total)
+    const expectedSpendToDate = target === null ? null : (target / daysInMonth) * dayOfMonth
+    const projectedMonthEndSpend = dayOfMonth > 0 ? (spendToDate / dayOfMonth) * daysInMonth : spendToDate
+    const paceStatus =
+      target === null
+        ? null
+        : projectedMonthEndSpend > target * 1.05
+          ? 'over'
+          : projectedMonthEndSpend < target * 0.95
+            ? 'under'
+            : 'on_track'
+
+    return reply.send({
+      month: monthStart.toISOString().slice(0, 7),
+      daysInMonth,
+      dayOfMonth,
+      target,
+      spendToDate,
+      expectedSpendToDate,
+      projectedMonthEndSpend,
+      paceStatus,
+    })
+  })
+
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(
     '/clients/:id/reports/ltv',
     async (req, reply) => {

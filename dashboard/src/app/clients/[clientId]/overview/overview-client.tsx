@@ -2,15 +2,71 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getOverview } from "@/lib/api";
+import { getOverview, getBudgetPacing } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { KpiTile } from "@/components/kpi-tile";
 import { TrendChart } from "@/components/trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { cn } from "@/lib/utils";
+
+// Step 43 — always the current calendar month, independent of the Overview page's
+// own date-range preset — pacing only ever means "this month so far."
+function BudgetPacingCard({ clientId }: { clientId: string }) {
+  const { data } = useQuery({
+    queryKey: ["budget-pacing", clientId],
+    queryFn: () => getBudgetPacing(clientId),
+  });
+
+  if (!data || data.target === null) return null;
+
+  const statusLabel = { over: "Over pace", under: "Under pace", on_track: "On pace" }[data.paceStatus ?? "on_track"];
+  const statusVariant = data.paceStatus === "over" ? "destructive" : "secondary";
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          Budget Pacing ({data.month})
+          <Badge variant={statusVariant} className="text-[10px]">
+            {statusLabel}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-baseline gap-6 px-0">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Spend to date</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">{formatCurrency(data.spendToDate)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Expected by now</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-muted-foreground">
+            {data.expectedSpendToDate === null ? "-" : formatCurrency(data.expectedSpendToDate)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Monthly target</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums">{formatCurrency(data.target)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Projected month-end</p>
+          <p
+            className={cn(
+              "mt-1 text-xl font-semibold tabular-nums",
+              data.paceStatus === "over" ? "text-status-critical" : "text-foreground"
+            )}
+          >
+            {formatCurrency(data.projectedMonthEndSpend)}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function OverviewClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
@@ -99,6 +155,8 @@ export function OverviewClient({ clientId }: { clientId: string }) {
               </CardContent>
             </Card>
           </div>
+
+          <BudgetPacingCard clientId={clientId} />
 
           <Card className="px-4">
             <CardHeader className="px-0">

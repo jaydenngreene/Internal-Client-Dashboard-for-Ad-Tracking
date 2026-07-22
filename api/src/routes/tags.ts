@@ -5,6 +5,10 @@ import { lookupVisitorId } from '../lib/visitorResolution'
 
 const TAG_TYPES = ['freeform', 'funnel_stage', 'product']
 
+function toNumberOrNull(value: string | null): number | null {
+  return value === null ? null : parseFloat(value)
+}
+
 export async function tagRoutes(app: FastifyInstance) {
   // Tag definitions
   app.post<{
@@ -24,7 +28,7 @@ export async function tagRoutes(app: FastifyInstance) {
        RETURNING *`,
       [id, name, tag_type, stage_order ?? null, product_value ?? null]
     )
-    return reply.code(200).send(rows[0])
+    return reply.code(200).send({ ...rows[0], product_value: toNumberOrNull(rows[0].product_value) })
   })
 
   app.get<{ Params: { id: string } }>('/clients/:id/tags', async (req, reply) => {
@@ -32,7 +36,10 @@ export async function tagRoutes(app: FastifyInstance) {
       `SELECT * FROM tags WHERE client_id = $1 ORDER BY tag_type, stage_order NULLS LAST, name`,
       [req.params.id]
     )
-    return reply.send(rows)
+    // product_value is NUMERIC in Postgres, which node-postgres returns as a
+    // string — every other report route in this app parses it before responding,
+    // this one didn't.
+    return reply.send(rows.map((r) => ({ ...r, product_value: toNumberOrNull(r.product_value) })))
   })
 
   app.delete<{ Params: { tagId: string } }>('/tags/:tagId', async (req, reply) => {

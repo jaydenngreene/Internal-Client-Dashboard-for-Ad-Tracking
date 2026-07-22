@@ -24,7 +24,7 @@ export async function customCostsRoutes(app: FastifyInstance) {
        RETURNING *`,
       [id, platform_label, date, spend, notes ?? null]
     )
-    return reply.code(200).send(rows[0])
+    return reply.code(200).send({ ...rows[0], spend: parseFloat(rows[0].spend) })
   })
 
   app.get<{
@@ -39,7 +39,10 @@ export async function customCostsRoutes(app: FastifyInstance) {
        ORDER BY date DESC`,
       [id, from ?? null, to ?? null]
     )
-    return reply.send(rows)
+    // spend is NUMERIC in Postgres, which node-postgres returns as a string —
+    // every other report route in this app parses it before responding, this one
+    // didn't.
+    return reply.send(rows.map((r) => ({ ...r, spend: parseFloat(r.spend) })))
   })
 
   app.delete<{ Params: { costId: string } }>('/custom-costs/:costId', async (req, reply) => {

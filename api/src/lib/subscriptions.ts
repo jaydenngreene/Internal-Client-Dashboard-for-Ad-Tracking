@@ -112,7 +112,13 @@ function classifyTransition(
   if (input.status === 'active') {
     return { eventType: 'reactivated', mrrDelta: input.mrrAmount }
   }
-  if (fromStatus === 'active' && (input.status === 'canceled' || input.status === 'unpaid')) {
+  // 'paused' reuses the 'canceled' event bucket rather than being its own
+  // event_type: reports.ts's churn-rate/churned-MRR math and the MRR trend chart
+  // both only ever look for event_type='canceled', and a paused subscription is
+  // lost MRR the same way a true cancellation is — from_status/to_status still
+  // record which one actually happened for anyone reading subscription_events
+  // directly.
+  if (fromStatus === 'active' && (input.status === 'canceled' || input.status === 'unpaid' || input.status === 'paused')) {
     return { eventType: 'canceled', mrrDelta: -oldMrr }
   }
   if (fromStatus === 'active' && input.status === 'past_due') {

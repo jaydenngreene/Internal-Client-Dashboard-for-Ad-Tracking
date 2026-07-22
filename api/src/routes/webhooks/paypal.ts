@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../../db'
-import { recordPurchase } from '../../lib/attribution'
+import { recordPurchase, recordRefund } from '../../lib/attribution'
 
 interface PaypalConfig {
   client_id: string
@@ -68,6 +68,7 @@ interface PaypalWebhookEvent {
     id: string
     amount?: { total: string }
     sale_id?: string
+    parent_payment?: string
     payer?: { payer_info?: { email?: string } }
   }
 }
@@ -105,11 +106,17 @@ export async function paypalWebhookRoutes(app: FastifyInstance) {
             processor: 'paypal',
           })
         }
+      } else if (event.event_type === 'PAYMENT.SALE.REFUNDED') {
+        // The refund resource doesn't carry the payer's email, but recordRefund()
+        // never needed it — it looks the purchase up by order_id alone, and
+        // `sale_id` here is exactly the original sale's resource.id we stored as
+        // order_id when PAYMENT.SALE.COMPLETED first came in.
+        const originalOrderId = event.resource.sale_id ?? event.resource.parent_payment
+        const refundAmount = parseFloat(event.resource.amount?.total ?? '0')
+        if (originalOrderId && refundAmount > 0) {
+          await recordRefund(client_id, originalOrderId, refundAmount)
+        }
       }
-      // Note: PAYMENT.SALE.REFUNDED doesn't carry the payer email on the refund
-      // resource itself — refund handling for PayPal is a known gap, same class of
-      // limitation as the rest of this generic-processor family until there's a
-      // concrete need to build it out further.
 
       return reply.code(200).send({ received: true })
     }

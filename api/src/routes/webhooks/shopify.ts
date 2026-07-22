@@ -62,7 +62,7 @@ async function getWebhookSecret(clientId: string): Promise<string | null> {
   return rows[0]?.secret ?? null
 }
 
-function verifyShopifyHmac(rawBody: Buffer, hmacHeader: string, secret: string): boolean {
+export function verifyShopifyHmac(rawBody: Buffer, hmacHeader: string, secret: string): boolean {
   const computed = crypto
     .createHmac('sha256', secret)
     .update(rawBody)

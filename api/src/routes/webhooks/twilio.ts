@@ -19,7 +19,7 @@ async function getIntegration(clientId: string): Promise<TwilioConfig | null> {
 // pairs) with the account's auth token, HMAC-SHA1, base64. The URL must exactly
 // match what's registered in the Twilio console (including https:// and the full
 // path) or every signature check fails even with the right token.
-function verifyTwilioSignature(
+export function verifyTwilioSignature(
   url: string,
   params: Record<string, string>,
   signatureHeader: string,

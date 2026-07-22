@@ -29,7 +29,7 @@ interface TouchSession {
 // absolute scale.
 const TIME_DECAY_HALF_LIFE_DAYS = 7
 
-function timeDecayWeights(sessions: TouchSession[], purchaseTime: Date): number[] {
+export function timeDecayWeights(sessions: TouchSession[], purchaseTime: Date): number[] {
   const rawWeights = sessions.map((s) => {
     const daysBefore = (purchaseTime.getTime() - new Date(s.started_at).getTime()) / (1000 * 60 * 60 * 24)
     return Math.pow(2, -Math.max(daysBefore, 0) / TIME_DECAY_HALF_LIFE_DAYS)
@@ -41,7 +41,7 @@ function timeDecayWeights(sessions: TouchSession[], purchaseTime: Date): number[
 // Standard position-based/U-shaped split: 40% first touch, 40% last touch, the
 // remaining 20% divided evenly across whatever touches fall in between. Collapses
 // sensibly for 1 touch (100%) and 2 touches (50/50, no middle to split).
-function uShapedWeights(count: number): number[] {
+export function uShapedWeights(count: number): number[] {
   if (count === 1) return [1]
   if (count === 2) return [0.5, 0.5]
   const middleWeight = 0.2 / (count - 2)

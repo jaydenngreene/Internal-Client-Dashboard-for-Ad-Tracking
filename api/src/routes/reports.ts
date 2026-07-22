@@ -3,7 +3,7 @@ import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
 
-function defaultRange(from?: string, to?: string): { from: string; to: string } {
+export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
   const toDate = new Date()
   const fromDate = new Date(toDate)
@@ -12,7 +12,7 @@ function defaultRange(from?: string, to?: string): { from: string; to: string } 
 }
 
 // Same-length window immediately preceding [from, to] — for period-over-period deltas.
-function previousPeriod(from: string, to: string): { prevFrom: string; prevTo: string } {
+export function previousPeriod(from: string, to: string): { prevFrom: string; prevTo: string } {
   const fromDate = new Date(from + 'T00:00:00Z')
   const toDate = new Date(to + 'T00:00:00Z')
   const lengthDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1

@@ -3,7 +3,7 @@ import * as crypto from 'crypto'
 import { db } from '../../db'
 import { recordPurchase, recordRefund } from '../../lib/attribution'
 
-interface SquareConfig {
+export interface SquareConfig {
   signature_key: string
   notification_url: string
 }
@@ -17,7 +17,7 @@ async function getIntegration(clientId: string): Promise<SquareConfig | null> {
 }
 
 // Square signs (notification_url + raw_body) with the signature key, base64-encoded.
-function verifySquareSignature(rawBody: Buffer, signatureHeader: string, config: SquareConfig): boolean {
+export function verifySquareSignature(rawBody: Buffer, signatureHeader: string, config: SquareConfig): boolean {
   const computed = crypto
     .createHmac('sha256', config.signature_key)
     .update(config.notification_url + rawBody.toString())

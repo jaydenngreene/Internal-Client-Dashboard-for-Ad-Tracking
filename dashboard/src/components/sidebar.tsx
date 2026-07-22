@@ -25,6 +25,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "tags", label: "Tags & Stages", enabled: true },
   { slug: "audiences", label: "Audiences", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: true },
+  { slug: "settings", label: "Settings", enabled: true },
 ];
 
 export function Sidebar() {
@@ -38,7 +39,8 @@ export function Sidebar() {
     queryFn: getClients,
   });
 
-  const activeNiche = clients?.find((c) => c.id === activeClientId)?.niche;
+  const activeClient = clients?.find((c) => c.id === activeClientId);
+  const activeNiche = activeClient?.niche;
   const visibleNavItems = NAV_ITEMS.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche)));
 
   return (
@@ -127,8 +129,8 @@ export function Sidebar() {
 
         {activeClientId && (
           <div>
-            <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Reports
+            <p className="mb-2 truncate px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              {activeClient ? `${activeClient.name} Reports` : "Reports"}
             </p>
             <ul className="space-y-0.5">
               {visibleNavItems.map((item) => {

@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientKicker } from "@/components/client-kicker";
 
 const STATUS_OPTIONS: { value: RemarketingStatus; label: string }[] = [
   { value: "pending", label: "Pending Review" },
@@ -107,6 +108,7 @@ export function RemarketingClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
+          <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Remarketing Agent</h1>
           <p className="text-sm text-muted-foreground">
             Visitors identified by Customers.ai, with AI-drafted outreach copy awaiting review.

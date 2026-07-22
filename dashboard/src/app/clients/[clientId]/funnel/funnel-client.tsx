@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientKicker } from "@/components/client-kicker";
 
 type Stage = "tof" | "mof" | "bof";
 
@@ -70,6 +71,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
+          <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Funnel</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">{STAGE_SUBTITLE[stage]}</p>
         </div>

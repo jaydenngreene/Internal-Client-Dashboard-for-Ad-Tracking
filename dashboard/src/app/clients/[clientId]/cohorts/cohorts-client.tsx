@@ -7,6 +7,7 @@ import { CohortTable } from "@/components/cohort-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SegmentedToggle } from "@/components/segmented-toggle";
+import { ClientKicker } from "@/components/client-kicker";
 
 const MONTH_OPTIONS: { value: string; label: string }[] = [
   { value: "6", label: "6mo" },
@@ -26,6 +27,7 @@ export function CohortsClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
+          <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">LTV Cohorts</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Customers grouped by acquisition month, using the same trailing-window LTV snapshots as the LTV report, refreshed nightly

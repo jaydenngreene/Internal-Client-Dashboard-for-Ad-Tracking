@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientKicker } from "@/components/client-kicker";
 
 const PRIORITY_VARIANT: Record<Insight["priority"], "destructive" | "outline" | "secondary"> = {
   high: "destructive",
@@ -48,6 +49,7 @@ export function InsightsClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
+          <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Insights</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             AI-generated recommendations from the last 30 days of this client&apos;s data. Generated on demand,

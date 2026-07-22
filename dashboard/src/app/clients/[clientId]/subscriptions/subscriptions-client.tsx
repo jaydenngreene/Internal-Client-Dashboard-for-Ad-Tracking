@@ -10,6 +10,7 @@ import { KpiTile } from "@/components/kpi-tile";
 import { MrrTrendChart } from "@/components/mrr-trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientKicker } from "@/components/client-kicker";
 
 export function SubscriptionsClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
@@ -24,6 +25,7 @@ export function SubscriptionsClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
+          <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Subscriptions</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             MRR, trial conversion, and churn. Current MRR is a live snapshot, the rest is scoped to the selected range

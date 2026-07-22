@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClientKicker } from "@/components/client-kicker";
 import { formatNumber } from "@/lib/format";
 
 const PLATFORM_LABEL: Record<AudiencePlatform, string> = {
@@ -158,6 +159,7 @@ export function AudiencesClient({ clientId }: { clientId: string }) {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div>
+        <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Audiences</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Export lead/customer segments as Meta Custom Audiences or Google Customer Match lists, re-evaluated against live data on every sync

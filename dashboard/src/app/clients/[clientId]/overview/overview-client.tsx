@@ -10,6 +10,7 @@ import { KpiTile } from "@/components/kpi-tile";
 import { TrendChart } from "@/components/trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientKicker } from "@/components/client-kicker";
 
 export function OverviewClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
@@ -23,7 +24,10 @@ export function OverviewClient({ clientId }: { clientId: string }) {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Overview</h1>
+        <div>
+          <ClientKicker clientId={clientId} />
+          <h1 className="text-lg font-semibold">Overview</h1>
+        </div>
         <DateRangeSelect value={preset} onChange={setPreset} />
       </div>
 

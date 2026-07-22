@@ -1,8 +1,9 @@
 # Internal Ad Tracking
 
 A self-hosted, multi-tenant ad-attribution platform (a Hyros-style tool) — full-funnel tracking, cross-device identity
-resolution, ad-cost sync, subscription/MRR reporting, an AI remarketing agent, and per-client dashboards. Each user
-who registers gets their own isolated set of clients; nobody sees another user's data.
+resolution, ad-cost sync, subscription/MRR reporting, an AI remarketing agent, and per-client dashboards. Each login
+gets its own isolated set of clients; nobody sees another user's data. There is no public self-registration — logins
+are created by whoever administers the deployment, via `npm run create:user` (see below).
 
 ## Stack
 
@@ -38,9 +39,9 @@ npm workspaces: `api/`, `pixel/`, `dashboard/`, plus `scripts/` (CLI onboarding 
    npm run dev:api        # http://localhost:3001
    npm run dev:dashboard  # http://localhost:3000
    ```
-5. Open http://localhost:3000, register an account (this is the only account you'll need — no invite system, anyone
-   who registers gets their own empty workspace), then add a client from the dashboard (`+ Add` in the sidebar) or one
-   of the `scripts/setup-*.ts` CLI wizards.
+5. Create your own login: `npm run create:user` (prompts for email/agency name/password, writes directly to the
+   database — there's no registration page). Open http://localhost:3000 and log in, then add a client from the
+   dashboard (`+ Add` in the sidebar) or one of the `scripts/setup-*.ts` CLI wizards.
 
 ## Repo layout
 
@@ -62,9 +63,9 @@ npm workspaces: `api/`, `pixel/`, `dashboard/`, plus `scripts/` (CLI onboarding 
 ## Multi-tenant auth
 
 Every dashboard-facing API route requires a logged-in user and is scoped to that user's own clients — see
-`api/src/lib/ownership.ts` for the full per-route table of how each route's data ownership is checked. Registration
-is open (anyone can create an account); there's no admin/team-sharing concept — each login is a fully separate,
-isolated workspace.
+`api/src/lib/ownership.ts` for the full per-route table of how each route's data ownership is checked. There is no
+self-registration and no admin/team-sharing concept — each login is created via `npm run create:user` and is a
+fully separate, isolated workspace.
 
 ## What's not wired up yet
 

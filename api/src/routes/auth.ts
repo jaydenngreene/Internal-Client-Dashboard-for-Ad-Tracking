@@ -24,46 +24,13 @@ function dashboardUrl(path: string): string {
 // global rate limit in index.ts already covers.
 const AUTH_RATE_LIMIT = { rateLimit: { max: 10, timeWindow: '15 minutes' } }
 
+// Self-service registration was removed on purpose — this app is no longer "anyone
+// who registers gets their own workspace." Logins are now created only by whoever
+// runs `npm run create:user` (scripts/create-user.ts, writes directly to the users
+// table). There is deliberately no HTTP path to create a user anymore, not even an
+// admin-secret-gated one — the smaller the attack surface, the better for something
+// meant to be reachable from the internet with only a login form in front of it.
 export async function authRoutes(app: FastifyInstance) {
-  app.post<{ Body: { email: string; password: string; agency_name: string } }>(
-    '/auth/register',
-    { config: AUTH_RATE_LIMIT },
-    async (req, reply) => {
-      const email = req.body.email?.toLowerCase().trim()
-      const agencyName = req.body.agency_name?.trim()
-      const { password } = req.body
-      if (!email || !password || password.length < 8 || !agencyName) {
-        return reply
-          .code(400)
-          .send({ error: 'email, agency_name, and a password of at least 8 characters are required' })
-      }
-      if (!isValidEmail(email)) {
-        return reply.code(400).send({ error: 'Enter a valid email address' })
-      }
-      if (agencyName.length > AGENCY_NAME_MAX_LENGTH) {
-        return reply.code(400).send({ error: `agency_name must be ${AGENCY_NAME_MAX_LENGTH} characters or fewer` })
-      }
-
-      const { rows: existing } = await db.query('SELECT id FROM users WHERE email = $1', [email])
-      if (existing.length > 0) {
-        return reply.code(409).send({ error: 'An account with this email already exists' })
-      }
-
-      const passwordHash = await hashPassword(password)
-      const verificationToken = generateRandomToken()
-      const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
-        `INSERT INTO users (email, password_hash, agency_name, email_verification_token_hash)
-         VALUES ($1, $2, $3, $4) RETURNING id, email, agency_name`,
-        [email, passwordHash, agencyName, hashToken(verificationToken)]
-      )
-      const user = rows[0]
-      // Best-effort — a missing email provider never blocks account creation,
-      // same disclosure pattern as every other unconfigured integration here.
-      sendVerificationEmail(email, dashboardUrl(`/verify-email?token=${verificationToken}`)).catch(() => {})
-      return reply.code(201).send({ token: signToken(user.id), user })
-    }
-  )
-
   app.post<{ Body: { email: string; password: string } }>(
     '/auth/login',
     { config: AUTH_RATE_LIMIT },

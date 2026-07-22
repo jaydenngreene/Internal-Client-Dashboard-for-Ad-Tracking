@@ -36,6 +36,7 @@ export function Sidebar() {
   const params = useParams<{ clientId?: string }>();
   const activeClientId = params?.clientId;
   const isAgencyOverview = pathname === "/agency";
+  const isAccountSettings = pathname === "/account";
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
@@ -82,6 +83,24 @@ export function Sidebar() {
               )}
             />
             Agency Overview
+          </Link>
+          <Link
+            href="/account"
+            className={cn(
+              navLinkBase,
+              "font-medium",
+              isAccountSettings
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+            )}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                isAccountSettings ? "bg-primary" : "bg-muted-foreground/40"
+              )}
+            />
+            Account Settings
           </Link>
         </div>
 
@@ -175,7 +194,13 @@ export function Sidebar() {
       </div>
 
       <div className="flex items-center justify-between border-t border-sidebar-border px-4 py-3">
-        <span className="truncate text-xs text-muted-foreground">{me?.email}</span>
+        <Link
+          href="/account"
+          className="truncate text-xs text-muted-foreground hover:text-sidebar-foreground"
+          title="Account settings"
+        >
+          {me?.email}
+        </Link>
         <button
           type="button"
           onClick={handleLogout}

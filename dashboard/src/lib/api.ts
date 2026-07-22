@@ -45,6 +45,39 @@ export function getMe(): Promise<AuthUser> {
   });
 }
 
+export function updateMe(body: { agency_name?: string; email?: string }): Promise<AuthUser> {
+  return apiRequest(`${API_URL}/auth/me`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      throw new Error(errorBody.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function updatePassword(body: { current_password: string; new_password: string }): Promise<void> {
+  return apiRequest(`${API_URL}/auth/password`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      throw new Error(errorBody.error ?? `Request failed (${res.status})`);
+    }
+  });
+}
+
+export function deleteAccount(): Promise<void> {
+  return apiRequest(`${API_URL}/auth/me`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 export type Niche = "ecommerce" | "call" | "lead_gen" | "saas" | "info_product" | "other";
 
 export interface Client {

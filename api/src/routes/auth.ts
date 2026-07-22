@@ -63,4 +63,67 @@ export async function authRoutes(app: FastifyInstance) {
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])
   })
+
+  // Update account-level profile fields. Deliberately separate from /auth/password
+  // below — changing your agency name shouldn't require re-typing your password,
+  // and vice versa.
+  app.patch<{ Body: { agency_name?: string; email?: string } }>(
+    '/auth/me',
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const agencyName = req.body.agency_name?.trim()
+      const email = req.body.email?.toLowerCase().trim()
+      if (!agencyName && !email) {
+        return reply.code(400).send({ error: 'agency_name and/or email required' })
+      }
+      if (email) {
+        const { rows: existing } = await db.query('SELECT id FROM users WHERE email = $1 AND id != $2', [
+          email,
+          req.userId,
+        ])
+        if (existing.length > 0) {
+          return reply.code(409).send({ error: 'An account with this email already exists' })
+        }
+      }
+      const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
+        `UPDATE users SET agency_name = COALESCE($1, agency_name), email = COALESCE($2, email) WHERE id = $3
+         RETURNING id, email, agency_name`,
+        [agencyName ?? null, email ?? null, req.userId]
+      )
+      return reply.send(rows[0])
+    }
+  )
+
+  app.patch<{ Body: { current_password: string; new_password: string } }>(
+    '/auth/password',
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { current_password, new_password } = req.body
+      if (!current_password || !new_password || new_password.length < 8) {
+        return reply
+          .code(400)
+          .send({ error: 'current_password and a new_password of at least 8 characters are required' })
+      }
+
+      const { rows } = await db.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [
+        req.userId,
+      ])
+      if (!(await verifyPassword(current_password, rows[0].password_hash))) {
+        return reply.code(401).send({ error: 'Current password is incorrect' })
+      }
+
+      const newHash = await hashPassword(new_password)
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId])
+      return reply.send({ ok: true })
+    }
+  )
+
+  // Delete your own account. Every client's owner_user_id references users(id)
+  // ON DELETE CASCADE, so this one statement also removes every client (and
+  // everything under them) this user owns — same cascade the per-client Danger
+  // Zone already relies on, just one level up.
+  app.delete('/auth/me', { preHandler: authenticate }, async (req, reply) => {
+    await db.query('DELETE FROM users WHERE id = $1', [req.userId])
+    return reply.code(204).send()
+  })
 }

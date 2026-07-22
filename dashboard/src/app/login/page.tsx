@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
+import { SegmentedToggle } from "@/components/segmented-toggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,8 +29,16 @@ export default function LoginPage() {
   return (
     <div className="flex h-full items-center justify-center bg-background p-6">
       <Card className="w-full max-w-sm px-4">
-        <CardHeader className="px-0">
+        <CardHeader className="flex flex-col gap-3 px-0">
           <CardTitle>{mode === "login" ? "Log in" : "Create an account"}</CardTitle>
+          <SegmentedToggle
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "login", label: "Log In" },
+              { value: "register", label: "Create Account" },
+            ]}
+          />
         </CardHeader>
         <CardContent className="px-0">
           <form
@@ -65,13 +74,6 @@ export default function LoginPage() {
               {mutation.isPending ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
             </Button>
           </form>
-          <button
-            type="button"
-            className="mt-4 text-xs text-muted-foreground underline underline-offset-2"
-            onClick={() => setMode(mode === "login" ? "register" : "login")}
-          >
-            {mode === "login" ? "Need an account? Create one" : "Already have an account? Log in"}
-          </button>
         </CardContent>
       </Card>
     </div>

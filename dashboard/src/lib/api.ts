@@ -18,23 +18,25 @@ function apiRequest(input: string, init?: RequestInit): Promise<Response> {
 export interface AuthUser {
   id: string;
   email: string;
+  agency_name: string;
 }
 
-async function authRequest(path: "login" | "register", email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+async function authRequest(path: "login" | "register", body: Record<string, string>): Promise<{ token: string; user: AuthUser }> {
   const res = await fetch(`${API_URL}/auth/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.error ?? `Request failed (${res.status})`);
   }
   return res.json();
 }
 
-export const login = (email: string, password: string) => authRequest("login", email, password);
-export const register = (email: string, password: string) => authRequest("register", email, password);
+export const login = (email: string, password: string) => authRequest("login", { email, password });
+export const register = (email: string, password: string, agencyName: string) =>
+  authRequest("register", { email, password, agency_name: agencyName });
 
 export function getMe(): Promise<AuthUser> {
   return apiRequest(`${API_URL}/auth/me`).then((res) => {

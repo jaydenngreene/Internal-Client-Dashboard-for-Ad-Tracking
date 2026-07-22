@@ -58,8 +58,8 @@ export function Sidebar() {
         <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
           <Radar className="size-4" strokeWidth={2.25} />
         </span>
-        <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-          Ad Tracking
+        <span className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
+          {me?.agency_name ?? "Ad Tracking"}
         </span>
       </div>
 

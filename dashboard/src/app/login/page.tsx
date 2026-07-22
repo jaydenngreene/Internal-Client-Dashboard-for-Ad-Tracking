@@ -15,9 +15,10 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agencyName, setAgencyName] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () => (mode === "login" ? login(email, password) : register(email, password)),
+    mutationFn: () => (mode === "login" ? login(email, password) : register(email, password, agencyName)),
     onSuccess: (result) => {
       setToken(result.token);
       router.replace("/agency");
@@ -38,6 +39,12 @@ export default function LoginPage() {
               mutation.mutate();
             }}
           >
+            {mode === "register" && (
+              <div className="flex flex-col gap-1">
+                <FieldLabel>Agency name</FieldLabel>
+                <Input value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="e.g. Greene Consulting Group" required />
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               <FieldLabel>Email</FieldLabel>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

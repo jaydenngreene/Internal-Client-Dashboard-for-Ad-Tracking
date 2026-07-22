@@ -28,6 +28,7 @@ import { shopifyAppRoutes } from './routes/shopifyApp'
 import { remarketingRoutes } from './routes/remarketing'
 import { pauseCandidateRoutes } from './routes/pauseCandidates'
 import { publicShareRoutes } from './routes/publicShare'
+import { incrementalityRoutes } from './routes/incrementality'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -127,6 +128,7 @@ app.register(
     instance.register(callRoutes)
     instance.register(remarketingRoutes)
     instance.register(pauseCandidateRoutes)
+    instance.register(incrementalityRoutes)
     instance.register(customCostsRoutes)
     instance.register(tagRoutes)
     instance.register(audienceSyncRoutes)

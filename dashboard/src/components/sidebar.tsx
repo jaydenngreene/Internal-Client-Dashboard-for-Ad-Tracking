@@ -24,6 +24,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
   { slug: "remarketing", label: "Remarketing", enabled: true },
   { slug: "pause-candidates", label: "Pause Candidates", enabled: true },
+  { slug: "incrementality", label: "Incrementality Testing", enabled: true },
   { slug: "tags", label: "Tags & Stages", enabled: true },
   { slug: "audiences", label: "Audiences", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: true },

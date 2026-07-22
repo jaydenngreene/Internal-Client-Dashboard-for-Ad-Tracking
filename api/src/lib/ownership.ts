@@ -77,6 +77,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/collaborators/:userId': 'client',
   '/clients/:id/remarketing/candidates': 'client',
   '/clients/:id/pause-candidates': 'client',
+  '/clients/:id/incrementality-tests': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
 
@@ -92,6 +93,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/remarketing/:id/dispatch': (req) => clientIdFrom('remarketing_candidates', 'id', (req.params as { id: string }).id),
   '/pause-candidates/:id/confirm': (req) => clientIdFrom('pause_candidates', 'id', (req.params as { id: string }).id),
   '/pause-candidates/:id/dismiss': (req) => clientIdFrom('pause_candidates', 'id', (req.params as { id: string }).id),
+  '/incrementality-tests/:testId': (req) =>
+    clientIdFrom('incrementality_tests', 'id', (req.params as { testId: string }).testId),
   '/tags/:tagId': (req) => clientIdFrom('tags', 'id', (req.params as { tagId: string }).tagId),
 }
 

@@ -276,6 +276,62 @@ export function getBudgetPacing(clientId: string): Promise<BudgetPacingReport> {
   return fetchJson<BudgetPacingReport>(`/clients/${clientId}/reports/budget-pacing`);
 }
 
+// Step 45 — time-based pause/holdout incrementality testing. The user manually
+// pauses the campaign in their ad platform for the test window; this app only
+// defines the test and computes the before/after analysis.
+export interface IncrementalityTest {
+  id: string;
+  client_id: string;
+  platform: string;
+  campaign_name: string;
+  pre_period_days: number;
+  pause_start: string;
+  pause_end: string;
+  created_at: string;
+}
+
+export interface IncrementalityResult {
+  status: "pending" | "running" | "completed";
+  preperiodDailyTotalRevenue: number;
+  preperiodDailyCampaignAttributedRevenue: number;
+  projectedBaselineTotalRevenue: number | null;
+  actualTotalRevenueDuringPause: number | null;
+  incrementalRevenueEstimate: number | null;
+  incrementalityRatio: number | null;
+}
+
+export interface IncrementalityTestWithResult {
+  test: IncrementalityTest;
+  result: IncrementalityResult;
+}
+
+export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
+  return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
+}
+
+export function createIncrementalityTest(
+  clientId: string,
+  body: { platform: string; campaignName: string; pauseStart: string; pauseEnd: string; prePeriodDays?: number }
+): Promise<IncrementalityTestWithResult> {
+  return apiRequest(`${API_URL}/clients/${clientId}/incrementality-tests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function deleteIncrementalityTest(testId: string): Promise<void> {
+  return apiRequest(`${API_URL}/incrementality-tests/${testId}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 export function generateShareLink(clientId: string): Promise<Client> {
   return mutateJson<Client>(`/clients/${clientId}/share-link`, "POST");
 }

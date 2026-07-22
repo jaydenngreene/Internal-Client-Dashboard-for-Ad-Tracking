@@ -399,6 +399,49 @@ export function dismissCreativeFatigueSignal(id: string): Promise<CreativeFatigu
   return mutateJson<CreativeFatigueSignal>(`/creative-fatigue/${id}/dismiss`, "PATCH");
 }
 
+// Step 50 — confirm-first budget reallocation suggestions.
+export type BudgetReallocationStatus = "pending" | "confirmed" | "dismissed" | "failed";
+
+export interface BudgetReallocationSuggestion {
+  id: string;
+  client_id: string;
+  platform: string;
+  from_campaign_id: string;
+  from_campaign_name: string | null;
+  from_roas: number;
+  to_campaign_id: string;
+  to_campaign_name: string | null;
+  to_roas: number;
+  suggested_shift_amount: number;
+  reasoning: string;
+  status: BudgetReallocationStatus;
+  error: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function getBudgetReallocations(
+  clientId: string,
+  status: BudgetReallocationStatus = "pending"
+): Promise<BudgetReallocationSuggestion[]> {
+  return fetchJson<BudgetReallocationSuggestion[]>(`/clients/${clientId}/budget-reallocations${rangeQuery(undefined, { status })}`);
+}
+
+export function dismissBudgetReallocation(id: string): Promise<BudgetReallocationSuggestion> {
+  return mutateJson<BudgetReallocationSuggestion>(`/budget-reallocations/${id}/dismiss`, "PATCH");
+}
+
+// Bespoke (not mutateJson), same reasoning as confirmPauseCandidate — a failed
+// execution still returns a real body (the suggestion marked 'failed', with the
+// actual platform error) on a non-2xx status.
+export function confirmBudgetReallocation(id: string): Promise<BudgetReallocationSuggestion> {
+  return apiRequest(`${API_URL}/budget-reallocations/${id}/confirm`, { method: "POST" }).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+    return body;
+  });
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

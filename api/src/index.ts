@@ -30,6 +30,7 @@ import { pauseCandidateRoutes } from './routes/pauseCandidates'
 import { publicShareRoutes } from './routes/publicShare'
 import { incrementalityRoutes } from './routes/incrementality'
 import { creativeFatigueRoutes } from './routes/creativeFatigue'
+import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -131,6 +132,7 @@ app.register(
     instance.register(pauseCandidateRoutes)
     instance.register(incrementalityRoutes)
     instance.register(creativeFatigueRoutes)
+    instance.register(budgetReallocationRoutes)
     instance.register(customCostsRoutes)
     instance.register(tagRoutes)
     instance.register(audienceSyncRoutes)

@@ -25,6 +25,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "email-sms", label: "Email & SMS", enabled: true },
   { slug: "remarketing", label: "Remarketing", enabled: true },
   { slug: "pause-candidates", label: "Pause Candidates", enabled: true },
+  { slug: "budget-reallocation", label: "Budget Reallocation", enabled: true },
   { slug: "creative-fatigue", label: "Creative Fatigue", enabled: true },
   { slug: "incrementality", label: "Incrementality Testing", enabled: true },
   { slug: "tags", label: "Tags & Stages", enabled: true },

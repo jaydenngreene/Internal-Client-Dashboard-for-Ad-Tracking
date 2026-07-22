@@ -9,6 +9,7 @@ import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 import { runWarehouseExports } from '../lib/bigqueryExport'
 import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
 import { detectCreativeFatigue } from '../jobs/creativeFatigue/run'
+import { detectReallocationOpportunities } from '../lib/budgetReallocation'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -88,6 +89,12 @@ export function startScheduledJobs(): void {
   cron.schedule('5 7 * * *', () => {
     console.log('[scheduler] running creative fatigue detection')
     runAndRecord('creative_fatigue', detectCreativeFatigue)
+  })
+
+  // Same daily 7am family — a third "review this account's campaigns" check.
+  cron.schedule('10 7 * * *', () => {
+    console.log('[scheduler] running budget reallocation detection')
+    runAndRecord('budget_reallocation', detectReallocationOpportunities)
   })
 
   // Every 15 minutes: recordings finish within seconds of a call ending, but

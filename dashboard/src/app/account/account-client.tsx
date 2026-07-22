@@ -22,6 +22,7 @@ const JOB_LABEL: Record<string, string> = {
   warehouse_export: "BigQuery warehouse export",
   klaviyo_sync: "Klaviyo campaign sync",
   creative_fatigue: "Creative fatigue detection",
+  budget_reallocation: "Budget reallocation detection",
 };
 
 function formatDateTime(iso: string): string {

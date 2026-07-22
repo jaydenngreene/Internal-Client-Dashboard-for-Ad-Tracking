@@ -21,6 +21,7 @@ const JOB_LABEL: Record<string, string> = {
   webhook_retry: "Outbound webhook retries",
   warehouse_export: "BigQuery warehouse export",
   klaviyo_sync: "Klaviyo campaign sync",
+  creative_fatigue: "Creative fatigue detection",
 };
 
 function formatDateTime(iso: string): string {

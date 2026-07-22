@@ -8,6 +8,7 @@ import { transcribeAndScoreCalls } from '../jobs/callTranscription/run'
 import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 import { runWarehouseExports } from '../lib/bigqueryExport'
 import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
+import { detectCreativeFatigue } from '../jobs/creativeFatigue/run'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -80,6 +81,13 @@ export function startScheduledJobs(): void {
   cron.schedule('0 7 * * *', () => {
     console.log('[scheduler] running anomaly detection')
     runAndRecord('anomaly_detection', detectAnomalies)
+  })
+
+  // Same 7am slot as anomaly detection — both are "daily creative/campaign health
+  // check" jobs reading yesterday's finalized ad_costs.
+  cron.schedule('5 7 * * *', () => {
+    console.log('[scheduler] running creative fatigue detection')
+    runAndRecord('creative_fatigue', detectCreativeFatigue)
   })
 
   // Every 15 minutes: recordings finish within seconds of a call ending, but

@@ -329,6 +329,36 @@ export function getEmailSmsReport(clientId: string): Promise<EmailSmsReport> {
   return fetchJson<EmailSmsReport>(`/clients/${clientId}/reports/email-sms`);
 }
 
+// Step 47 — creative fatigue: a declining-CTR-trend signal, advisory only (no
+// confirm-and-pause action like pause candidates have).
+export type FatigueStatus = "active" | "dismissed";
+
+export interface CreativeFatigueSignal {
+  id: string;
+  client_id: string;
+  platform: string;
+  ad_id: string;
+  ad_name: string | null;
+  campaign_name: string | null;
+  recent_ctr: number;
+  prior_ctr: number;
+  decline_pct: number;
+  status: FatigueStatus;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function getCreativeFatigueSignals(
+  clientId: string,
+  status: FatigueStatus = "active"
+): Promise<CreativeFatigueSignal[]> {
+  return fetchJson<CreativeFatigueSignal[]>(`/clients/${clientId}/creative-fatigue${rangeQuery(undefined, { status })}`);
+}
+
+export function dismissCreativeFatigueSignal(id: string): Promise<CreativeFatigueSignal> {
+  return mutateJson<CreativeFatigueSignal>(`/creative-fatigue/${id}/dismiss`, "PATCH");
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

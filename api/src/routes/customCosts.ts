@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 
+const PLATFORM_LABEL_MAX_LENGTH = 100
+const NOTES_MAX_LENGTH = 1000
+
 // Manual ad-spend entry for platforms this app has no native cost-sync integration
 // for (native ad networks, sponsorships, etc) — Step 26. One row per (client, label,
 // date); re-posting the same label/date upserts rather than duplicating.
@@ -14,6 +17,12 @@ export async function customCostsRoutes(app: FastifyInstance) {
 
     if (!platform_label || !date || typeof spend !== 'number') {
       return reply.code(400).send({ error: 'platform_label, date, and spend required' })
+    }
+    if (platform_label.length > PLATFORM_LABEL_MAX_LENGTH) {
+      return reply.code(400).send({ error: `platform_label must be ${PLATFORM_LABEL_MAX_LENGTH} characters or fewer` })
+    }
+    if (notes && notes.length > NOTES_MAX_LENGTH) {
+      return reply.code(400).send({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` })
     }
 
     const { rows } = await db.query(

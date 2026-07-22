@@ -1,10 +1,19 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { hashPassword, verifyPassword, signToken, authenticate } from '../lib/auth'
+import { isValidEmail } from '../lib/validation'
+
+const AGENCY_NAME_MAX_LENGTH = 200
+
+// Credential-stuffing/brute-force only matters on login and registration — every
+// other route here already requires a valid token (authenticate), which the
+// global rate limit in index.ts already covers.
+const AUTH_RATE_LIMIT = { rateLimit: { max: 10, timeWindow: '15 minutes' } }
 
 export async function authRoutes(app: FastifyInstance) {
   app.post<{ Body: { email: string; password: string; agency_name: string } }>(
     '/auth/register',
+    { config: AUTH_RATE_LIMIT },
     async (req, reply) => {
       const email = req.body.email?.toLowerCase().trim()
       const agencyName = req.body.agency_name?.trim()
@@ -13,6 +22,12 @@ export async function authRoutes(app: FastifyInstance) {
         return reply
           .code(400)
           .send({ error: 'email, agency_name, and a password of at least 8 characters are required' })
+      }
+      if (!isValidEmail(email)) {
+        return reply.code(400).send({ error: 'Enter a valid email address' })
+      }
+      if (agencyName.length > AGENCY_NAME_MAX_LENGTH) {
+        return reply.code(400).send({ error: `agency_name must be ${AGENCY_NAME_MAX_LENGTH} characters or fewer` })
       }
 
       const { rows: existing } = await db.query('SELECT id FROM users WHERE email = $1', [email])
@@ -30,7 +45,10 @@ export async function authRoutes(app: FastifyInstance) {
     }
   )
 
-  app.post<{ Body: { email: string; password: string } }>('/auth/login', async (req, reply) => {
+  app.post<{ Body: { email: string; password: string } }>(
+    '/auth/login',
+    { config: AUTH_RATE_LIMIT },
+    async (req, reply) => {
     const email = req.body.email?.toLowerCase().trim()
     const { password } = req.body
     if (!email || !password) {
@@ -53,7 +71,8 @@ export async function authRoutes(app: FastifyInstance) {
       token: signToken(user.id),
       user: { id: user.id, email: user.email, agency_name: user.agency_name },
     })
-  })
+    }
+  )
 
   app.get('/auth/me', { preHandler: authenticate }, async (req, reply) => {
     const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
@@ -76,7 +95,13 @@ export async function authRoutes(app: FastifyInstance) {
       if (!agencyName && !email) {
         return reply.code(400).send({ error: 'agency_name and/or email required' })
       }
+      if (agencyName && agencyName.length > AGENCY_NAME_MAX_LENGTH) {
+        return reply.code(400).send({ error: `agency_name must be ${AGENCY_NAME_MAX_LENGTH} characters or fewer` })
+      }
       if (email) {
+        if (!isValidEmail(email)) {
+          return reply.code(400).send({ error: 'Enter a valid email address' })
+        }
         const { rows: existing } = await db.query('SELECT id FROM users WHERE email = $1 AND id != $2', [
           email,
           req.userId,

@@ -4,6 +4,7 @@ import { applyTagAndAutomate } from '../lib/tagAutomation'
 import { lookupVisitorId } from '../lib/visitorResolution'
 
 const TAG_TYPES = ['freeform', 'funnel_stage', 'product']
+const TAG_NAME_MAX_LENGTH = 100
 
 function toNumberOrNull(value: string | null): number | null {
   return value === null ? null : parseFloat(value)
@@ -18,6 +19,9 @@ export async function tagRoutes(app: FastifyInstance) {
     const { id } = req.params
     const { name, tag_type = 'freeform', stage_order, product_value } = req.body
     if (!name) return reply.code(400).send({ error: 'name required' })
+    if (name.length > TAG_NAME_MAX_LENGTH) {
+      return reply.code(400).send({ error: `name must be ${TAG_NAME_MAX_LENGTH} characters or fewer` })
+    }
     if (!TAG_TYPES.includes(tag_type)) {
       return reply.code(400).send({ error: `tag_type must be one of: ${TAG_TYPES.join(', ')}` })
     }

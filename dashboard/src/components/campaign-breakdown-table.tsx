@@ -10,8 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FunnelRow } from "@/lib/api";
 import { formatCurrency, formatNumber, formatRoas, formatPercent, formatPlatformLabel } from "@/lib/format";
+import { downloadCsv } from "@/lib/csv";
 import { cn } from "@/lib/utils";
 
 type SortKey =
@@ -107,8 +109,22 @@ export function CampaignBreakdownTable({
     );
   }
 
+  function exportCsv() {
+    downloadCsv(
+      `${nameColumnLabel.toLowerCase()}-breakdown.csv`,
+      sorted,
+      [...columns, { key: "platform", label: "Platform" }, { key: "matched", label: "Matched" }]
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-end px-4">
+        <Button size="xs" variant="outline" onClick={exportCsv}>
+          Export CSV
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -180,6 +196,7 @@ export function CampaignBreakdownTable({
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

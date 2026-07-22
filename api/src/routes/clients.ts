@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { v4 as uuidv4 } from 'uuid'
+import { isValidUrl } from '../lib/validation'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
+const CLIENT_NAME_MAX_LENGTH = 200
 
 async function upsertIntegration(clientId: string, platform: string, config: Record<string, unknown>) {
   const { rows } = await db.query(
@@ -23,6 +25,9 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients', async (req, reply) => {
     const { name, timezone = 'America/New_York', niche = 'other' } = req.body
     if (!name) return reply.code(400).send({ error: 'name required' })
+    if (name.length > CLIENT_NAME_MAX_LENGTH) {
+      return reply.code(400).send({ error: `name must be ${CLIENT_NAME_MAX_LENGTH} characters or fewer` })
+    }
     if (!NICHES.includes(niche)) {
       return reply.code(400).send({ error: `niche must be one of: ${NICHES.join(', ')}` })
     }
@@ -62,6 +67,9 @@ export async function clientRoutes(app: FastifyInstance) {
     const { id } = req.params
     const { name } = req.body
     if (!name || !name.trim()) return reply.code(400).send({ error: 'name required' })
+    if (name.trim().length > CLIENT_NAME_MAX_LENGTH) {
+      return reply.code(400).send({ error: `name must be ${CLIENT_NAME_MAX_LENGTH} characters or fewer` })
+    }
 
     const { rows } = await db.query('UPDATE clients SET name = $1 WHERE id = $2 RETURNING *', [name.trim(), id])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
@@ -349,6 +357,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!signature_key || !notification_url) {
       return reply.code(400).send({ error: 'signature_key and notification_url required' })
     }
+    if (!isValidUrl(notification_url)) {
+      return reply.code(400).send({ error: 'notification_url must be a valid http(s) URL' })
+    }
     return reply.code(200).send(await upsertIntegration(id, 'square', { signature_key, notification_url }))
   })
 
@@ -549,6 +560,9 @@ export async function clientRoutes(app: FastifyInstance) {
     const { target_url, event_types } = req.body
     if (!target_url || !Array.isArray(event_types) || event_types.length === 0) {
       return reply.code(400).send({ error: 'target_url and a non-empty event_types array required' })
+    }
+    if (!isValidUrl(target_url)) {
+      return reply.code(400).send({ error: 'target_url must be a valid http(s) URL' })
     }
     const validEvents = ['sale.attributed', 'lead.opted.in', 'call.qualified']
     const invalid = event_types.filter((e) => !validEvents.includes(e))

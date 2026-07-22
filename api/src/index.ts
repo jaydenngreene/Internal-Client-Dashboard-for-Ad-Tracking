@@ -1,6 +1,7 @@
-import Fastify from 'fastify'
+import Fastify, { FastifyError } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
+import rateLimit from '@fastify/rate-limit'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -51,6 +52,24 @@ app.register(cors, {
 })
 
 app.register(helmet)
+
+// A generous global ceiling against basic abuse; /auth/login and /auth/register
+// carry their own much stricter per-route limit (see routes/auth.ts) since
+// credential-stuffing/brute-force only matters there.
+app.register(rateLimit, { max: 300, timeWindow: '1 minute' })
+
+// Never let an unexpected exception leak internal details (a raw stack trace, a
+// DB error message) to the client — log the real error server-side, respond with
+// a generic message. Routes that already reply.code(4xx).send(...) themselves
+// never reach this; it only catches genuinely uncaught errors.
+app.setErrorHandler((error: FastifyError, request, reply) => {
+  request.log.error(error)
+  const statusCode = error.statusCode ?? 500
+  if (statusCode >= 500) {
+    return reply.code(statusCode).send({ error: 'Internal server error' })
+  }
+  return reply.code(statusCode).send({ error: error.message })
+})
 
 app.get('/health', async () => ({ status: 'ok' }))
 

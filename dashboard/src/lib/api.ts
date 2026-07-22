@@ -20,9 +20,15 @@ export interface AuthUser {
   email: string;
   agency_name: string;
   email_verified: boolean;
+  totp_enabled?: boolean;
 }
 
-export async function login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+// Step 55 — a login now returns either a real session directly, or (if the
+// account has 2FA enabled) a short-lived mfaToken that only /auth/mfa/verify
+// will accept, alongside a flag telling the UI to show the code-entry step.
+export type LoginResult = { token: string; user: AuthUser } | { mfaRequired: true; mfaToken: string };
+
+export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,6 +39,55 @@ export async function login(email: string, password: string): Promise<{ token: s
     throw new Error(errorBody.error ?? `Request failed (${res.status})`);
   }
   return res.json();
+}
+
+export async function verifyMfaCode(mfaToken: string, code: string): Promise<{ token: string; user: AuthUser }> {
+  const res = await fetch(`${API_URL}/auth/mfa/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mfaToken, code }),
+  });
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.error ?? `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface MfaSetupResponse {
+  secret: string;
+  qrCodeDataUrl: string;
+}
+
+export function startMfaSetup(): Promise<MfaSetupResponse> {
+  return apiRequest(`${API_URL}/auth/mfa/setup`, { method: "POST" }).then(async (res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function confirmMfaSetup(code: string): Promise<{ enabled: boolean; backupCodes: string[] }> {
+  return apiRequest(`${API_URL}/auth/mfa/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  }).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+    return body;
+  });
+}
+
+export function disableMfa(password: string): Promise<{ enabled: boolean }> {
+  return apiRequest(`${API_URL}/auth/mfa/disable`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  }).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+    return body;
+  });
 }
 
 async function publicPost(path: string, body: Record<string, string>): Promise<Record<string, unknown>> {

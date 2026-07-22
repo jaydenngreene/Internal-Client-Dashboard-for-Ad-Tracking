@@ -7,10 +7,14 @@ import {
   authenticate,
   generateRandomToken,
   hashToken,
+  signMfaPendingToken,
+  verifyMfaPendingToken,
 } from '../lib/auth'
 import { isValidEmail } from '../lib/validation'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email'
 import { logAction } from '../lib/auditLog'
+import { generateBase32Secret, generateTotp, verifyTotp, buildOtpAuthUri } from '../lib/totp'
+import QRCode from 'qrcode'
 
 const AGENCY_NAME_MAX_LENGTH = 200
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000 // 1 hour
@@ -48,7 +52,8 @@ export async function authRoutes(app: FastifyInstance) {
       password_hash: string
       agency_name: string
       email_verified: boolean
-    }>('SELECT id, email, password_hash, agency_name, email_verified FROM users WHERE email = $1', [email])
+      totp_enabled: boolean
+    }>('SELECT id, email, password_hash, agency_name, email_verified, totp_enabled FROM users WHERE email = $1', [email])
     const user = rows[0]
     // Deliberately identical error for "no such user" and "wrong password" — a
     // distinct message for one vs the other would let an attacker enumerate which
@@ -56,6 +61,13 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       await logAction({ userId: user?.id ?? null, clientId: null, method: 'POST', route: '/auth/login', statusCode: 401, details: `failed login attempt for ${email}`, ip: req.ip })
       return reply.code(401).send({ error: 'Invalid email or password' })
+    }
+
+    // Step 55 — password checked out, but if 2FA is on, the real session token
+    // isn't issued yet. mfaToken is only ever valid for /auth/mfa/verify below.
+    if (user.totp_enabled) {
+      await logAction({ userId: user.id, clientId: null, method: 'POST', route: '/auth/login', statusCode: 200, details: 'password ok, awaiting MFA code', ip: req.ip })
+      return reply.send({ mfaRequired: true, mfaToken: signMfaPendingToken(user.id) })
     }
 
     await logAction({ userId: user.id, clientId: null, method: 'POST', route: '/auth/login', statusCode: 200, details: 'login succeeded', ip: req.ip })
@@ -66,9 +78,107 @@ export async function authRoutes(app: FastifyInstance) {
     }
   )
 
+  // Step 55 — the second step of login when the account has 2FA enabled. Accepts
+  // either a 6-digit TOTP code or one of the (single-use) backup codes.
+  app.post<{ Body: { mfaToken: string; code: string } }>(
+    '/auth/mfa/verify',
+    { config: AUTH_RATE_LIMIT },
+    async (req, reply) => {
+      const { mfaToken, code } = req.body
+      if (!mfaToken || !code) return reply.code(400).send({ error: 'mfaToken and code required' })
+
+      const decoded = verifyMfaPendingToken(mfaToken)
+      if (!decoded) return reply.code(401).send({ error: 'This login attempt has expired — log in again' })
+
+      const { rows } = await db.query<{
+        id: string
+        email: string
+        agency_name: string
+        email_verified: boolean
+        totp_secret: string | null
+        mfa_backup_codes_hash: string[]
+      }>('SELECT id, email, agency_name, email_verified, totp_secret, mfa_backup_codes_hash FROM users WHERE id = $1', [
+        decoded.userId,
+      ])
+      const user = rows[0]
+      if (!user?.totp_secret) return reply.code(401).send({ error: 'Invalid login attempt' })
+
+      const isValidTotp = verifyTotp(user.totp_secret, code)
+      const backupCodeHash = hashToken(code.trim())
+      const backupIndex = user.mfa_backup_codes_hash.indexOf(backupCodeHash)
+
+      if (!isValidTotp && backupIndex === -1) {
+        await logAction({ userId: user.id, clientId: null, method: 'POST', route: '/auth/mfa/verify', statusCode: 401, details: 'wrong MFA code', ip: req.ip })
+        return reply.code(401).send({ error: 'Invalid code' })
+      }
+
+      // A backup code is single-use — remove it the moment it's spent.
+      if (backupIndex !== -1) {
+        const remaining = user.mfa_backup_codes_hash.filter((_, i) => i !== backupIndex)
+        await db.query('UPDATE users SET mfa_backup_codes_hash = $1 WHERE id = $2', [remaining, user.id])
+      }
+
+      await logAction({ userId: user.id, clientId: null, method: 'POST', route: '/auth/mfa/verify', statusCode: 200, details: backupIndex !== -1 ? 'login via backup code' : 'login succeeded (MFA)', ip: req.ip })
+      return reply.send({
+        token: signToken(user.id),
+        user: { id: user.id, email: user.email, agency_name: user.agency_name, email_verified: user.email_verified },
+      })
+    }
+  )
+
+  // Begins 2FA setup — generates a secret and returns a QR code, but does NOT
+  // enable it yet (see /auth/mfa/confirm). Re-calling this before confirming
+  // just overwrites the pending secret, so a user can restart setup cleanly if
+  // they scan the wrong QR or their app rejects it.
+  app.post('/auth/mfa/setup', { preHandler: authenticate }, async (req, reply) => {
+    const { rows } = await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [req.userId])
+    const secret = generateBase32Secret()
+    await db.query('UPDATE users SET totp_secret = $1, totp_enabled = false WHERE id = $2', [secret, req.userId])
+    const uri = buildOtpAuthUri(secret, rows[0].email, 'Ad Tracking')
+    const qrCodeDataUrl = await QRCode.toDataURL(uri)
+    return reply.send({ secret, qrCodeDataUrl })
+  })
+
+  // Confirms setup with a real code from the app, turns 2FA on, and issues
+  // backup codes — shown to the user exactly once, only their hashes are kept.
+  app.post<{ Body: { code: string } }>('/auth/mfa/confirm', { preHandler: authenticate }, async (req, reply) => {
+    const { rows } = await db.query<{ totp_secret: string | null }>('SELECT totp_secret FROM users WHERE id = $1', [
+      req.userId,
+    ])
+    const secret = rows[0]?.totp_secret
+    if (!secret) return reply.code(400).send({ error: 'Call /auth/mfa/setup first' })
+    if (!req.body.code || !verifyTotp(secret, req.body.code)) {
+      return reply.code(401).send({ error: 'Invalid code' })
+    }
+
+    const backupCodes = Array.from({ length: 8 }, () => generateRandomToken().slice(0, 10))
+    await db.query('UPDATE users SET totp_enabled = true, mfa_backup_codes_hash = $1 WHERE id = $2', [
+      backupCodes.map(hashToken),
+      req.userId,
+    ])
+    await logAction({ userId: req.userId!, clientId: null, method: 'POST', route: '/auth/mfa/confirm', statusCode: 200, details: '2FA enabled', ip: req.ip })
+    return reply.send({ enabled: true, backupCodes })
+  })
+
+  // Disabling requires the current password — the same "prove you're still you"
+  // bar as changing it, since turning 2FA off is a real security downgrade.
+  app.post<{ Body: { password: string } }>('/auth/mfa/disable', { preHandler: authenticate }, async (req, reply) => {
+    const { rows } = await db.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [
+      req.userId,
+    ])
+    if (!req.body.password || !(await verifyPassword(req.body.password, rows[0].password_hash))) {
+      return reply.code(401).send({ error: 'Password is incorrect' })
+    }
+    await db.query(`UPDATE users SET totp_enabled = false, totp_secret = NULL, mfa_backup_codes_hash = '{}' WHERE id = $1`, [
+      req.userId,
+    ])
+    await logAction({ userId: req.userId!, clientId: null, method: 'POST', route: '/auth/mfa/disable', statusCode: 200, details: '2FA disabled', ip: req.ip })
+    return reply.send({ enabled: false })
+  })
+
   app.get('/auth/me', { preHandler: authenticate }, async (req, reply) => {
-    const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean }>(
-      'SELECT id, email, agency_name, email_verified FROM users WHERE id = $1',
+    const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean; totp_enabled: boolean }>(
+      'SELECT id, email, agency_name, email_verified, totp_enabled FROM users WHERE id = $1',
       [req.userId]
     )
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })

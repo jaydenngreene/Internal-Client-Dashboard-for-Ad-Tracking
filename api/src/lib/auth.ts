@@ -18,6 +18,29 @@ export function signToken(userId: string): string {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' })
 }
 
+// Step 55 — a separate, narrowly-scoped, short-lived token issued when a login's
+// password check passes but the account has 2FA enabled. It carries
+// `mfaPending: true` specifically so `authenticate()` below can tell it apart
+// from a real session token and refuse it on every normal route — it's only
+// ever accepted by /auth/mfa/verify.
+export function signMfaPendingToken(userId: string): string {
+  if (!JWT_SECRET) throw new Error('JWT_SECRET is not configured')
+  return jwt.sign({ userId, mfaPending: true }, JWT_SECRET, { expiresIn: '5m' })
+}
+
+export function verifyMfaPendingToken(token: string): { userId: string } | null {
+  if (!JWT_SECRET) return null
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    if (typeof decoded === 'object' && decoded && decoded.mfaPending === true && 'userId' in decoded) {
+      return { userId: (decoded as { userId: string }).userId }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 // Used for password-reset and email-verification tokens — high-entropy random
 // values, not user-chosen secrets, so a fast hash (not bcrypt's deliberately slow
 // one) is the right tool: it's stored so a DB read alone can't be replayed as a
@@ -35,7 +58,9 @@ export function verifyToken(token: string): { userId: string } | null {
   if (!JWT_SECRET) return null
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
-    if (typeof decoded === 'object' && decoded && 'userId' in decoded) {
+    // An mfaPending token must never work as a real session token — it's only
+    // ever valid for /auth/mfa/verify (see verifyMfaPendingToken below).
+    if (typeof decoded === 'object' && decoded && 'userId' in decoded && decoded.mfaPending !== true) {
       return { userId: (decoded as { userId: string }).userId }
     }
     return null

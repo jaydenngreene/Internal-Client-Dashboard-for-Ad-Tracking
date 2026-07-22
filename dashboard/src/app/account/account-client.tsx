@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail, getAccountAuditLog } from "@/lib/api";
+import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail, getAccountAuditLog, startMfaSetup, confirmMfaSetup, disableMfa } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AuditLogSection } from "@/components/audit-log-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,110 @@ function formatDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+// Step 55 — TOTP-based 2FA. Three states: off (show "Enable"), setup-in-progress
+// (QR code + confirm-code input shown), and on (show backup codes once right
+// after confirming, then just "Disable"). Disabling requires the current
+// password, same "prove you're still you" bar as changing it.
+function MfaSection({ enabled, onChanged }: { enabled: boolean; onChanged: () => void }) {
+  const [setupData, setSetupData] = useState<{ secret: string; qrCodeDataUrl: string } | null>(null);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [disablePassword, setDisablePassword] = useState("");
+
+  const setup = useMutation({
+    mutationFn: startMfaSetup,
+    onSuccess: (data) => setSetupData(data),
+  });
+  const confirm = useMutation({
+    mutationFn: () => confirmMfaSetup(confirmCode.trim()),
+    onSuccess: (data) => {
+      setBackupCodes(data.backupCodes);
+      setSetupData(null);
+      setConfirmCode("");
+      onChanged();
+    },
+  });
+  const disable = useMutation({
+    mutationFn: () => disableMfa(disablePassword),
+    onSuccess: () => {
+      setDisablePassword("");
+      onChanged();
+    },
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="flex items-center gap-2">
+          Two-Factor Authentication
+          <Badge variant={enabled ? "secondary" : "outline"} className="text-[10px]">
+            {enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        {backupCodes && (
+          <div className="flex flex-col gap-2 rounded-md border border-status-warning/40 bg-status-warning/10 p-3">
+            <p className="text-sm font-medium">Save these backup codes now — they won&apos;t be shown again.</p>
+            <p className="text-xs text-muted-foreground">Each one can be used once if you lose access to your authenticator app.</p>
+            <div className="grid grid-cols-2 gap-1 font-mono text-sm">
+              {backupCodes.map((c) => (
+                <span key={c}>{c}</span>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setBackupCodes(null)}>
+              I&apos;ve saved these
+            </Button>
+          </div>
+        )}
+
+        {!enabled && !setupData && !backupCodes && (
+          <div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Adds a second step to logging in — a 6-digit code from an authenticator app (Google Authenticator, Authy, etc).
+            </p>
+            <Button size="sm" disabled={setup.isPending} onClick={() => setup.mutate()}>
+              {setup.isPending ? "Generating…" : "Enable 2FA"}
+            </Button>
+          </div>
+        )}
+
+        {setupData && (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">Scan this with your authenticator app, then enter the 6-digit code it shows.</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={setupData.qrCodeDataUrl} alt="2FA setup QR code" className="h-40 w-40" />
+            <p className="text-xs text-muted-foreground">Can&apos;t scan? Enter this manually: <span className="font-mono">{setupData.secret}</span></p>
+            <div className="flex items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <FieldLabel>6-digit code</FieldLabel>
+                <Input className="w-32" value={confirmCode} onChange={(e) => setConfirmCode(e.target.value)} />
+              </div>
+              <Button size="sm" disabled={confirm.isPending || confirmCode.trim().length !== 6} onClick={() => confirm.mutate()}>
+                Confirm
+              </Button>
+            </div>
+            {confirm.isError && <p className="text-xs text-status-critical">{(confirm.error as Error).message}</p>}
+          </div>
+        )}
+
+        {enabled && !backupCodes && (
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground">Disabling requires your current password.</p>
+            <div className="flex items-end gap-2">
+              <Input className="w-48" type="password" placeholder="Current password" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} />
+              <Button size="sm" variant="outline" disabled={disable.isPending || !disablePassword} onClick={() => disable.mutate()}>
+                Disable 2FA
+              </Button>
+            </div>
+            {disable.isError && <p className="text-xs text-status-critical">{(disable.error as Error).message}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function SystemStatusSection() {
@@ -262,6 +366,7 @@ function DangerZoneSection({ email }: { email: string }) {
 }
 
 export function AccountClient() {
+  const queryClient = useQueryClient();
   const { data: me, isLoading } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   return (
@@ -278,6 +383,7 @@ export function AccountClient() {
         <>
           <ProfileSection agencyName={me.agency_name} email={me.email} emailVerified={me.email_verified} />
           <PasswordSection />
+          <MfaSection enabled={!!me.totp_enabled} onChanged={() => queryClient.invalidateQueries({ queryKey: ["me"] })} />
           <SystemStatusSection />
           <AuditLogSection queryKey={["account-audit-log"]} fetcher={getAccountAuditLog} showClientColumn />
           <SessionSection />

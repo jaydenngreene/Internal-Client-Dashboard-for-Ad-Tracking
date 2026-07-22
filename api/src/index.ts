@@ -25,6 +25,7 @@ import { remarketingRoutes } from './routes/remarketing'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
+import { insightsRoutes } from './routes/insights'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -68,6 +69,7 @@ app.register(remarketingRoutes)
 app.register(customCostsRoutes)
 app.register(tagRoutes)
 app.register(audienceSyncRoutes)
+app.register(insightsRoutes)
 
 // Public Attribution API (Step 11) — the same report routes, mounted again under
 // /api/v1 with bearer-token auth, so this data can feed other tools without going

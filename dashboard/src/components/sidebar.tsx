@@ -17,6 +17,7 @@ const navLinkBase =
 // happened *within* a page, e.g. funnel-client.tsx's cart cards).
 const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: string[] }[] = [
   { slug: "overview", label: "Overview", enabled: true },
+  { slug: "insights", label: "Insights", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "funnel", label: "Funnel", enabled: true },
   { slug: "ltv", label: "LTV", enabled: true },

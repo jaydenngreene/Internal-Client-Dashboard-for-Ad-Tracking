@@ -67,6 +67,30 @@ export const saveSquareIntegration = (clientId: string, body: { signature_key: s
 export const saveGoHighLevelIntegration = (clientId: string, body: { webhook_secret: string }) =>
   postIntegration(clientId, "gohighlevel", body);
 
+// AI Insights — on-demand + cached (not a nightly job), so a stale generated_at is
+// visible to the user rather than silently refreshing overnight.
+export interface Insight {
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface ClientInsights {
+  client_id: string;
+  generated_at: string;
+  insights: Insight[];
+  model: string;
+  error: string | null;
+}
+
+export function getInsights(clientId: string): Promise<ClientInsights | null> {
+  return fetchJson<ClientInsights | null>(`/clients/${clientId}/insights`);
+}
+
+export function regenerateInsights(clientId: string): Promise<ClientInsights> {
+  return mutateJson<ClientInsights>(`/clients/${clientId}/insights/regenerate`, "POST");
+}
+
 export interface DateRange {
   from: string;
   to: string;

@@ -206,6 +206,7 @@ export function TagsClient({ clientId }: { clientId: string }) {
     queryKey: ["tags", clientId],
     queryFn: () => getTags(clientId),
   });
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -215,6 +216,34 @@ export function TagsClient({ clientId }: { clientId: string }) {
           Freeform labels, funnel stages, and product tags. Applying a product tag to a lead generates a Sale automatically
         </p>
       </div>
+
+      <Card className="px-4">
+        <CardContent className="flex flex-col gap-2 px-0 text-xs text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">Freeform</span> — a plain label for filtering/segmenting (e.g.
+            &quot;vip&quot;, &quot;referral&quot;). No side effects.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Funnel Stage</span> — a label with a sequence number (Stage
+            order), for tracking where a lead sits in your process (e.g. Booked Call → Showed Up → Closed).
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Product</span> — has a dollar value. The first time it&apos;s
+            applied to a lead, it automatically records a Sale for that amount, attributed back to whichever ad brought
+            the lead in — for revenue that closes somewhere this software can&apos;t see (a phone call, a manual
+            invoice). Re-applying the same tag later doesn&apos;t create a second sale.
+          </p>
+          <p className="pt-1">
+            Apply tags below by hand, from the client&apos;s own site (
+            <code className="rounded bg-muted px-1 py-0.5">ADT.applyTag(email, tagName)</code>), or from a CRM/Zapier by
+            POSTing <code className="rounded bg-muted px-1 py-0.5">{`{ "tag_name": "..." }`}</code> to
+            <br />
+            <code className="mt-1 inline-block rounded bg-muted px-1 py-0.5">
+              {apiUrl}/clients/{clientId}/leads/&lt;email&gt;/tags
+            </code>
+          </p>
+        </CardContent>
+      </Card>
 
       <CreateTagForm clientId={clientId} />
 

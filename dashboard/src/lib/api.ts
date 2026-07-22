@@ -442,6 +442,33 @@ export function confirmBudgetReallocation(id: string): Promise<BudgetReallocatio
   });
 }
 
+// Step 51 — conversational AI chat, one thread per client. Claude answers using
+// real live-queried data via tool-use, never guesses.
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export function getChatHistory(clientId: string): Promise<ChatMessage[]> {
+  return fetchJson<ChatMessage[]>(`/clients/${clientId}/chat`);
+}
+
+export function sendChatMessage(clientId: string, message: string): Promise<{ answer: string }> {
+  return apiRequest(`${API_URL}/clients/${clientId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

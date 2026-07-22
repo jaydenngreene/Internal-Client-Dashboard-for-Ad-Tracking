@@ -83,6 +83,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/incrementality-tests': 'client',
   '/clients/:id/creative-fatigue': 'client',
   '/clients/:id/budget-reallocations': 'client',
+  '/clients/:id/chat': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
 

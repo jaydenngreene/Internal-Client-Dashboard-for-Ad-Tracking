@@ -18,6 +18,7 @@ const navLinkBase =
 const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: string[] }[] = [
   { slug: "overview", label: "Overview", enabled: true },
   { slug: "insights", label: "Insights", enabled: true },
+  { slug: "chat", label: "Ask Your Data", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "funnel", label: "Funnel", enabled: true },
   { slug: "leads", label: "Leads", enabled: true },

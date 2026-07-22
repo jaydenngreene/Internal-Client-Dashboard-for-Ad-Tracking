@@ -37,10 +37,6 @@ interface OverviewQuery {
   to?: string
 }
 
-interface CampaignsQuery {
-  from?: string
-  to?: string
-}
 
 interface LeadsQuery {
   from?: string
@@ -373,79 +369,6 @@ export async function reportRoutes(app: FastifyInstance) {
         sales: parseInt(salesTotal.rows[0].total, 10),
         series,
       })
-    }
-  )
-
-  app.get<{ Params: { id: string }; Querystring: CampaignsQuery }>(
-    '/clients/:id/reports/campaigns',
-    async (req, reply) => {
-      const clientId = req.params.id
-      const { from, to } = defaultRange(req.query.from, req.query.to)
-
-      const [spendRows, revenueRows] = await Promise.all([
-        getSpendByCampaign(clientId, from, to),
-        getRevenueByCampaign(clientId, from, to),
-      ])
-
-      const normalize = normalizeCampaignName
-
-      interface Row {
-        campaign_name: string
-        platform: string | null
-        cost: number
-        impressions: number
-        clicks: number
-        revenue: number
-        sales: number
-        matched: boolean
-      }
-
-      const rows = new Map<string, Row>()
-
-      for (const r of spendRows.rows) {
-        const key = normalize(r.campaign_name)
-        rows.set(key, {
-          campaign_name: r.campaign_name ?? '(unnamed campaign)',
-          platform: r.platform,
-          cost: parseFloat(r.cost),
-          impressions: parseInt(r.impressions, 10),
-          clicks: parseInt(r.clicks, 10),
-          revenue: 0,
-          sales: 0,
-          matched: false,
-        })
-      }
-
-      for (const r of revenueRows.rows) {
-        const key = normalize(r.utm_campaign)
-        const existing = rows.get(key)
-        if (existing) {
-          existing.revenue = parseFloat(r.revenue)
-          existing.sales = parseInt(r.sales, 10)
-          existing.matched = true
-        } else {
-          rows.set(key, {
-            campaign_name: r.utm_campaign ?? '(no utm_campaign)',
-            platform: null,
-            cost: 0,
-            impressions: 0,
-            clicks: 0,
-            revenue: parseFloat(r.revenue),
-            sales: parseInt(r.sales, 10),
-            matched: false,
-          })
-        }
-      }
-
-      const campaigns = Array.from(rows.values())
-        .map((r) => ({
-          ...r,
-          profit: r.revenue - r.cost,
-          roas: r.cost > 0 ? r.revenue / r.cost : null,
-        }))
-        .sort((a, b) => b.revenue - a.revenue)
-
-      return reply.send({ from, to, campaigns })
     }
   )
 

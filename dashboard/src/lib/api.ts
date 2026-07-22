@@ -207,6 +207,36 @@ export function deleteWebhookSubscription(subId: string): Promise<void> {
   });
 }
 
+export interface TrackingNumber {
+  id: string;
+  phone_number: string;
+  forward_to: string;
+  status: "available" | "assigned";
+  assigned_at: string | null;
+  created_at: string;
+}
+
+export function getTrackingNumbers(clientId: string): Promise<TrackingNumber[]> {
+  return apiRequest(`${API_URL}/clients/${clientId}/tracking-numbers`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function createTrackingNumber(
+  clientId: string,
+  body: { phone_number: string; forward_to: string }
+): Promise<TrackingNumber> {
+  return apiRequest(`${API_URL}/clients/${clientId}/tracking-numbers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
 export const saveShopifyIntegration = (clientId: string, body: { webhook_secret: string; shop_domain: string }) =>
   postIntegration(clientId, "shopify", body);
 
@@ -536,6 +566,39 @@ export function getJourney(clientId: string, email: string): Promise<Journey> {
   return fetchJson<Journey>(`/clients/${clientId}/leads/${encodeURIComponent(email)}/journey`);
 }
 
+export type CallDisposition =
+  | "new_lead"
+  | "qualified"
+  | "unqualified"
+  | "existing_customer"
+  | "wrong_number"
+  | "voicemail"
+  | "spam";
+
+export const CALL_DISPOSITIONS: CallDisposition[] = [
+  "new_lead",
+  "qualified",
+  "unqualified",
+  "existing_customer",
+  "wrong_number",
+  "voicemail",
+  "spam",
+];
+
+export function updateCallQualification(
+  callId: string,
+  body: { qualification_score?: number; disposition?: CallDisposition }
+): Promise<JourneyCall> {
+  return apiRequest(`${API_URL}/calls/${callId}/qualification`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
 // Step 12 — AI remarketing agent. Candidates are deanonymized visitors (via Customers.ai)
 // with an AI-drafted outreach message awaiting human review. Approve/reject only change
 // review status here — nothing on this page ever sends anything to a real inbox; see
@@ -575,6 +638,13 @@ export function approveRemarketingCandidate(id: string): Promise<RemarketingCand
 
 export function rejectRemarketingCandidate(id: string): Promise<RemarketingCandidate> {
   return mutateJson<RemarketingCandidate>(`/remarketing/${id}/reject`, "PATCH");
+}
+
+// The one action in this whole flow that reaches a real ESP — adds the candidate
+// to a Klaviyo list, it does not itself trigger a send. Only callable once a
+// candidate is already approved.
+export function dispatchRemarketingCandidate(id: string): Promise<RemarketingCandidate & { klaviyo_profile_id: string }> {
+  return mutateJson(`/remarketing/${id}/dispatch`, "POST");
 }
 
 // Step 30 — Cohorts. Pure re-aggregation of customer_ltv by acquisition month;

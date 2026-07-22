@@ -6,6 +6,7 @@ import {
   getRemarketingCandidates,
   approveRemarketingCandidate,
   rejectRemarketingCandidate,
+  dispatchRemarketingCandidate,
   RemarketingCandidate,
   RemarketingStatus,
 } from "@/lib/api";
@@ -37,9 +38,14 @@ function CandidateCard({ candidate, clientId }: { candidate: RemarketingCandidat
     mutationFn: () => rejectRemarketingCandidate(candidate.id),
     onSuccess: invalidate,
   });
+  const dispatch = useMutation({
+    mutationFn: () => dispatchRemarketingCandidate(candidate.id),
+    onSuccess: invalidate,
+  });
 
   const name = [candidate.first_name, candidate.last_name].filter(Boolean).join(" ") || candidate.email;
   const isPending = candidate.status === "pending";
+  const isApproved = candidate.status === "approved";
 
   return (
     <Card className="px-4 py-3">
@@ -89,6 +95,18 @@ function CandidateCard({ candidate, clientId }: { candidate: RemarketingCandidat
             >
               Reject
             </Button>
+          </div>
+        )}
+
+        {isApproved && (
+          <div className="flex flex-col gap-1.5">
+            <Button size="sm" onClick={() => dispatch.mutate()} disabled={dispatch.isPending}>
+              {dispatch.isPending ? "Sending to Klaviyo…" : "Dispatch to Klaviyo"}
+            </Button>
+            {dispatch.isError && (
+              <p className="text-xs text-status-critical">{(dispatch.error as Error).message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">Adds this lead to your connected Klaviyo list — doesn't send a message by itself.</p>
           </div>
         )}
       </CardContent>

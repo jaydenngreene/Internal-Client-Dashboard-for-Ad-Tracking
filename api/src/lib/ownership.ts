@@ -56,7 +56,6 @@ const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/calls': 'client',
   '/clients/:id/reports/cohorts': 'client',
   '/clients/:id/reports/subscriptions': 'client',
-  '/clients/:id/reports/campaigns': 'client',
   '/clients/:id/tags': 'client',
   '/clients/:id/leads/:email/tags': 'client',
   '/clients/:id/leads/:email/tags/:tagId': 'client',

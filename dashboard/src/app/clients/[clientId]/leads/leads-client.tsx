@@ -1,17 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getJourney, Journey, JourneySession } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  getJourney,
+  updateCallQualification,
+  CALL_DISPOSITIONS,
+  CallDisposition,
+  Journey,
+  JourneySession,
+  JourneyCall,
+} from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+const DISPOSITION_LABEL: Record<CallDisposition, string> = {
+  new_lead: "New lead",
+  qualified: "Qualified",
+  unqualified: "Unqualified",
+  existing_customer: "Existing customer",
+  wrong_number: "Wrong number",
+  voicemail: "Voicemail",
+  spam: "Spam",
+};
 
 function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -59,7 +78,52 @@ function SessionRow({ session, index }: { session: JourneySession; index: number
   );
 }
 
-function JourneyView({ journey }: { journey: Journey }) {
+function CallRow({ call, clientId, email }: { call: JourneyCall; clientId: string; email: string }) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (body: { qualification_score?: number; disposition?: CallDisposition }) =>
+      updateCallQualification(call.id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["journey", clientId, email] }),
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm">
+      <span>{formatDateTime(call.started_at)}</span>
+      {call.status && <Badge variant="outline" className="text-[10px]">{call.status}</Badge>}
+      {call.duration_seconds != null && (
+        <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
+      )}
+      <Select
+        value={call.disposition ?? ""}
+        onValueChange={(v) => mutation.mutate({ disposition: v as CallDisposition })}
+      >
+        <SelectTrigger className="h-7 w-40">
+          <SelectValue placeholder="Set disposition…">
+            {(v: string) => (v ? DISPOSITION_LABEL[v as CallDisposition] : "Set disposition…")}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {CALL_DISPOSITIONS.map((d) => (
+            <SelectItem key={d} value={d}>
+              {DISPOSITION_LABEL[d]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="xs"
+        variant={call.qualified ? "secondary" : "outline"}
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate({ qualification_score: call.qualified ? 0 : 1 })}
+      >
+        {call.qualified ? "Qualified" : "Mark qualified"}
+      </Button>
+    </div>
+  );
+}
+
+function JourneyView({ journey, clientId }: { journey: Journey; clientId: string }) {
   const sessionById = new Map(journey.sessions.map((s, i) => [s.id, { ...s, index: i }]));
 
   return (
@@ -157,19 +221,7 @@ function JourneyView({ journey }: { journey: Journey }) {
           </CardHeader>
           <CardContent className="flex flex-col gap-2 px-0">
             {journey.calls.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm">
-                <span>{formatDateTime(c.started_at)}</span>
-                {c.status && <Badge variant="outline" className="text-[10px]">{c.status}</Badge>}
-                {c.duration_seconds != null && (
-                  <span className="text-xs text-muted-foreground">{formatDuration(c.duration_seconds)}</span>
-                )}
-                {c.disposition && <Badge variant="secondary" className="text-[10px]">{c.disposition}</Badge>}
-                {c.qualified != null && (
-                  <Badge variant={c.qualified ? "secondary" : "outline"} className="text-[10px]">
-                    {c.qualified ? "qualified" : "not qualified"}
-                  </Badge>
-                )}
-              </div>
+              <CallRow key={c.id} call={c} clientId={clientId} email={journey.email} />
             ))}
           </CardContent>
         </Card>
@@ -221,7 +273,7 @@ export function LeadsClient({ clientId }: { clientId: string }) {
 
       {isLoading && <Skeleton className="h-64 w-full" />}
       {isError && <p className="text-sm text-status-critical">Failed to load. Is the API running?</p>}
-      {journey && <JourneyView journey={journey} />}
+      {journey && <JourneyView journey={journey} clientId={clientId} />}
     </div>
   );
 }

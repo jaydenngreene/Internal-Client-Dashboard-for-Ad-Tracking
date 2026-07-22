@@ -14,6 +14,8 @@ import {
   getWebhookSubscriptions,
   createWebhookSubscription,
   deleteWebhookSubscription,
+  getTrackingNumbers,
+  createTrackingNumber,
   deleteClient,
   OUTBOUND_WEBHOOK_EVENT_TYPES,
   Client,
@@ -335,6 +337,73 @@ function IntegrationsSection({ clientId }: { clientId: string }) {
   );
 }
 
+function TrackingNumbersSection({ clientId }: { clientId: string }) {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [forwardTo, setForwardTo] = useState("");
+  const queryClient = useQueryClient();
+
+  const { data: numbers, isLoading } = useQuery({
+    queryKey: ["tracking-numbers", clientId],
+    queryFn: () => getTrackingNumbers(clientId),
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => createTrackingNumber(clientId, { phone_number: phoneNumber.trim(), forward_to: forwardTo.trim() }),
+    onSuccess: () => {
+      setPhoneNumber("");
+      setForwardTo("");
+      queryClient.invalidateQueries({ queryKey: ["tracking-numbers", clientId] });
+    },
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Call Tracking Numbers</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Numbers purchased in the client&apos;s own Twilio account (this app never buys numbers or touches billing) —
+          register them here so dynamic number insertion can assign one per visitor.
+        </p>
+
+        {isLoading && <Skeleton className="h-16 w-full" />}
+        {!isLoading && numbers?.length === 0 && (
+          <p className="text-xs text-muted-foreground">No tracking numbers registered yet.</p>
+        )}
+        {numbers && numbers.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {numbers.map((n) => (
+              <div key={n.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                <span className="font-medium">{n.phone_number}</span>
+                <span className="text-xs text-muted-foreground">forwards to {n.forward_to}</span>
+                <Badge variant={n.status === "assigned" ? "secondary" : "outline"} className="text-[10px]">
+                  {n.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Tracking number</FieldLabel>
+            <Input className="w-40" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+15551234567" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Forwards to</FieldLabel>
+            <Input className="w-40" value={forwardTo} onChange={(e) => setForwardTo(e.target.value)} placeholder="+15557654321" />
+          </div>
+          {mutation.isError && <p className="text-xs text-status-critical">Failed to register number.</p>}
+          <Button size="sm" disabled={!phoneNumber.trim() || !forwardTo.trim() || mutation.isPending} onClick={() => mutation.mutate()}>
+            Add number
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TagWebhookSection({ clientId }: { clientId: string }) {
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -561,6 +630,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
         <>
           <GeneralSection clientId={clientId} client={client} />
           <IntegrationsSection clientId={clientId} />
+          <TrackingNumbersSection clientId={clientId} />
           <TagWebhookSection clientId={clientId} />
           <OutboundWebhooksSection clientId={clientId} />
           <DangerZoneSection clientId={clientId} clientName={client.name} />

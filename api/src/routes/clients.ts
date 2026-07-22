@@ -485,17 +485,33 @@ export async function clientRoutes(app: FastifyInstance) {
   // links aren't a client_integrations row, they're a dedicated many-to-many table.
   app.post<{
     Params: { id: string }
-    Body: { primary_identity_id: string; linked_identity_id: string }
+    Body: { primary_email: string; linked_email: string }
   }>('/clients/:id/identity-links', async (req, reply) => {
     const { id } = req.params
-    const { primary_identity_id, linked_identity_id } = req.body
-    if (!primary_identity_id || !linked_identity_id) {
-      return reply.code(400).send({ error: 'primary_identity_id and linked_identity_id required' })
+    const primaryEmail = req.body.primary_email?.toLowerCase().trim()
+    const linkedEmail = req.body.linked_email?.toLowerCase().trim()
+    if (!primaryEmail || !linkedEmail) {
+      return reply.code(400).send({ error: 'primary_email and linked_email required' })
     }
-    if (primary_identity_id === linked_identity_id) {
+    if (primaryEmail === linkedEmail) {
       return reply.code(400).send({ error: 'Cannot link an identity to itself' })
     }
-    const [a, b] = [primary_identity_id, linked_identity_id].sort()
+
+    // Manual linking is by email — the same identifier every other feature in this
+    // app uses (tags, journey, custom costs) — rather than exposing raw identity
+    // UUIDs, which no dashboard user would ever have on hand.
+    const { rows: identityRows } = await db.query<{ id: string; email: string }>(
+      `SELECT id, email FROM identities WHERE client_id = $1 AND email IN ($2, $3)`,
+      [id, primaryEmail, linkedEmail]
+    )
+    const primaryIdentity = identityRows.find((r) => r.email === primaryEmail)
+    const linkedIdentity = identityRows.find((r) => r.email === linkedEmail)
+    if (!primaryIdentity || !linkedIdentity) {
+      const missing = [!primaryIdentity && primaryEmail, !linkedIdentity && linkedEmail].filter(Boolean)
+      return reply.code(404).send({ error: `No identity found for: ${missing.join(', ')}` })
+    }
+
+    const [a, b] = [primaryIdentity.id, linkedIdentity.id].sort()
     const { rows } = await db.query(
       `INSERT INTO identity_links (client_id, primary_identity_id, linked_identity_id, mechanism, confidence)
        VALUES ($1, $2, $3, 'manual', 1.0)
@@ -503,11 +519,12 @@ export async function clientRoutes(app: FastifyInstance) {
        RETURNING *`,
       [id, a, b]
     )
-    return reply.code(200).send(rows[0] ?? { message: 'Link already exists' })
+    const link = rows[0]
+    return reply.code(200).send(link ? { ...link, confidence: parseFloat(link.confidence) } : { message: 'Link already exists' })
   })
 
   app.get<{ Params: { id: string } }>('/clients/:id/identity-links', async (req, reply) => {
-    const { rows } = await db.query(
+    const { rows } = await db.query<{ confidence: string }>(
       `SELECT l.*, pi.email AS primary_email, li.email AS linked_email
        FROM identity_links l
        JOIN identities pi ON pi.id = l.primary_identity_id
@@ -516,7 +533,9 @@ export async function clientRoutes(app: FastifyInstance) {
        ORDER BY l.created_at DESC`,
       [req.params.id]
     )
-    return reply.send(rows)
+    // confidence is NUMERIC in Postgres, which node-postgres returns as a string —
+    // every other report route in this app parses it before responding.
+    return reply.send(rows.map((r) => ({ ...r, confidence: parseFloat(r.confidence) })))
   })
 
   // Step 29 — outbound webhook subscriptions. Dedicated CRUD, not upsertIntegration()

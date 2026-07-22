@@ -239,6 +239,41 @@ export function createTrackingNumber(
   });
 }
 
+export interface IdentityLink {
+  id: string;
+  primary_identity_id: string;
+  linked_identity_id: string;
+  primary_email: string;
+  linked_email: string;
+  mechanism: "session_id" | "phone_number" | "ip" | "manual";
+  confidence: number;
+  created_at: string;
+}
+
+export function getIdentityLinks(clientId: string): Promise<IdentityLink[]> {
+  return apiRequest(`${API_URL}/clients/${clientId}/identity-links`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function createIdentityLink(
+  clientId: string,
+  body: { primary_email: string; linked_email: string }
+): Promise<IdentityLink> {
+  return apiRequest(`${API_URL}/clients/${clientId}/identity-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      throw new Error(errorBody.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
 export const saveShopifyIntegration = (clientId: string, body: { webhook_secret: string; shop_domain: string }) =>
   postIntegration(clientId, "shopify", body);
 

@@ -16,6 +16,8 @@ import {
   deleteWebhookSubscription,
   getTrackingNumbers,
   createTrackingNumber,
+  getIdentityLinks,
+  createIdentityLink,
   deleteClient,
   OUTBOUND_WEBHOOK_EVENT_TYPES,
   Client,
@@ -566,6 +568,86 @@ function OutboundWebhooksSection({ clientId }: { clientId: string }) {
   );
 }
 
+const MECHANISM_LABEL: Record<string, string> = {
+  session_id: "Same session",
+  phone_number: "Matched phone",
+  ip: "Matched IP",
+  manual: "Manually linked",
+};
+
+function IdentityLinksSection({ clientId }: { clientId: string }) {
+  const [primaryEmail, setPrimaryEmail] = useState("");
+  const [linkedEmail, setLinkedEmail] = useState("");
+  const queryClient = useQueryClient();
+
+  const { data: links, isLoading } = useQuery({
+    queryKey: ["identity-links", clientId],
+    queryFn: () => getIdentityLinks(clientId),
+  });
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createIdentityLink(clientId, { primary_email: primaryEmail.trim(), linked_email: linkedEmail.trim() }),
+    onSuccess: () => {
+      setPrimaryEmail("");
+      setLinkedEmail("");
+      queryClient.invalidateQueries({ queryKey: ["identity-links", clientId] });
+    },
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Identity Links</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Cross-device matching links a returning visitor automatically when it can (same session, a matched phone
+          number or IP) — but an exact-match-only system will sometimes miss a real person across two devices. Use
+          this to manually tell it two leads are the same person; their sessions and purchases stay separate rows,
+          this just records that they belong together.
+        </p>
+
+        {isLoading && <Skeleton className="h-16 w-full" />}
+        {!isLoading && links?.length === 0 && <p className="text-xs text-muted-foreground">No links yet.</p>}
+        {links && links.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {links.map((l) => (
+              <div key={l.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                <span className="truncate">
+                  {l.primary_email} <span className="text-muted-foreground">&harr;</span> {l.linked_email}
+                </span>
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  {MECHANISM_LABEL[l.mechanism] ?? l.mechanism}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>First lead&apos;s email</FieldLabel>
+            <Input className="w-56" value={primaryEmail} onChange={(e) => setPrimaryEmail(e.target.value)} placeholder="lead@example.com" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Second lead&apos;s email</FieldLabel>
+            <Input className="w-56" value={linkedEmail} onChange={(e) => setLinkedEmail(e.target.value)} placeholder="same-person@example.com" />
+          </div>
+          {mutation.isError && <p className="text-xs text-status-critical">{(mutation.error as Error).message}</p>}
+          <Button
+            size="sm"
+            disabled={!primaryEmail.trim() || !linkedEmail.trim() || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            Link
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DangerZoneSection({ clientId, clientName }: { clientId: string; clientName: string }) {
   const [confirmText, setConfirmText] = useState("");
   const router = useRouter();
@@ -633,6 +715,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <TrackingNumbersSection clientId={clientId} />
           <TagWebhookSection clientId={clientId} />
           <OutboundWebhooksSection clientId={clientId} />
+          <IdentityLinksSection clientId={clientId} />
           <DangerZoneSection clientId={clientId} clientName={client.name} />
         </>
       )}

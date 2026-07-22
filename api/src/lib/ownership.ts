@@ -39,6 +39,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/utm-mismatches': 'client',
   '/clients/:id/budget-target': 'client',
   '/clients/:id/currency': 'client',
+  '/clients/:id/report-schedule': 'client',
   '/clients/:id/audit-log': 'client',
   '/account/audit-log': 'skip',
   '/clients/:id/identity-links': 'client',

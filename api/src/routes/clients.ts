@@ -214,6 +214,25 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
+  // Step 57 — opt-in periodic (weekly/monthly) report email, sent to the owning
+  // user's email by the scheduler. 'none' turns it back off.
+  app.patch<{ Params: { id: string }; Body: { report_schedule_frequency: string } }>(
+    '/clients/:id/report-schedule',
+    async (req, reply) => {
+      const { id } = req.params
+      const frequency = req.body.report_schedule_frequency
+      if (!['none', 'weekly', 'monthly'].includes(frequency)) {
+        return reply.code(400).send({ error: 'report_schedule_frequency must be one of: none, weekly, monthly' })
+      }
+      const { rows } = await db.query('UPDATE clients SET report_schedule_frequency = $1 WHERE id = $2 RETURNING *', [
+        frequency,
+        id,
+      ])
+      if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+      return reply.send(rows[0])
+    }
+  )
+
   // Step 43 — account-wide monthly ad-spend budget target, used by the budget
   // pacing report. null clears it back to "no target set."
   app.patch<{

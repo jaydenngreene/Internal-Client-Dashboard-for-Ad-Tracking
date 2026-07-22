@@ -46,3 +46,41 @@ export function sendVerificationEmail(to: string, verifyUrl: string): Promise<vo
      <p><a href="${verifyUrl}">Click here to verify</a>.</p>`
   )
 }
+
+interface ScheduledReportSummary {
+  clientName: string
+  from: string
+  to: string
+  cost: number
+  revenue: number
+  profit: number
+  roas: number | null
+  leads: number
+  sales: number
+  currency: string
+}
+
+const money = (n: number, currency: string) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n)
+
+// Step 57 — the periodic (weekly/monthly) account summary a client owner opts
+// into via clients.report_schedule_frequency. Reuses the exact numbers
+// `/reports/overview` computes (via lib/overviewSummary.ts) rather than a
+// second hand-written aggregation.
+export function sendScheduledReportEmail(to: string, s: ScheduledReportSummary): Promise<void> {
+  return sendEmail(
+    to,
+    `${s.clientName} performance summary: ${s.from} to ${s.to}`,
+    `<p>Here's how <strong>${s.clientName}</strong> performed from ${s.from} to ${s.to}:</p>
+     <ul>
+       <li>Ad spend: ${money(s.cost, s.currency)}</li>
+       <li>Attributed revenue: ${money(s.revenue, s.currency)}</li>
+       <li>Profit: ${money(s.profit, s.currency)}</li>
+       <li>ROAS: ${s.roas === null ? 'n/a (no spend in this window)' : `${s.roas.toFixed(2)}x`}</li>
+       <li>Leads: ${s.leads}</li>
+       <li>Sales: ${s.sales}</li>
+     </ul>
+     <p>Log in to the dashboard for the full breakdown by campaign and source.</p>
+     <p style="color:#888;font-size:12px">You're receiving this because scheduled reports are enabled for this client in Settings. You can turn this off there at any time.</p>`
+  )
+}

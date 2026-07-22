@@ -10,6 +10,7 @@ import { runWarehouseExports } from '../lib/bigqueryExport'
 import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
 import { detectCreativeFatigue } from '../jobs/creativeFatigue/run'
 import { detectReallocationOpportunities } from '../lib/budgetReallocation'
+import { sendWeeklyReports, sendMonthlyReports } from '../jobs/scheduledReports/run'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -110,6 +111,20 @@ export function startScheduledJobs(): void {
   // pointless overhead for deliveries whose next_retry_at is hours out.
   cron.schedule('*/2 * * * *', () => {
     runAndRecord('webhook_retry', retryFailedWebhookDeliveries)
+  })
+
+  // Step 57 — opt-in periodic report emails. Monday 8am covers the just-ended
+  // week; the 1st of the month at 8am covers the just-ended month. Both run
+  // well after the 7am daily job family so the trailing window's ad-cost data
+  // has already synced for the day.
+  cron.schedule('0 8 * * 1', () => {
+    console.log('[scheduler] sending weekly report emails')
+    runAndRecord('weekly_report_email', sendWeeklyReports)
+  })
+
+  cron.schedule('0 8 1 * *', () => {
+    console.log('[scheduler] sending monthly report emails')
+    runAndRecord('monthly_report_email', sendMonthlyReports)
   })
 
   // Run once immediately on startup too, so data isn't stale from a cold start

@@ -10,6 +10,7 @@ import {
   updateAttributionModel,
   updateClientMargin,
   updateClientCurrency,
+  updateReportSchedule,
   updateBudgetTarget,
   generateShareLink,
   revokeShareLink,
@@ -50,6 +51,12 @@ const NICHE_LABEL: Record<Niche, string> = {
   saas: "SaaS",
   info_product: "Info product / education",
   other: "Other",
+};
+
+const REPORT_SCHEDULE_LABEL: Record<Client["report_schedule_frequency"], string> = {
+  none: "Off",
+  weekly: "Weekly",
+  monthly: "Monthly",
 };
 
 const ATTRIBUTION_LABEL: Record<Client["attribution_model"], string> = {
@@ -112,6 +119,11 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
   const [currency, setCurrency] = useState(client.currency);
   const currencyMutation = useMutation({
     mutationFn: () => updateClientCurrency(clientId, currency),
+    onSuccess: invalidateClient,
+  });
+
+  const reportScheduleMutation = useMutation({
+    mutationFn: (frequency: Client["report_schedule_frequency"]) => updateReportSchedule(clientId, frequency),
     onSuccess: invalidateClient,
   });
 
@@ -196,6 +208,28 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
             {currencyMutation.isError && (
               <p className="text-xs text-status-critical">{(currencyMutation.error as Error).message}</p>
             )}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Scheduled report email</FieldLabel>
+            <Select
+              value={client.report_schedule_frequency}
+              onValueChange={(v) => reportScheduleMutation.mutate(v as Client["report_schedule_frequency"])}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue>
+                  {(v: Client["report_schedule_frequency"]) => REPORT_SCHEDULE_LABEL[v]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(REPORT_SCHEDULE_LABEL) as Client["report_schedule_frequency"][]).map((f) => (
+                  <SelectItem key={f} value={f}>
+                    {REPORT_SCHEDULE_LABEL[f]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Sends a performance summary to your login email.</p>
           </div>
         </div>
 

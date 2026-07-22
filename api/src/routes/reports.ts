@@ -4,6 +4,7 @@ import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
 import { projectSum } from '../lib/forecasting'
 import { computeMMM } from '../lib/mmm'
+import { getOverviewSummary } from '../lib/overviewSummary'
 
 export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -305,32 +306,11 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [marginConfig, costTotal, revenueTotal, leadsTotal, salesTotal, costByDay, revenueByDay, salesByDay] = await Promise.all([
+      const [summary, marginConfig, costByDay, revenueByDay, salesByDay] = await Promise.all([
+        getOverviewSummary(clientId, from, to),
         db.query<MarginConfig>(
           `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
           [clientId]
-        ),
-        db.query<{ total: string }>(
-          `SELECT
-             (SELECT COALESCE(SUM(spend), 0) FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3) +
-             (SELECT COALESCE(SUM(spend), 0) FROM custom_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3)
-             AS total`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string }>(
-          `SELECT COALESCE(SUM(a.attributed_revenue), 0) AS total
-           FROM attributions a JOIN purchases p ON p.id = a.purchase_id
-           WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string }>(
-          `SELECT COUNT(*) AS total FROM leads WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string }>(
-          `SELECT COUNT(*) AS total FROM purchases
-           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded`,
-          [clientId, from, to]
         ),
         db.query<{ date: string; total: string }>(
           `SELECT date::text, SUM(spend) AS total FROM (
@@ -356,14 +336,8 @@ export async function reportRoutes(app: FastifyInstance) {
         ),
       ])
 
-      const cost = parseFloat(costTotal.rows[0].total)
-      const revenue = parseFloat(revenueTotal.rows[0].total)
-      const sales = parseInt(salesTotal.rows[0].total, 10)
-      const profit = revenue - cost
-      const roas = cost > 0 ? revenue / cost : null
-      const roi = cost > 0 ? (profit / cost) * 100 : null
+      const { cost, revenue, profit, roas, roi, trueProfit, trueRoi, leads, sales } = summary
       const margin = marginConfig.rows[0] ?? null
-      const { trueProfit, trueRoi } = computeTrueProfit(margin, revenue, cost, sales)
 
       const costByDate = new Map(costByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
       const revenueByDate = new Map(revenueByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
@@ -393,7 +367,7 @@ export async function reportRoutes(app: FastifyInstance) {
         trueProfit,
         trueRoi,
         hasMarginConfig: Boolean(margin && (margin.cogs_percent || margin.payment_fee_percent || margin.fulfillment_cost_flat)),
-        leads: parseInt(leadsTotal.rows[0].total, 10),
+        leads,
         sales,
         series,
       })

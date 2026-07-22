@@ -1,4 +1,5 @@
 import { db } from '../db'
+import { lookupGeo } from './geo'
 
 interface AdParams {
   fbclid?: string
@@ -23,15 +24,17 @@ export async function resolveSession(
   clientId: string,
   visitorId: string,
   url: string,
-  params: AdParams = {}
+  params: AdParams = {},
+  ip?: string | null
 ): Promise<string> {
   const hasAdData = params.fbclid || params.gclid || params.ttclid || params.msclkid || params.utm_source
+  const geo = lookupGeo(ip)
 
   if (hasAdData) {
     const { rows } = await db.query(
       `INSERT INTO sessions
-       (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer, country, region)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING id`,
       [
         clientId,
@@ -47,6 +50,8 @@ export async function resolveSession(
         params.utm_term,
         params.landing_page ?? url,
         params.referrer,
+        geo.country,
+        geo.region,
       ]
     )
     return rows[0].id
@@ -59,8 +64,8 @@ export async function resolveSession(
   if (existing.length > 0) return existing[0].id
 
   const { rows: created } = await db.query(
-    `INSERT INTO sessions (client_id, visitor_id, landing_page, referrer) VALUES ($1, $2, $3, $4) RETURNING id`,
-    [clientId, visitorId, url, params.referrer]
+    `INSERT INTO sessions (client_id, visitor_id, landing_page, referrer, country, region) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [clientId, visitorId, url, params.referrer, geo.country, geo.region]
   )
   return created[0].id
 }

@@ -30,6 +30,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "budget-reallocation", label: "Budget Reallocation", enabled: true },
   { slug: "creative-fatigue", label: "Creative Fatigue", enabled: true },
   { slug: "incrementality", label: "Incrementality Testing", enabled: true },
+  { slug: "geo-lift", label: "Geo-Lift Testing", enabled: true },
   { slug: "tags", label: "Tags & Stages", enabled: true },
   { slug: "audiences", label: "Audiences", enabled: true },
   { slug: "cohorts", label: "Cohorts", enabled: true },

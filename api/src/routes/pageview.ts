@@ -71,19 +71,25 @@ export async function pageviewRoutes(app: FastifyInstance) {
       fingerprintComponents: fingerprint_components,
     })
 
-    const sessionId = await resolveSession(clientId, visitorId, url, {
-      fbclid,
-      gclid,
-      ttclid,
-      msclkid,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      landing_page,
-      referrer,
-    })
+    const sessionId = await resolveSession(
+      clientId,
+      visitorId,
+      url,
+      {
+        fbclid,
+        gclid,
+        ttclid,
+        msclkid,
+        utm_source,
+        utm_medium,
+        utm_campaign,
+        utm_content,
+        utm_term,
+        landing_page,
+        referrer,
+      },
+      ip
+    )
 
     // Record pageview
     await db.query(

@@ -491,6 +491,64 @@ export function getMmm(clientId: string): Promise<MmmResult> {
   return fetchJson<MmmResult>(`/clients/${clientId}/reports/mmm`);
 }
 
+// Step 53 — true geo-lift/holdout testing via difference-in-differences. The
+// user excludes holdout_regions from the campaign's own ad-platform targeting;
+// this app only defines the test and runs the DiD analysis.
+export interface GeoLiftTest {
+  id: string;
+  client_id: string;
+  platform: string;
+  campaign_name: string;
+  holdout_regions: string[];
+  pre_period_days: number;
+  test_start: string;
+  test_end: string;
+  created_at: string;
+}
+
+export interface GeoLiftResult {
+  status: "pending" | "running" | "completed";
+  preHoldoutRevenuePerSession: number;
+  preTreatmentRevenuePerSession: number;
+  duringHoldoutRevenuePerSession: number | null;
+  duringTreatmentRevenuePerSession: number | null;
+  didEstimate: number | null;
+  holdoutSessions: number;
+  treatmentSessions: number;
+}
+
+export interface GeoLiftTestWithResult {
+  test: GeoLiftTest;
+  result: GeoLiftResult;
+}
+
+export function getGeoLiftTests(clientId: string): Promise<GeoLiftTestWithResult[]> {
+  return fetchJson<GeoLiftTestWithResult[]>(`/clients/${clientId}/geo-lift-tests`);
+}
+
+export function createGeoLiftTest(
+  clientId: string,
+  body: { platform: string; campaignName: string; holdoutRegions: string[]; testStart: string; testEnd: string; prePeriodDays?: number }
+): Promise<GeoLiftTestWithResult> {
+  return apiRequest(`${API_URL}/clients/${clientId}/geo-lift-tests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function deleteGeoLiftTest(testId: string): Promise<void> {
+  return apiRequest(`${API_URL}/geo-lift-tests/${testId}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

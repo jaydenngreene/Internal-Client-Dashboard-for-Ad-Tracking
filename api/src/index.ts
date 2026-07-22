@@ -32,6 +32,7 @@ import { incrementalityRoutes } from './routes/incrementality'
 import { creativeFatigueRoutes } from './routes/creativeFatigue'
 import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { chatRoutes } from './routes/chat'
+import { geoLiftRoutes } from './routes/geoLift'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -135,6 +136,7 @@ app.register(
     instance.register(creativeFatigueRoutes)
     instance.register(budgetReallocationRoutes)
     instance.register(chatRoutes)
+    instance.register(geoLiftRoutes)
     instance.register(customCostsRoutes)
     instance.register(tagRoutes)
     instance.register(audienceSyncRoutes)

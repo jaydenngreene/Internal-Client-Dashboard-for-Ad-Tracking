@@ -85,6 +85,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/creative-fatigue': 'client',
   '/clients/:id/budget-reallocations': 'client',
   '/clients/:id/chat': 'client',
+  '/clients/:id/geo-lift-tests': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
 
@@ -102,6 +103,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/pause-candidates/:id/dismiss': (req) => clientIdFrom('pause_candidates', 'id', (req.params as { id: string }).id),
   '/incrementality-tests/:testId': (req) =>
     clientIdFrom('incrementality_tests', 'id', (req.params as { testId: string }).testId),
+  '/geo-lift-tests/:testId': (req) =>
+    clientIdFrom('geo_lift_tests', 'id', (req.params as { testId: string }).testId),
   '/creative-fatigue/:id/dismiss': (req) =>
     clientIdFrom('creative_fatigue_signals', 'id', (req.params as { id: string }).id),
   '/budget-reallocations/:id/confirm': (req) =>

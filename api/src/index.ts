@@ -27,6 +27,7 @@ import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
 import { insightsRoutes } from './routes/insights'
+import { startScheduledJobs } from './lib/scheduler'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -95,6 +96,11 @@ const start = async () => {
     const port = Number(process.env.PORT ?? 3001)
     await app.listen({ port, host: '0.0.0.0' })
     console.log(`API running on port ${port}`)
+    // Ad-cost sync, LTV refresh, and audience sync only ever run while this
+    // process is alive — there's no OS-level cron here. In production that means
+    // this API needs to run on something that stays up continuously (a VPS,
+    // Render/Railway/Fly, etc.), not just a laptop dev server that sleeps.
+    startScheduledJobs()
   } catch (err) {
     app.log.error(err)
     process.exit(1)

@@ -7,6 +7,7 @@ import { detectAnomalies } from '../jobs/anomalyDetection/run'
 import { transcribeAndScoreCalls } from '../jobs/callTranscription/run'
 import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 import { runWarehouseExports } from '../lib/bigqueryExport'
+import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -64,6 +65,13 @@ export function startScheduledJobs(): void {
   cron.schedule('0 4 * * *', () => {
     console.log('[scheduler] running BigQuery warehouse exports')
     runAndRecord('warehouse_export', runWarehouseExports)
+  })
+
+  // Same 6-hourly cadence as ad-cost sync — email/SMS campaign performance is the
+  // email/SMS-channel equivalent of ad spend/revenue, worth keeping similarly fresh.
+  cron.schedule('30 */6 * * *', () => {
+    console.log('[scheduler] running Klaviyo campaign sync')
+    runAndRecord('klaviyo_sync', runKlaviyoSync)
   })
 
   // Runs after the 6-hourly ad-cost sync has a chance to land yesterday's finalized

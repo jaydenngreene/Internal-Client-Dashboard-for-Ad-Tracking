@@ -672,6 +672,63 @@ export async function reportRoutes(app: FastifyInstance) {
     })
   })
 
+  // Step 46 — email/SMS marketing attribution. Klaviyo's own campaign reporting
+  // (opens/clicks/revenue per campaign), previously nowhere in this app — the
+  // existing 'klaviyo' integration (Step 12) only ever added a person to a list,
+  // no visibility into campaign performance existed at all.
+  app.get<{ Params: { id: string } }>('/clients/:id/reports/email-sms', async (req, reply) => {
+    const { rows } = await db.query<{
+      campaign_id: string
+      campaign_name: string | null
+      channel: string
+      recipients: string
+      opens: string
+      clicks: string
+      revenue: string
+      orders: string
+    }>(
+      `SELECT campaign_id, campaign_name, channel,
+              SUM(recipients) AS recipients, SUM(opens) AS opens, SUM(clicks) AS clicks,
+              SUM(revenue) AS revenue, SUM(orders) AS orders
+       FROM email_campaign_stats WHERE client_id = $1
+       GROUP BY campaign_id, campaign_name, channel
+       ORDER BY SUM(revenue) DESC`,
+      [req.params.id]
+    )
+
+    const campaigns = rows.map((r) => {
+      const recipients = parseInt(r.recipients, 10)
+      const opens = parseInt(r.opens, 10)
+      const clicks = parseInt(r.clicks, 10)
+      const revenue = parseFloat(r.revenue)
+      const orders = parseInt(r.orders, 10)
+      return {
+        campaignId: r.campaign_id,
+        campaignName: r.campaign_name ?? '(unnamed campaign)',
+        channel: r.channel as 'email' | 'sms',
+        recipients,
+        opens,
+        clicks,
+        revenue,
+        orders,
+        openRate: recipients > 0 ? (opens / recipients) * 100 : null,
+        clickRate: recipients > 0 ? (clicks / recipients) * 100 : null,
+        revenuePerRecipient: recipients > 0 ? revenue / recipients : null,
+      }
+    })
+
+    const totals = campaigns.reduce(
+      (acc, c) => ({
+        recipients: acc.recipients + c.recipients,
+        revenue: acc.revenue + c.revenue,
+        orders: acc.orders + c.orders,
+      }),
+      { recipients: 0, revenue: 0, orders: 0 }
+    )
+
+    return reply.send({ campaigns, totals })
+  })
+
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(
     '/clients/:id/reports/ltv',
     async (req, reply) => {

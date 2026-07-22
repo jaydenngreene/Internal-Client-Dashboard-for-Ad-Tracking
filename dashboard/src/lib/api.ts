@@ -305,6 +305,30 @@ export interface IncrementalityTestWithResult {
   result: IncrementalityResult;
 }
 
+// Step 46 — email/SMS marketing attribution via Klaviyo's own campaign reporting.
+export interface EmailCampaignRow {
+  campaignId: string;
+  campaignName: string;
+  channel: "email" | "sms";
+  recipients: number;
+  opens: number;
+  clicks: number;
+  revenue: number;
+  orders: number;
+  openRate: number | null;
+  clickRate: number | null;
+  revenuePerRecipient: number | null;
+}
+
+export interface EmailSmsReport {
+  campaigns: EmailCampaignRow[];
+  totals: { recipients: number; revenue: number; orders: number };
+}
+
+export function getEmailSmsReport(clientId: string): Promise<EmailSmsReport> {
+  return fetchJson<EmailSmsReport>(`/clients/${clientId}/reports/email-sms`);
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

@@ -21,6 +21,52 @@ export function campaignGoalForNiche(niche: Niche): "leads" | "sales" {
   return LEAD_GOAL_NICHES.includes(niche) ? "leads" : "sales";
 }
 
+export const NICHES: Niche[] = ["ecommerce", "call", "lead_gen", "saas", "info_product", "other"];
+
+// Add Client wizard — ports the scripts/setup-*.ts CLI wizards into the dashboard.
+// Every one of these calls an endpoint that already existed for the CLI scripts;
+// no backend changes needed, this is purely a new frontend surface on top of them.
+export function createClient(input: { name: string; niche: Niche; timezone: string }): Promise<Client> {
+  return fetch(`${API_URL}/clients`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export type ProcessorPlatform = "shopify" | "stripe" | "paypal" | "square" | "gohighlevel";
+
+function postIntegration(clientId: string, platform: string, body: Record<string, unknown>): Promise<unknown> {
+  return fetch(`${API_URL}/clients/${clientId}/integrations/${platform}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export const saveShopifyIntegration = (clientId: string, body: { webhook_secret: string; shop_domain: string }) =>
+  postIntegration(clientId, "shopify", body);
+
+export const saveStripeIntegration = (clientId: string, body: { webhook_secret: string }) =>
+  postIntegration(clientId, "stripe", body);
+
+export const savePaypalIntegration = (
+  clientId: string,
+  body: { client_id: string; client_secret: string; webhook_id: string; sandbox?: boolean }
+) => postIntegration(clientId, "paypal", body);
+
+export const saveSquareIntegration = (clientId: string, body: { signature_key: string; notification_url: string }) =>
+  postIntegration(clientId, "square", body);
+
+export const saveGoHighLevelIntegration = (clientId: string, body: { webhook_secret: string }) =>
+  postIntegration(clientId, "gohighlevel", body);
+
 export interface DateRange {
   from: string;
   to: string;

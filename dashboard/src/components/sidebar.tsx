@@ -75,9 +75,19 @@ export function Sidebar() {
         </div>
 
         <div className="mb-6">
-          <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Clients
-          </p>
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Clients</p>
+            <Link
+              href="/clients/new"
+              className={cn(
+                navLinkBase,
+                "px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-sidebar-foreground",
+                pathname === "/clients/new" && "text-primary"
+              )}
+            >
+              + Add
+            </Link>
+          </div>
           {isLoading && (
             <div className="space-y-2 px-1">
               <Skeleton className="h-7 w-full" />

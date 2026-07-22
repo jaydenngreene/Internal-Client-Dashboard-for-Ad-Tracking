@@ -9,4 +9,14 @@ export interface AdCostRow {
   spend: number
   impressions: number
   clicks: number
+  // The actual ad creative (what the campaign/creative drill-down UI shows) — optional
+  // because only Facebook's fetcher populates it so far; every other platform's fetcher
+  // leaves these undefined and upsertAdCosts writes them through as NULL.
+  creative_thumbnail_url?: string | null
+  creative_asset_url?: string | null
+  creative_type?: 'image' | 'video' | null
+  creative_headline?: string | null
+  creative_primary_text?: string | null
+  creative_description?: string | null
+  creative_landing_page_url?: string | null
 }

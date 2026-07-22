@@ -28,6 +28,64 @@ interface TikTokReportResponse {
   }
 }
 
+interface TikTokAdEntity {
+  ad_id: string
+  ad_text?: string
+  landing_page_url?: string
+}
+
+interface TikTokAdGetResponse {
+  code: number
+  message: string
+  data?: { list: TikTokAdEntity[] }
+}
+
+// TikTok's basic ad formats have a single "ad_text" field (shown alongside the
+// creative) rather than a distinct headline/primary-text/description split — mapped
+// to primaryText since that's the closest fit, headline/description left null rather
+// than guessed. Unlike Facebook's per-ad lookup, TikTok's ad/get endpoint accepts a
+// list of ad_ids in one filtered call, so this is one request per 100 ads instead of
+// one request per ad.
+async function fetchTikTokCopy(
+  accessToken: string,
+  advertiserId: string,
+  adIds: string[]
+): Promise<Map<string, { headline: string | null; primaryText: string | null; description: string | null; landingPageUrl: string | null }>> {
+  const result = new Map<
+    string,
+    { headline: string | null; primaryText: string | null; description: string | null; landingPageUrl: string | null }
+  >()
+
+  for (let i = 0; i < adIds.length; i += 100) {
+    const chunk = adIds.slice(i, i + 100)
+    const params = new URLSearchParams({
+      advertiser_id: advertiserId,
+      filtering: JSON.stringify({ ad_ids: chunk }),
+      fields: JSON.stringify(['ad_id', 'ad_text', 'landing_page_url']),
+      page_size: '100',
+    })
+    try {
+      const res = await fetch(`https://business-api.tiktok.com/open_api/${TIKTOK_API_VERSION}/ad/get/?${params.toString()}`, {
+        headers: { 'Access-Token': accessToken },
+      })
+      const body = (await res.json()) as TikTokAdGetResponse
+      if (!res.ok || body.code !== 0) continue
+      for (const ad of body.data?.list ?? []) {
+        result.set(ad.ad_id, {
+          headline: null,
+          primaryText: ad.ad_text ?? null,
+          description: null,
+          landingPageUrl: ad.landing_page_url ?? null,
+        })
+      }
+    } catch {
+      // A failed copy lookup never blocks spend/impressions/clicks from syncing.
+    }
+  }
+
+  return result
+}
+
 export async function fetchTikTokAdCosts(
   accessToken: string,
   advertiserId: string,
@@ -88,6 +146,15 @@ export async function fetchTikTokAdCosts(
     totalPages = body.data?.page_info?.total_page ?? 1
     page += 1
   } while (page <= totalPages)
+
+  const copyByAdId = await fetchTikTokCopy(accessToken, advertiserId, Array.from(new Set(rows.map((r) => r.ad_id))))
+  for (const row of rows) {
+    const copy = copyByAdId.get(row.ad_id)
+    row.creative_headline = copy?.headline ?? null
+    row.creative_primary_text = copy?.primaryText ?? null
+    row.creative_description = copy?.description ?? null
+    row.creative_landing_page_url = copy?.landingPageUrl ?? null
+  }
 
   return rows
 }

@@ -13,6 +13,27 @@ interface PinterestAnalyticsRow {
   CLICKTHROUGH_2?: number
 }
 
+interface PinterestAdEntity {
+  id: string
+  destination_url?: string
+}
+
+// Pinterest ads are Promoted Pins — the actual visible headline/description text
+// lives on the underlying Pin, not the Ad entity itself, and reaching it needs a
+// further ad -> pin_id -> pin hop whose exact field name isn't confidently documented
+// enough to guess at here (unlike destination_url, which is a plain field on the Ad
+// object itself). headline/primaryText/description stay null; landingPageUrl is
+// fetched per unique ad id, same sequential per-ad trade-off as facebook.ts/
+// snapchat.ts (no documented bulk-by-ids endpoint for this call).
+async function fetchPinterestLandingPageUrl(accessToken: string, adAccountId: string, adId: string): Promise<string | null> {
+  const res = await fetch(`https://api.pinterest.com/v5/ad_accounts/${adAccountId}/ads/${adId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return null
+  const body = (await res.json()) as PinterestAdEntity
+  return body.destination_url ?? null
+}
+
 export async function fetchPinterestAdCosts(
   accessToken: string,
   adAccountId: string,
@@ -57,6 +78,22 @@ export async function fetchPinterestAdCosts(
         clicks: r.CLICKTHROUGH_2 ?? 0,
       })
     }
+  }
+
+  const uniqueAdIds = Array.from(new Set(rows.map((r) => r.ad_id)))
+  const landingPageByAdId = new Map<string, string | null>()
+  for (const adId of uniqueAdIds) {
+    try {
+      landingPageByAdId.set(adId, await fetchPinterestLandingPageUrl(accessToken, adAccountId, adId))
+    } catch {
+      landingPageByAdId.set(adId, null)
+    }
+  }
+  for (const row of rows) {
+    row.creative_headline = null
+    row.creative_primary_text = null
+    row.creative_description = null
+    row.creative_landing_page_url = landingPageByAdId.get(row.ad_id) ?? null
   }
 
   return rows

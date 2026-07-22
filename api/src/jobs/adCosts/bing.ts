@@ -37,6 +37,9 @@ async function submitReport(headers: Record<string, string>, accountId: string, 
         'Spend',
         'Impressions',
         'Clicks',
+        'AdTitle',
+        'AdDescription',
+        'DestinationUrl',
       ],
     },
   }
@@ -96,6 +99,13 @@ function parseReportCsv(csvText: string): AdCostRow[] {
       spend: parseFloat(cells[col('Spend')] || '0'),
       impressions: parseInt(cells[col('Impressions')] || '0', 10),
       clicks: parseInt(cells[col('Clicks')] || '0', 10),
+      // Microsoft's text/expanded-text-ad formats always carry these two columns —
+      // there's no separate "primary text" field distinct from headline/description
+      // (same shape as Google Search ads).
+      creative_headline: cells[col('AdTitle')] || null,
+      creative_primary_text: null,
+      creative_description: cells[col('AdDescription')] || null,
+      creative_landing_page_url: cells[col('DestinationUrl')] || null,
     }
   })
 }

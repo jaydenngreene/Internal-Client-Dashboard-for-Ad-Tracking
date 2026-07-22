@@ -9,6 +9,8 @@ import {
   updateClientNiche,
   updateAttributionModel,
   updateClientMargin,
+  generateShareLink,
+  revokeShareLink,
   getIntegrations,
   saveIntegration,
   generateTagWebhookSecret,
@@ -874,6 +876,62 @@ function DangerZoneSection({ clientId, clientName }: { clientId: string; clientN
   );
 }
 
+// Step 40 — a shareable, unauthenticated read-only report link (user's explicit
+// choice over a real client-role login). Regenerating overwrites/revokes the
+// previous token immediately; the link's actual page is /share/[token], outside
+// this app's login gate entirely (see app-shell.tsx's PUBLIC_PATH_PREFIXES).
+function ShareLinkSection({ clientId, client }: { clientId: string; client: Client }) {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["client", clientId] });
+  const generate = useMutation({ mutationFn: () => generateShareLink(clientId), onSuccess: invalidate });
+  const revoke = useMutation({ mutationFn: () => revokeShareLink(clientId), onSuccess: invalidate });
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = client.public_share_token
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/${client.public_share_token}`
+    : null;
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Public Share Link</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          A clean, read-only overview report this client can view with no login — cost, revenue, profit, ROAS/ROI.
+          No integration or credential details are ever exposed through it.
+        </p>
+        {shareUrl ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <CodeBlock>{shareUrl}</CodeBlock>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+            <Button size="sm" variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
+              Regenerate (revokes old link)
+            </Button>
+            <Button size="sm" variant="outline" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
+              Revoke
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" disabled={generate.isPending} onClick={() => generate.mutate()}>
+            {generate.isPending ? "Generating…" : "Generate share link"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SettingsClient({ clientId }: { clientId: string }) {
   const { data: client, isLoading } = useQuery({ queryKey: ["client", clientId], queryFn: () => getClient(clientId) });
 
@@ -897,6 +955,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <OutboundWebhooksSection clientId={clientId} />
           <IdentityLinksSection clientId={clientId} />
           <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
+          <ShareLinkSection clientId={clientId} client={client} />
           {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
         </>
       )}

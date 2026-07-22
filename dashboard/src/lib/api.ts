@@ -125,6 +125,9 @@ export interface Client {
   cogs_percent: number | null;
   payment_fee_percent: number | null;
   fulfillment_cost_flat: number | null;
+  // Step 40 — null until Settings generates one; regenerating overwrites/revokes
+  // the previous link.
+  public_share_token: string | null;
   // False for a client shared with this login rather than owned by it (migration
   // 028) — gates owner-only UI (collaborator management, delete) client-side; the
   // backend enforces the same restriction independently, this is just so the
@@ -233,6 +236,43 @@ export function updateClientMargin(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(margin),
   }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function generateShareLink(clientId: string): Promise<Client> {
+  return mutateJson<Client>(`/clients/${clientId}/share-link`, "POST");
+}
+
+export function revokeShareLink(clientId: string): Promise<Client> {
+  return apiRequest(`${API_URL}/clients/${clientId}/share-link`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+// Step 40 — the public share report itself needs no auth header (the token IS
+// the credential), so this deliberately does NOT go through apiRequest()'s
+// Authorization-header-attaching wrapper the way every other call in this file does.
+export interface PublicShareOverview {
+  clientName: string;
+  from: string;
+  to: string;
+  cost: number;
+  revenue: number;
+  profit: number;
+  roas: number | null;
+  roi: number | null;
+  sales: number;
+  series: { date: string; cost: number; revenue: number }[];
+}
+
+export function getPublicShareOverview(token: string): Promise<PublicShareOverview> {
+  return fetch(`${API_URL}/public/share/${token}/overview`).then(async (res) => {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `Request failed (${res.status})`);

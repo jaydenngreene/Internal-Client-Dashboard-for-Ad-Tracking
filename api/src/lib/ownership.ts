@@ -26,6 +26,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/attribution-model': 'client',
   '/clients/:id/niche': 'client',
   '/clients/:id/margin': 'client',
+  '/clients/:id/share-link': 'client',
   '/clients/:id/identity-links': 'client',
   '/clients/:id/tracking-numbers': 'client',
   '/clients/:id/webhook-subscriptions': 'client',

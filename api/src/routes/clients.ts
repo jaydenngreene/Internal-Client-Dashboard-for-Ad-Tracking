@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { isValidUrl, isValidEmail } from '../lib/validation'
 import { isClientOwner } from '../lib/ownership'
 import { backfillIntegration } from '../jobs/adCosts/run'
+import { generateRandomToken } from '../lib/auth'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 const CLIENT_NAME_MAX_LENGTH = 200
@@ -163,6 +164,29 @@ export async function clientRoutes(app: FastifyInstance) {
       `UPDATE clients SET cogs_percent = $1, payment_fee_percent = $2, fulfillment_cost_flat = $3 WHERE id = $4 RETURNING *`,
       [cogs_percent, payment_fee_percent, fulfillment_cost_flat, id]
     )
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
+  // Generate (or regenerate, revoking the old one) a public share link — Step 40.
+  // Regenerating is the deliberate revoke mechanism (matches the user's own
+  // explicit choice of a link over a client-role login): the old token stops
+  // resolving the instant a new one overwrites it.
+  app.post<{ Params: { id: string } }>('/clients/:id/share-link', async (req, reply) => {
+    const token = generateRandomToken()
+    const { rows } = await db.query('UPDATE clients SET public_share_token = $1 WHERE id = $2 RETURNING *', [
+      token,
+      req.params.id,
+    ])
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
+  // Revoke without generating a replacement.
+  app.delete<{ Params: { id: string } }>('/clients/:id/share-link', async (req, reply) => {
+    const { rows } = await db.query('UPDATE clients SET public_share_token = NULL WHERE id = $1 RETURNING *', [
+      req.params.id,
+    ])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])
   })

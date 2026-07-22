@@ -27,6 +27,7 @@ import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
 import { remarketingRoutes } from './routes/remarketing'
 import { pauseCandidateRoutes } from './routes/pauseCandidates'
+import { publicShareRoutes } from './routes/publicShare'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -109,6 +110,7 @@ app.register(dniRoutes)
 app.register(shopifyAppRoutes)
 app.register(trackTagRoutes)
 app.register(authRoutes)
+app.register(publicShareRoutes)
 
 // Dashboard-facing routes — every one of these requires a valid login (authenticate)
 // and, except for the two 'skip' cases handled in their own handlers (create/list

@@ -13,11 +13,16 @@ import { getToken } from "@/lib/auth";
 // apiRequest()'s 401 handler in lib/api.ts once a real request goes out, this
 // only guards against "no token at all."
 const PUBLIC_PATHS = ["/login", "/reset-password", "/verify-email"];
+// /share/:token (Step 40) is a whole separate tree of pages meant to be opened by
+// a client with no login at all — a prefix check, not an exact match, since every
+// token gets its own path segment.
+const PUBLIC_PATH_PREFIXES = ["/share/"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isPublicPage = PUBLIC_PATHS.includes(pathname);
+  const isPublicPage =
+    PUBLIC_PATHS.includes(pathname) || PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const [ready, setReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 

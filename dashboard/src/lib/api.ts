@@ -932,6 +932,47 @@ export function dispatchRemarketingCandidate(id: string): Promise<RemarketingCan
   return mutateJson(`/remarketing/${id}/dispatch`, "POST");
 }
 
+// Step 35 — confirm-first review surface for ad-level anomaly detection. Confirming
+// actually pauses the ad via that platform's API (Facebook only for now); dismissing
+// just closes the candidate out with no action taken.
+export type PauseCandidateStatus = "pending" | "confirmed" | "dismissed" | "failed";
+
+export interface PauseCandidate {
+  id: string;
+  client_id: string;
+  platform: string;
+  ad_id: string;
+  ad_name: string | null;
+  campaign_name: string | null;
+  reason: string;
+  status: PauseCandidateStatus;
+  error: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function getPauseCandidates(
+  clientId: string,
+  status: PauseCandidateStatus = "pending"
+): Promise<PauseCandidate[]> {
+  return fetchJson<PauseCandidate[]>(`/clients/${clientId}/pause-candidates${rangeQuery(undefined, { status })}`);
+}
+
+// Bespoke (not mutateJson) because a failed pause attempt still returns a real body
+// (the candidate marked 'failed', with the actual platform error) on a non-2xx
+// status — worth surfacing that instead of a generic "Request failed (502)".
+export function confirmPauseCandidate(id: string): Promise<PauseCandidate> {
+  return apiRequest(`${API_URL}/pause-candidates/${id}/confirm`, { method: "POST" }).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+    return body;
+  });
+}
+
+export function dismissPauseCandidate(id: string): Promise<PauseCandidate> {
+  return mutateJson<PauseCandidate>(`/pause-candidates/${id}/dismiss`, "PATCH");
+}
+
 // Step 30 — Cohorts. Pure re-aggregation of customer_ltv by acquisition month;
 // no new data collection. `months` (not a DateRange) controls how far back to look.
 export interface CohortRow {

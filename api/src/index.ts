@@ -26,6 +26,7 @@ import { dniRoutes } from './routes/dni'
 import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
 import { remarketingRoutes } from './routes/remarketing'
+import { pauseCandidateRoutes } from './routes/pauseCandidates'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -123,6 +124,7 @@ app.register(
     instance.register(campaignDetailRoutes)
     instance.register(callRoutes)
     instance.register(remarketingRoutes)
+    instance.register(pauseCandidateRoutes)
     instance.register(customCostsRoutes)
     instance.register(tagRoutes)
     instance.register(audienceSyncRoutes)

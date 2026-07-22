@@ -1080,8 +1080,9 @@ export async function reportRoutes(app: FastifyInstance) {
          WHERE p.purchased_at::date BETWEEN $3 AND $4
          GROUP BY a.client_id
        ) prev_rev ON prev_rev.client_id = c.id
+       WHERE c.owner_user_id = $5
        ORDER BY c.name`,
-      [from, to, prevFrom, prevTo]
+      [from, to, prevFrom, prevTo, req.userId]
     )
 
     const clients = rows.map((r) => {

@@ -29,16 +29,18 @@ export async function clientRoutes(app: FastifyInstance) {
 
     const pixelKey = uuidv4()
     const { rows } = await db.query(
-      `INSERT INTO clients (name, pixel_key, timezone, niche) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, pixelKey, timezone, niche]
+      `INSERT INTO clients (name, pixel_key, timezone, niche, owner_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [name, pixelKey, timezone, niche, req.userId]
     )
     return reply.code(201).send(rows[0])
   })
 
-  // List all clients
-  app.get('/clients', async (_req, reply) => {
+  // List all clients belonging to the authenticated user — every other user's
+  // clients are invisible here, not just inaccessible by direct id.
+  app.get('/clients', async (req, reply) => {
     const { rows } = await db.query(
-      'SELECT id, name, pixel_key, timezone, niche, created_at FROM clients ORDER BY created_at DESC'
+      'SELECT id, name, pixel_key, timezone, niche, created_at FROM clients WHERE owner_user_id = $1 ORDER BY created_at DESC',
+      [req.userId]
     )
     return reply.send(rows)
   })

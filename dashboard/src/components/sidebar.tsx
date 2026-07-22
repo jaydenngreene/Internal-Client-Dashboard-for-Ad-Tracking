@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Radar } from "lucide-react";
-import { getClients } from "@/lib/api";
+import { getClients, getMe } from "@/lib/api";
+import { clearToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const params = useParams<{ clientId?: string }>();
   const activeClientId = params?.clientId;
   const isAgencyOverview = pathname === "/agency";
@@ -39,6 +41,12 @@ export function Sidebar() {
     queryKey: ["clients"],
     queryFn: getClients,
   });
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+
+  function handleLogout() {
+    clearToken();
+    router.replace("/login");
+  }
 
   const activeClient = clients?.find((c) => c.id === activeClientId);
   const activeNiche = activeClient?.niche;
@@ -164,6 +172,17 @@ export function Sidebar() {
             </ul>
           </div>
         )}
+      </div>
+
+      <div className="flex items-center justify-between border-t border-sidebar-border px-4 py-3">
+        <span className="truncate text-xs text-muted-foreground">{me?.email}</span>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-sidebar-foreground"
+        >
+          Log out
+        </button>
       </div>
     </aside>
   );

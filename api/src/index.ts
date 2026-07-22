@@ -24,10 +24,13 @@ import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
 import { remarketingRoutes } from './routes/remarketing'
 import { customCostsRoutes } from './routes/customCosts'
-import { tagRoutes } from './routes/tags'
+import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
 import { insightsRoutes } from './routes/insights'
 import { journeyRoutes } from './routes/journey'
+import { authRoutes } from './routes/auth'
+import { authenticate } from './lib/auth'
+import { requireOwnership } from './lib/ownership'
 import { startScheduledJobs } from './lib/scheduler'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
@@ -51,6 +54,9 @@ app.register(helmet)
 
 app.get('/health', async () => ({ status: 'ok' }))
 
+// Third-party/pixel-facing routes — authenticate themselves a different way
+// (pixel_key, a webhook signature, or a per-client shared secret), never a
+// logged-in dashboard user, so none of these sit behind the auth block below.
 app.register(pageviewRoutes)
 app.register(identifyRoutes)
 app.register(conversionRoutes)
@@ -64,17 +70,31 @@ app.register(goHighLevelWebhookRoutes)
 app.register(twilioWebhookRoutes)
 app.register(customersAiWebhookRoutes)
 app.register(tagWebhookRoutes)
-app.register(clientRoutes)
-app.register(reportRoutes)
 app.register(dniRoutes)
-app.register(callRoutes)
 app.register(shopifyAppRoutes)
-app.register(remarketingRoutes)
-app.register(customCostsRoutes)
-app.register(tagRoutes)
-app.register(audienceSyncRoutes)
-app.register(insightsRoutes)
-app.register(journeyRoutes)
+app.register(trackTagRoutes)
+app.register(authRoutes)
+
+// Dashboard-facing routes — every one of these requires a valid login (authenticate)
+// and, except for the two 'skip' cases handled in their own handlers (create/list
+// clients, the agency-aggregate report), verifies the authenticated user actually
+// owns the client this request touches (requireOwnership) before the real handler
+// ever runs. See lib/ownership.ts for the full per-route resolver table.
+app.register(
+  async (instance) => {
+    instance.addHook('preHandler', authenticate)
+    instance.addHook('preHandler', requireOwnership)
+    instance.register(clientRoutes)
+    instance.register(reportRoutes)
+    instance.register(callRoutes)
+    instance.register(remarketingRoutes)
+    instance.register(customCostsRoutes)
+    instance.register(tagRoutes)
+    instance.register(audienceSyncRoutes)
+    instance.register(insightsRoutes)
+    instance.register(journeyRoutes)
+  }
+)
 
 // Public Attribution API (Step 11) — the same report routes, mounted again under
 // /api/v1 with bearer-token auth, so this data can feed other tools without going

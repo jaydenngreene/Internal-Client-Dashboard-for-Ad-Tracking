@@ -89,9 +89,15 @@ export async function tagRoutes(app: FastifyInstance) {
     return reply.send(rows)
   })
 
-  // Pixel-facing — mirrors /track/identify's shape (pixel_key + anonymous_id),
-  // resolving the lead's email via identities rather than requiring it directly,
-  // since the client's own site/CRM automation is calling this, not the dashboard.
+}
+
+// Pixel-facing — split from tagRoutes above so it can be registered outside the
+// dashboard's JWT-auth block (it authenticates via pixel_key, same as every other
+// /track/* route, not a logged-in user). Mirrors /track/identify's shape
+// (pixel_key + anonymous_id), resolving the lead's email via identities rather
+// than requiring it directly, since the client's own site/CRM automation is
+// calling this, not the dashboard.
+export async function trackTagRoutes(app: FastifyInstance) {
   app.post<{
     Body: { pixel_key: string; anonymous_id: string; tag_name: string }
   }>('/track/tag', async (req, reply) => {

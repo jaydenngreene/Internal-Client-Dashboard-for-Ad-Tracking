@@ -1,4 +1,47 @@
+import { getToken, redirectToLogin } from "./auth";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+// Drop-in replacement for fetch() — every call site in this file uses this instead
+// so the auth token is attached automatically and a 401 (expired/invalid/missing
+// token) bounces to /login in one place rather than needing every caller to check.
+function apiRequest(input: string, init?: RequestInit): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(input, { ...init, headers }).then((res) => {
+    if (res.status === 401) redirectToLogin();
+    return res;
+  });
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+}
+
+async function authRequest(path: "login" | "register", email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  const res = await fetch(`${API_URL}/auth/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export const login = (email: string, password: string) => authRequest("login", email, password);
+export const register = (email: string, password: string) => authRequest("register", email, password);
+
+export function getMe(): Promise<AuthUser> {
+  return apiRequest(`${API_URL}/auth/me`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
 
 export type Niche = "ecommerce" | "call" | "lead_gen" | "saas" | "info_product" | "other";
 
@@ -27,7 +70,7 @@ export const NICHES: Niche[] = ["ecommerce", "call", "lead_gen", "saas", "info_p
 // Every one of these calls an endpoint that already existed for the CLI scripts;
 // no backend changes needed, this is purely a new frontend surface on top of them.
 export function createClient(input: { name: string; niche: Niche; timezone?: string }): Promise<Client> {
-  return fetch(`${API_URL}/clients`, {
+  return apiRequest(`${API_URL}/clients`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -40,7 +83,7 @@ export function createClient(input: { name: string; niche: Niche; timezone?: str
 export type ProcessorPlatform = "shopify" | "stripe" | "paypal" | "square" | "gohighlevel";
 
 function postIntegration(clientId: string, platform: string, body: Record<string, unknown>): Promise<unknown> {
-  return fetch(`${API_URL}/clients/${clientId}/integrations/${platform}`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/integrations/${platform}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -62,14 +105,14 @@ export interface IntegrationSummary {
 }
 
 export function getIntegrations(clientId: string): Promise<IntegrationSummary[]> {
-  return fetch(`${API_URL}/clients/${clientId}/integrations`).then((res) => {
+  return apiRequest(`${API_URL}/clients/${clientId}/integrations`).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
     return res.json();
   });
 }
 
 export function updateClientName(clientId: string, name: string): Promise<Client> {
-  return fetch(`${API_URL}/clients/${clientId}`, {
+  return apiRequest(`${API_URL}/clients/${clientId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
@@ -80,7 +123,7 @@ export function updateClientName(clientId: string, name: string): Promise<Client
 }
 
 export function updateClientNiche(clientId: string, niche: Niche): Promise<Client> {
-  return fetch(`${API_URL}/clients/${clientId}/niche`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/niche`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ niche }),
@@ -94,7 +137,7 @@ export function updateAttributionModel(
   clientId: string,
   attribution_model: Client["attribution_model"]
 ): Promise<Client> {
-  return fetch(`${API_URL}/clients/${clientId}/attribution-model`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/attribution-model`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ attribution_model }),
@@ -105,13 +148,13 @@ export function updateAttributionModel(
 }
 
 export function deleteClient(clientId: string): Promise<void> {
-  return fetch(`${API_URL}/clients/${clientId}`, { method: "DELETE" }).then((res) => {
+  return apiRequest(`${API_URL}/clients/${clientId}`, { method: "DELETE" }).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
   });
 }
 
 export function generateTagWebhookSecret(clientId: string): Promise<IntegrationSummary & { config: { webhook_secret: string } }> {
-  return fetch(`${API_URL}/clients/${clientId}/integrations/tag-webhook/generate`, { method: "POST" }).then((res) => {
+  return apiRequest(`${API_URL}/clients/${clientId}/integrations/tag-webhook/generate`, { method: "POST" }).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
     return res.json();
   });
@@ -138,7 +181,7 @@ export interface OutboundWebhookSubscription {
 }
 
 export function getWebhookSubscriptions(clientId: string): Promise<OutboundWebhookSubscription[]> {
-  return fetch(`${API_URL}/clients/${clientId}/webhook-subscriptions`).then((res) => {
+  return apiRequest(`${API_URL}/clients/${clientId}/webhook-subscriptions`).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
     return res.json();
   });
@@ -148,7 +191,7 @@ export function createWebhookSubscription(
   clientId: string,
   body: { target_url: string; event_types: string[] }
 ): Promise<OutboundWebhookSubscription & { signing_secret: string }> {
-  return fetch(`${API_URL}/clients/${clientId}/webhook-subscriptions`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/webhook-subscriptions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -159,7 +202,7 @@ export function createWebhookSubscription(
 }
 
 export function deleteWebhookSubscription(subId: string): Promise<void> {
-  return fetch(`${API_URL}/webhook-subscriptions/${subId}`, { method: "DELETE" }).then((res) => {
+  return apiRequest(`${API_URL}/webhook-subscriptions/${subId}`, { method: "DELETE" }).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
   });
 }
@@ -358,7 +401,7 @@ export interface AgencyOverviewReport {
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+  const res = await apiRequest(`${API_URL}${path}`);
   if (!res.ok) {
     throw new Error(`Request failed (${res.status}): ${path}`);
   }
@@ -366,7 +409,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 async function mutateJson<T>(path: string, method: "PATCH" | "POST"): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { method });
+  const res = await apiRequest(`${API_URL}${path}`, { method });
   if (!res.ok) {
     throw new Error(`Request failed (${res.status}): ${path}`);
   }
@@ -380,7 +423,7 @@ function rangeQuery(range?: DateRange, extra?: Record<string, string>): string {
 }
 
 export function getClient(clientId: string): Promise<Client> {
-  return fetch(`${API_URL}/clients/${clientId}`).then((res) => {
+  return apiRequest(`${API_URL}/clients/${clientId}`).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
     return res.json();
   });
@@ -609,7 +652,7 @@ export function createTag(
   clientId: string,
   input: { name: string; tag_type: TagType; stage_order?: number; product_value?: number }
 ): Promise<Tag> {
-  return fetch(`${API_URL}/clients/${clientId}/tags`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/tags`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -620,7 +663,7 @@ export function createTag(
 }
 
 export function deleteTag(tagId: string): Promise<void> {
-  return fetch(`${API_URL}/tags/${tagId}`, { method: "DELETE" }).then((res) => {
+  return apiRequest(`${API_URL}/tags/${tagId}`, { method: "DELETE" }).then((res) => {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
   });
 }
@@ -630,7 +673,7 @@ export function getLeadTags(clientId: string, email: string): Promise<LeadTag[]>
 }
 
 export function applyLeadTag(clientId: string, email: string, tagId: string): Promise<void> {
-  return fetch(`${API_URL}/clients/${clientId}/leads/${encodeURIComponent(email)}/tags`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/leads/${encodeURIComponent(email)}/tags`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tag_id: tagId }),
@@ -671,7 +714,7 @@ export function createAudienceSync(
   clientId: string,
   input: { platform: AudiencePlatform; name: string; segment_definition: SegmentDefinition }
 ): Promise<AudienceSync> {
-  return fetch(`${API_URL}/clients/${clientId}/audience-syncs`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/audience-syncs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -701,7 +744,7 @@ export function addCustomCost(
   clientId: string,
   input: { platform_label: string; date: string; spend: number; notes?: string }
 ): Promise<CustomCost> {
-  return fetch(`${API_URL}/clients/${clientId}/custom-costs`, {
+  return apiRequest(`${API_URL}/clients/${clientId}/custom-costs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

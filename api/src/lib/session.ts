@@ -1,5 +1,6 @@
 import { db } from '../db'
 import { lookupGeo } from './geo'
+import { detectInvalidTraffic } from './botDetection'
 
 interface AdParams {
   fbclid?: string
@@ -25,16 +26,21 @@ export async function resolveSession(
   visitorId: string,
   url: string,
   params: AdParams = {},
-  ip?: string | null
+  ip?: string | null,
+  userAgent?: string | null
 ): Promise<string> {
   const hasAdData = params.fbclid || params.gclid || params.ttclid || params.msclkid || params.utm_source
   const geo = lookupGeo(ip)
 
   if (hasAdData) {
+    // Step 56 — computed once, at the moment a NEW ad session is created (not on
+    // every attached-event lookup below) — this is the one point where invalid
+    // traffic would otherwise silently enter attribution/funnel metrics.
+    const { isSuspectedBot, reason } = await detectInvalidTraffic(clientId, userAgent, ip)
     const { rows } = await db.query(
       `INSERT INTO sessions
-       (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer, country, region)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, referrer, country, region, is_suspected_bot, bot_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id`,
       [
         clientId,
@@ -52,6 +58,8 @@ export async function resolveSession(
         params.referrer,
         geo.country,
         geo.region,
+        isSuspectedBot,
+        reason,
       ]
     )
     return rows[0].id
@@ -63,9 +71,11 @@ export async function resolveSession(
   )
   if (existing.length > 0) return existing[0].id
 
+  const { isSuspectedBot, reason } = await detectInvalidTraffic(clientId, userAgent, ip)
   const { rows: created } = await db.query(
-    `INSERT INTO sessions (client_id, visitor_id, landing_page, referrer, country, region) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [clientId, visitorId, url, params.referrer, geo.country, geo.region]
+    `INSERT INTO sessions (client_id, visitor_id, landing_page, referrer, country, region, is_suspected_bot, bot_reason)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [clientId, visitorId, url, params.referrer, geo.country, geo.region, isSuspectedBot, reason]
   )
   return created[0].id
 }

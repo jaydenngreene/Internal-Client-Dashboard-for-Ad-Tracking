@@ -51,7 +51,7 @@ export async function eventRoutes(app: FastifyInstance) {
     )
     const visitor = visitorRows[0]
 
-    const sessionId = await resolveSession(clientId, visitor.id, url, {}, visitor.ip)
+    const sessionId = await resolveSession(clientId, visitor.id, url, {}, visitor.ip, visitor.user_agent)
 
     await db.query(
       `INSERT INTO cart_events (client_id, session_id, event_type, product_id, product_name, value)

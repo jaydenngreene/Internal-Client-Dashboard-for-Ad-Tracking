@@ -546,6 +546,20 @@ export function getMmm(clientId: string): Promise<MmmResult> {
   return fetchJson<MmmResult>(`/clients/${clientId}/reports/mmm`);
 }
 
+// Step 56 — invalid-traffic visibility, advisory only.
+export interface InvalidTrafficReport {
+  from: string;
+  to: string;
+  totalSessions: number;
+  suspectedBotSessions: number;
+  suspectedBotRate: number | null;
+  topReasons: { reason: string; count: number }[];
+}
+
+export function getInvalidTraffic(clientId: string, range?: DateRange): Promise<InvalidTrafficReport> {
+  return fetchJson<InvalidTrafficReport>(`/clients/${clientId}/reports/invalid-traffic${rangeQuery(range)}`);
+}
+
 // Step 53 — true geo-lift/holdout testing via difference-in-differences. The
 // user excludes holdout_regions from the campaign's own ad-platform targeting;
 // this app only defines the test and runs the DiD analysis.

@@ -88,7 +88,8 @@ export async function pageviewRoutes(app: FastifyInstance) {
         landing_page,
         referrer,
       },
-      ip
+      ip,
+      userAgent
     )
 
     // Record pageview

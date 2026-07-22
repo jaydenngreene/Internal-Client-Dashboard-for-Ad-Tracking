@@ -812,6 +812,49 @@ export async function reportRoutes(app: FastifyInstance) {
     return reply.send(await computeMMM(req.params.id))
   })
 
+  // Step 56 — invalid-traffic visibility. Advisory only, same "flag, don't
+  // silently act" pattern as pause candidates/creative fatigue — nothing here
+  // excludes anything from other reports automatically. Note honestly disclosed
+  // in the response: this app's ad_costs (spend/clicks/impressions) come from
+  // each ad platform's own reported numbers, not this pixel, so invalid traffic
+  // here mainly corrupts funnel/engagement metrics, not ad spend efficiency.
+  app.get<{ Params: { id: string }; Querystring: OverviewQuery }>(
+    '/clients/:id/reports/invalid-traffic',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [totalRow, botRow, reasonRows] = await Promise.all([
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3 AND is_suspected_bot`,
+          [clientId, from, to]
+        ),
+        db.query<{ bot_reason: string; count: string }>(
+          `SELECT bot_reason, COUNT(*) AS count FROM sessions
+           WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3 AND is_suspected_bot
+           GROUP BY bot_reason ORDER BY COUNT(*) DESC LIMIT 20`,
+          [clientId, from, to]
+        ),
+      ])
+
+      const totalSessions = parseInt(totalRow.rows[0].total, 10)
+      const suspectedBotSessions = parseInt(botRow.rows[0].total, 10)
+
+      return reply.send({
+        from,
+        to,
+        totalSessions,
+        suspectedBotSessions,
+        suspectedBotRate: totalSessions > 0 ? (suspectedBotSessions / totalSessions) * 100 : null,
+        topReasons: reasonRows.rows.map((r) => ({ reason: r.bot_reason, count: parseInt(r.count, 10) })),
+      })
+    }
+  )
+
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(
     '/clients/:id/reports/ltv',
     async (req, reply) => {

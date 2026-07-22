@@ -549,6 +549,28 @@ export function deleteGeoLiftTest(testId: string): Promise<void> {
   });
 }
 
+// Step 54 — audit log. Generic (route + method + status), populated by a shared
+// onResponse hook rather than a bespoke row shape per action type.
+export interface AuditLogEntry {
+  id: string;
+  method: string;
+  route: string;
+  status_code: number;
+  details: string | null;
+  ip: string | null;
+  created_at: string;
+  user_email: string | null;
+  client_name?: string | null;
+}
+
+export function getClientAuditLog(clientId: string): Promise<AuditLogEntry[]> {
+  return fetchJson<AuditLogEntry[]>(`/clients/${clientId}/audit-log`);
+}
+
+export function getAccountAuditLog(): Promise<AuditLogEntry[]> {
+  return fetchJson<AuditLogEntry[]>(`/account/audit-log`);
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

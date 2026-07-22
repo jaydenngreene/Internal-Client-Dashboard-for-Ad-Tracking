@@ -10,6 +10,7 @@ import {
 } from '../lib/auth'
 import { isValidEmail } from '../lib/validation'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email'
+import { logAction } from '../lib/auditLog'
 
 const AGENCY_NAME_MAX_LENGTH = 200
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000 // 1 hour
@@ -53,9 +54,11 @@ export async function authRoutes(app: FastifyInstance) {
     // distinct message for one vs the other would let an attacker enumerate which
     // emails have accounts.
     if (!user || !(await verifyPassword(password, user.password_hash))) {
+      await logAction({ userId: user?.id ?? null, clientId: null, method: 'POST', route: '/auth/login', statusCode: 401, details: `failed login attempt for ${email}`, ip: req.ip })
       return reply.code(401).send({ error: 'Invalid email or password' })
     }
 
+    await logAction({ userId: user.id, clientId: null, method: 'POST', route: '/auth/login', statusCode: 200, details: 'login succeeded', ip: req.ip })
     return reply.send({
       token: signToken(user.id),
       user: { id: user.id, email: user.email, agency_name: user.agency_name, email_verified: user.email_verified },

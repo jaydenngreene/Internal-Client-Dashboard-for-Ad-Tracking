@@ -14,6 +14,7 @@ import {
   generateShareLink,
   revokeShareLink,
   getUtmMismatches,
+  getClientAuditLog,
   getIntegrations,
   saveIntegration,
   generateTagWebhookSecret,
@@ -40,6 +41,7 @@ import { FieldLabel } from "@/components/ui/field-label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuditLogSection } from "@/components/audit-log-section";
 
 const NICHE_LABEL: Record<Niche, string> = {
   ecommerce: "Ecommerce",
@@ -1144,6 +1146,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
           <ShareLinkSection clientId={clientId} client={client} />
           <UtmToolsSection clientId={clientId} />
+          <AuditLogSection queryKey={["client-audit-log", clientId]} fetcher={() => getClientAuditLog(clientId)} />
           {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
         </>
       )}

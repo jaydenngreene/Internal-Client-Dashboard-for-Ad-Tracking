@@ -1,6 +1,15 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db'
 
+// Step 54 — the resolved client id is stashed here so the generic audit-log
+// onResponse hook (index.ts) can log which client a mutation touched without
+// re-running the same resolver lookup a second time after the handler runs.
+declare module 'fastify' {
+  interface FastifyRequest {
+    auditClientId?: string | null
+  }
+}
+
 type Resolver = 'client' | 'skip' | ((req: FastifyRequest) => Promise<string | null>)
 
 async function clientIdFrom(table: string, idColumn: string, idValue: string): Promise<string | null> {
@@ -30,6 +39,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/utm-mismatches': 'client',
   '/clients/:id/budget-target': 'client',
   '/clients/:id/currency': 'client',
+  '/clients/:id/audit-log': 'client',
+  '/account/audit-log': 'skip',
   '/clients/:id/identity-links': 'client',
   '/clients/:id/tracking-numbers': 'client',
   '/clients/:id/webhook-subscriptions': 'client',
@@ -151,6 +162,7 @@ export async function requireOwnership(req: FastifyRequest, reply: FastifyReply)
   if (resolver === 'skip') return
 
   const clientId = resolver === 'client' ? (req.params as { id: string }).id : await resolver(req)
+  req.auditClientId = clientId
 
   if (!clientId || !(await hasClientAccess(clientId, req.userId!))) {
     return reply.code(404).send({ error: 'Not found' })

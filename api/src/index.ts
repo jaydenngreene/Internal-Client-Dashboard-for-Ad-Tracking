@@ -33,6 +33,7 @@ import { creativeFatigueRoutes } from './routes/creativeFatigue'
 import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { chatRoutes } from './routes/chat'
 import { geoLiftRoutes } from './routes/geoLift'
+import { auditLogRoutes } from './routes/auditLogRoutes'
 import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
@@ -43,6 +44,7 @@ import { authRoutes } from './routes/auth'
 import { authenticate } from './lib/auth'
 import { requireOwnership } from './lib/ownership'
 import { startScheduledJobs } from './lib/scheduler'
+import { logAction } from './lib/auditLog'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
@@ -126,6 +128,21 @@ app.register(
   async (instance) => {
     instance.addHook('preHandler', authenticate)
     instance.addHook('preHandler', requireOwnership)
+    // Step 54 — generic audit logging: every mutation (non-GET) that succeeded
+    // gets one row, reusing whatever client id requireOwnership already resolved
+    // rather than instrumenting each route handler individually. Read-only
+    // requests aren't logged — the volume would swamp anything worth reviewing.
+    instance.addHook('onResponse', async (req, reply) => {
+      if (req.method === 'GET' || reply.statusCode >= 400) return
+      await logAction({
+        userId: req.userId ?? null,
+        clientId: req.auditClientId ?? null,
+        method: req.method,
+        route: req.routeOptions.url ?? req.url,
+        statusCode: reply.statusCode,
+        ip: req.ip,
+      })
+    })
     instance.register(clientRoutes)
     instance.register(reportRoutes)
     instance.register(campaignDetailRoutes)
@@ -143,6 +160,7 @@ app.register(
     instance.register(insightsRoutes)
     instance.register(journeyRoutes)
     instance.register(jobRoutes)
+    instance.register(auditLogRoutes)
   }
 )
 

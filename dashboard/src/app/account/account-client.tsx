@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail } from "@/lib/api";
+import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail, getAccountAuditLog } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
+import { AuditLogSection } from "@/components/audit-log-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -278,6 +279,7 @@ export function AccountClient() {
           <ProfileSection agencyName={me.agency_name} email={me.email} emailVerified={me.email_verified} />
           <PasswordSection />
           <SystemStatusSection />
+          <AuditLogSection queryKey={["account-audit-log"]} fetcher={getAccountAuditLog} showClientColumn />
           <SessionSection />
           <DangerZoneSection email={me.email} />
         </>

@@ -3,6 +3,7 @@ import { db } from '../db'
 import { v4 as uuidv4 } from 'uuid'
 import { isValidUrl, isValidEmail } from '../lib/validation'
 import { isClientOwner } from '../lib/ownership'
+import { backfillIntegration } from '../jobs/adCosts/run'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 const CLIENT_NAME_MAX_LENGTH = 200
@@ -240,6 +241,7 @@ export async function clientRoutes(app: FastifyInstance) {
        RETURNING *`,
       [id, JSON.stringify({ access_token, ad_account_id })]
     )
+    backfillIntegration(id, 'facebook_ads', rows[0].config)
     return reply.code(200).send(rows[0])
   })
 
@@ -283,6 +285,7 @@ export async function clientRoutes(app: FastifyInstance) {
         }),
       ]
     )
+    backfillIntegration(id, 'google_ads', rows[0].config)
     return reply.code(200).send(rows[0])
   })
 
@@ -326,7 +329,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!customer_id || !account_id || !refresh_token) {
       return reply.code(400).send({ error: 'customer_id, account_id, and refresh_token required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token }))
+    const saved = await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token })
+    backfillIntegration(id, 'bing_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Twilio integration for a client — Step 11 call tracking.
@@ -455,7 +460,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!access_token || !advertiser_id || !pixel_code) {
       return reply.code(400).send({ error: 'access_token, advertiser_id, and pixel_code required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code }))
+    const saved = await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code })
+    backfillIntegration(id, 'tiktok_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Snapchat Ads integration — Step 16 (signals) / Step 19 (cost sync).
@@ -468,7 +475,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!access_token || !pixel_id || !ad_account_id) {
       return reply.code(400).send({ error: 'access_token, pixel_id, and ad_account_id required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id }))
+    const saved = await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id })
+    backfillIntegration(id, 'snapchat_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Pinterest Ads integration — Step 17 (signals) / Step 19 (cost sync).
@@ -481,7 +490,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!access_token || !ad_account_id) {
       return reply.code(400).send({ error: 'access_token and ad_account_id required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id }))
+    const saved = await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id })
+    backfillIntegration(id, 'pinterest_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a LinkedIn Ads integration — Step 17 (signals, conversion_id_*)
@@ -504,16 +515,14 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!access_token) {
       return reply.code(400).send({ error: 'access_token required' })
     }
-    return reply
-      .code(200)
-      .send(
-        await upsertIntegration(id, 'linkedin_ads', {
-          access_token,
-          account_id,
-          conversion_id_purchase,
-          conversion_id_lead,
-        })
-      )
+    const saved = await upsertIntegration(id, 'linkedin_ads', {
+      access_token,
+      account_id,
+      conversion_id_purchase,
+      conversion_id_lead,
+    })
+    backfillIntegration(id, 'linkedin_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Reddit Ads integration — Step 17 (signals) / Step 20 (cost sync).
@@ -526,7 +535,9 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!access_token || !account_id) {
       return reply.code(400).send({ error: 'access_token and account_id required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'reddit_ads', { access_token, account_id }))
+    const saved = await upsertIntegration(id, 'reddit_ads', { access_token, account_id })
+    backfillIntegration(id, 'reddit_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Customers.ai integration — Step 12. See routes/webhooks/customersAi.ts

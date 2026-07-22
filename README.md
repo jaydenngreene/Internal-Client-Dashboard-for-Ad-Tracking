@@ -22,11 +22,13 @@ npm workspaces: `api/`, `pixel/`, `dashboard/`, plus `scripts/` (CLI onboarding 
 2. **Environment**: copy `.env.example` to `.env` at the repo root and fill in at minimum `DATABASE_URL` (a Postgres
    connection string — this project uses Supabase), `JWT_SECRET`, and `API_SECRET` (any long random strings for the
    latter two). Everything else in `.env.example` is optional — it's per-integration credentials (Facebook, Google
-   Ads, Bing, Shopify's OAuth app, Anthropic for AI Insights/remarketing) that only need to be filled in once you're
-   ready to connect a real client's ad accounts. The dashboard also needs its own env file:
+   Ads, Bing, Shopify's OAuth app, Anthropic for AI Insights/remarketing, Resend for password-reset/verification
+   emails, Sentry for error tracking) that only need to be filled in once you're ready to use that piece. The
+   dashboard also needs its own env file:
    ```
    echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > dashboard/.env.local
    ```
+   Optionally add `NEXT_PUBLIC_SENTRY_DSN=...` to that same file for client-side error tracking.
 3. **Run migrations**:
    ```
    npm run migrate

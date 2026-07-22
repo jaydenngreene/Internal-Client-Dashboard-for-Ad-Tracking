@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import jwt from 'jsonwebtoken'
-import { hashPassword, verifyPassword, signToken, verifyToken } from '../auth'
+import { hashPassword, verifyPassword, signToken, verifyToken, generateRandomToken, hashToken } from '../auth'
 
 describe('password hashing', () => {
   it('verifies a password against its own hash', async () => {
@@ -46,5 +46,30 @@ describe('JWT sign/verify — the core of every ownership check in the app', () 
   it('rejects a token with no userId claim', () => {
     const malformed = jwt.sign({ notUserId: 'x' }, process.env.JWT_SECRET as string)
     expect(verifyToken(malformed)).toBeNull()
+  })
+})
+
+describe('password-reset / email-verification tokens', () => {
+  it('generates a different random token every call', () => {
+    expect(generateRandomToken()).not.toBe(generateRandomToken())
+  })
+
+  it('generates a high-entropy token, not something guessable', () => {
+    // 32 random bytes hex-encoded = 64 characters
+    expect(generateRandomToken()).toHaveLength(64)
+  })
+
+  it('hashes the same token to the same value (so a stored hash can be matched)', () => {
+    const token = generateRandomToken()
+    expect(hashToken(token)).toBe(hashToken(token))
+  })
+
+  it('hashes different tokens to different values', () => {
+    expect(hashToken('token-a')).not.toBe(hashToken('token-b'))
+  })
+
+  it('never stores the raw token in its hash', () => {
+    const token = generateRandomToken()
+    expect(hashToken(token)).not.toContain(token)
   })
 })

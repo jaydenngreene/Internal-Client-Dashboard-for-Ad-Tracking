@@ -1,9 +1,23 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
-import { hashPassword, verifyPassword, signToken, authenticate } from '../lib/auth'
+import {
+  hashPassword,
+  verifyPassword,
+  signToken,
+  authenticate,
+  generateRandomToken,
+  hashToken,
+} from '../lib/auth'
 import { isValidEmail } from '../lib/validation'
+import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email'
 
 const AGENCY_NAME_MAX_LENGTH = 200
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000 // 1 hour
+
+function dashboardUrl(path: string): string {
+  const base = process.env.DASHBOARD_URL ?? 'http://localhost:3000'
+  return `${base}${path}`
+}
 
 // Credential-stuffing/brute-force only matters on login and registration — every
 // other route here already requires a valid token (authenticate), which the
@@ -36,11 +50,16 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const passwordHash = await hashPassword(password)
+      const verificationToken = generateRandomToken()
       const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
-        'INSERT INTO users (email, password_hash, agency_name) VALUES ($1, $2, $3) RETURNING id, email, agency_name',
-        [email, passwordHash, agencyName]
+        `INSERT INTO users (email, password_hash, agency_name, email_verification_token_hash)
+         VALUES ($1, $2, $3, $4) RETURNING id, email, agency_name`,
+        [email, passwordHash, agencyName, hashToken(verificationToken)]
       )
       const user = rows[0]
+      // Best-effort — a missing email provider never blocks account creation,
+      // same disclosure pattern as every other unconfigured integration here.
+      sendVerificationEmail(email, dashboardUrl(`/verify-email?token=${verificationToken}`)).catch(() => {})
       return reply.code(201).send({ token: signToken(user.id), user })
     }
   )
@@ -55,10 +74,13 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'email and password required' })
     }
 
-    const { rows } = await db.query<{ id: string; email: string; password_hash: string; agency_name: string }>(
-      'SELECT id, email, password_hash, agency_name FROM users WHERE email = $1',
-      [email]
-    )
+    const { rows } = await db.query<{
+      id: string
+      email: string
+      password_hash: string
+      agency_name: string
+      email_verified: boolean
+    }>('SELECT id, email, password_hash, agency_name, email_verified FROM users WHERE email = $1', [email])
     const user = rows[0]
     // Deliberately identical error for "no such user" and "wrong password" — a
     // distinct message for one vs the other would let an attacker enumerate which
@@ -69,14 +91,14 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.send({
       token: signToken(user.id),
-      user: { id: user.id, email: user.email, agency_name: user.agency_name },
+      user: { id: user.id, email: user.email, agency_name: user.agency_name, email_verified: user.email_verified },
     })
     }
   )
 
   app.get('/auth/me', { preHandler: authenticate }, async (req, reply) => {
-    const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
-      'SELECT id, email, agency_name FROM users WHERE id = $1',
+    const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean }>(
+      'SELECT id, email, agency_name, email_verified FROM users WHERE id = $1',
       [req.userId]
     )
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
@@ -110,12 +132,27 @@ export async function authRoutes(app: FastifyInstance) {
           return reply.code(409).send({ error: 'An account with this email already exists' })
         }
       }
-      const { rows } = await db.query<{ id: string; email: string; agency_name: string }>(
-        `UPDATE users SET agency_name = COALESCE($1, agency_name), email = COALESCE($2, email) WHERE id = $3
-         RETURNING id, email, agency_name`,
+      // Changing the email address invalidates whatever verification applied to
+      // the old one — a new address needs its own verify step.
+      const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean }>(
+        `UPDATE users
+         SET agency_name = COALESCE($1, agency_name),
+             email = COALESCE($2, email),
+             email_verified = CASE WHEN $2::text IS NOT NULL THEN false ELSE email_verified END
+         WHERE id = $3
+         RETURNING id, email, agency_name, email_verified`,
         [agencyName ?? null, email ?? null, req.userId]
       )
-      return reply.send(rows[0])
+      const updated = rows[0]
+      if (email) {
+        const token = generateRandomToken()
+        await db.query('UPDATE users SET email_verification_token_hash = $1 WHERE id = $2', [
+          hashToken(token),
+          req.userId,
+        ])
+        sendVerificationEmail(updated.email, dashboardUrl(`/verify-email?token=${token}`)).catch(() => {})
+      }
+      return reply.send(updated)
     }
   )
 
@@ -150,5 +187,93 @@ export async function authRoutes(app: FastifyInstance) {
   app.delete('/auth/me', { preHandler: authenticate }, async (req, reply) => {
     await db.query('DELETE FROM users WHERE id = $1', [req.userId])
     return reply.code(204).send()
+  })
+
+  // Always the same response whether or not the email has an account — a
+  // different message for "no such user" would let an attacker enumerate emails,
+  // same reasoning as /auth/login's identical invalid-credentials error.
+  app.post<{ Body: { email: string } }>(
+    '/auth/forgot-password',
+    { config: AUTH_RATE_LIMIT },
+    async (req, reply) => {
+      const email = req.body.email?.toLowerCase().trim()
+      const generic = { message: 'If an account exists for that email, a reset link has been sent.' }
+      if (!email) return reply.send(generic)
+
+      const { rows } = await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])
+      if (rows.length > 0) {
+        const token = generateRandomToken()
+        await db.query(
+          `UPDATE users SET password_reset_token_hash = $1, password_reset_expires_at = $2 WHERE id = $3`,
+          [hashToken(token), new Date(Date.now() + PASSWORD_RESET_TTL_MS), rows[0].id]
+        )
+        sendPasswordResetEmail(email, dashboardUrl(`/reset-password?token=${token}`)).catch(() => {})
+      }
+      return reply.send(generic)
+    }
+  )
+
+  app.post<{ Body: { token: string; new_password: string } }>(
+    '/auth/reset-password',
+    { config: AUTH_RATE_LIMIT },
+    async (req, reply) => {
+      const { token, new_password } = req.body
+      if (!token || !new_password || new_password.length < 8) {
+        return reply.code(400).send({ error: 'token and a new_password of at least 8 characters are required' })
+      }
+
+      const { rows } = await db.query<{ id: string }>(
+        `SELECT id FROM users
+         WHERE password_reset_token_hash = $1 AND password_reset_expires_at > NOW()`,
+        [hashToken(token)]
+      )
+      if (rows.length === 0) {
+        return reply.code(400).send({ error: 'This reset link is invalid or has expired' })
+      }
+
+      const newHash = await hashPassword(new_password)
+      await db.query(
+        `UPDATE users SET password_hash = $1, password_reset_token_hash = NULL, password_reset_expires_at = NULL
+         WHERE id = $2`,
+        [newHash, rows[0].id]
+      )
+      return reply.send({ ok: true })
+    }
+  )
+
+  app.post<{ Body: { token: string } }>('/auth/verify-email', async (req, reply) => {
+    const { token } = req.body
+    if (!token) return reply.code(400).send({ error: 'token required' })
+
+    const { rows } = await db.query<{ id: string }>(
+      'SELECT id FROM users WHERE email_verification_token_hash = $1',
+      [hashToken(token)]
+    )
+    if (rows.length === 0) {
+      return reply.code(400).send({ error: 'This verification link is invalid' })
+    }
+
+    await db.query('UPDATE users SET email_verified = true, email_verification_token_hash = NULL WHERE id = $1', [
+      rows[0].id,
+    ])
+    return reply.send({ ok: true })
+  })
+
+  app.post('/auth/resend-verification', { preHandler: authenticate }, async (req, reply) => {
+    const { rows } = await db.query<{ email: string; email_verified: boolean }>(
+      'SELECT email, email_verified FROM users WHERE id = $1',
+      [req.userId]
+    )
+    const user = rows[0]
+    if (!user || user.email_verified) {
+      return reply.send({ ok: true })
+    }
+    const token = generateRandomToken()
+    await db.query('UPDATE users SET email_verification_token_hash = $1 WHERE id = $2', [
+      hashToken(token),
+      req.userId,
+    ])
+    sendVerificationEmail(user.email, dashboardUrl(`/verify-email?token=${token}`)).catch(() => {})
+    return reply.send({ ok: true })
   })
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureError } from "@/lib/sentry";
 
 export default function GlobalError({
   error,
@@ -11,6 +12,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error);
+    captureError(error);
   }, [error]);
 
   return (

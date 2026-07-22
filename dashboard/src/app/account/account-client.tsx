@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus } from "@/lib/api";
+import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,15 @@ function SystemStatusSection() {
   );
 }
 
-function ProfileSection({ agencyName, email }: { agencyName: string; email: string }) {
+function ProfileSection({
+  agencyName,
+  email,
+  emailVerified,
+}: {
+  agencyName: string;
+  email: string;
+  emailVerified: boolean;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(agencyName);
   const [newEmail, setNewEmail] = useState(email);
@@ -85,6 +93,7 @@ function ProfileSection({ agencyName, email }: { agencyName: string; email: stri
     mutationFn: () => updateMe({ email: newEmail.trim() }),
     onSuccess: invalidate,
   });
+  const resendMutation = useMutation({ mutationFn: resendVerificationEmail });
 
   return (
     <Card className="px-4">
@@ -111,8 +120,19 @@ function ProfileSection({ agencyName, email }: { agencyName: string; email: stri
           <Button size="sm" disabled={!newEmail.trim() || newEmail.trim() === email || emailMutation.isPending} onClick={() => emailMutation.mutate()}>
             Save
           </Button>
+          <Badge variant={emailVerified ? "secondary" : "outline"} className="text-[10px]">
+            {emailVerified ? "verified" : "not verified"}
+          </Badge>
         </div>
         {emailMutation.isError && <p className="text-xs text-status-critical">{(emailMutation.error as Error).message}</p>}
+        {!emailVerified && (
+          <div className="flex items-center gap-2">
+            <Button size="xs" variant="outline" disabled={resendMutation.isPending} onClick={() => resendMutation.mutate()}>
+              {resendMutation.isPending ? "Sending…" : "Resend verification email"}
+            </Button>
+            {resendMutation.isSuccess && <span className="text-xs text-status-good">Sent.</span>}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -248,7 +268,7 @@ export function AccountClient() {
       {isLoading && <Skeleton className="h-64 w-full" />}
       {me && (
         <>
-          <ProfileSection agencyName={me.agency_name} email={me.email} />
+          <ProfileSection agencyName={me.agency_name} email={me.email} emailVerified={me.email_verified} />
           <PasswordSection />
           <SystemStatusSection />
           <SessionSection />

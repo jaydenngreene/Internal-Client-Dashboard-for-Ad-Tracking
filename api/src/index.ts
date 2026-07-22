@@ -2,6 +2,7 @@ import Fastify, { FastifyError } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
+import * as Sentry from '@sentry/node'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
@@ -37,6 +38,11 @@ import { startScheduledJobs } from './lib/scheduler'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
 
+// Same disclosure pattern as every other integration: without a real SENTRY_DSN,
+// Sentry.init's own SDK behavior is to no-op (nothing is captured or sent) —
+// there's no custom guard needed here, just an unset env var.
+Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 })
+
 const app = Fastify({ logger: true, trustProxy: true })
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim())
@@ -67,10 +73,17 @@ app.setErrorHandler((error: FastifyError, request, reply) => {
   request.log.error(error)
   const statusCode = error.statusCode ?? 500
   if (statusCode >= 500) {
+    Sentry.captureException(error)
     return reply.code(statusCode).send({ error: 'Internal server error' })
   }
   return reply.code(statusCode).send({ error: error.message })
 })
+
+// A safety net for anything outside Fastify's own request lifecycle (the cron
+// jobs in lib/scheduler.ts already catch their own errors, but this covers
+// whatever that pattern misses elsewhere).
+process.on('unhandledRejection', (reason) => Sentry.captureException(reason))
+process.on('uncaughtException', (err) => Sentry.captureException(err))
 
 app.get('/health', async () => ({ status: 'ok' }))
 

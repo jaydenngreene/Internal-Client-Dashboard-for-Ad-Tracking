@@ -6,19 +6,23 @@ import { Menu } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { getToken } from "@/lib/auth";
 
-// The login page gets no sidebar/chrome at all; every other page requires a
-// token to even attempt rendering — an invalid/expired token still gets caught
-// reactively by apiRequest()'s 401 handler in lib/api.ts once a real request goes
-// out, this only guards against "no token at all."
+// These get no sidebar/chrome and no token requirement — they're reachable from
+// an email link (or, for /login, before any account exists at all) by someone
+// who may not be logged in. Every other page requires a token to even attempt
+// rendering — an invalid/expired token still gets caught reactively by
+// apiRequest()'s 401 handler in lib/api.ts once a real request goes out, this
+// only guards against "no token at all."
+const PUBLIC_PATHS = ["/login", "/reset-password", "/verify-email"];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isLoginPage = pathname === "/login";
+  const isPublicPage = PUBLIC_PATHS.includes(pathname);
   const [ready, setReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    if (isLoginPage) {
+    if (isPublicPage) {
       setReady(true);
       return;
     }
@@ -27,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     setReady(true);
-  }, [pathname, isLoginPage, router]);
+  }, [pathname, isPublicPage, router]);
 
   // A navigation should always close the mobile drawer, even though most clicks
   // inside Sidebar already call onClose themselves.
@@ -35,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileNavOpen(false);
   }, [pathname]);
 
-  if (isLoginPage) return <>{children}</>;
+  if (isPublicPage) return <>{children}</>;
   if (!ready) return null;
 
   return (

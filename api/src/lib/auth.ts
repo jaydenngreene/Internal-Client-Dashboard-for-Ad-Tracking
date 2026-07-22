@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { FastifyRequest, FastifyReply } from 'fastify'
 
 const JWT_SECRET = process.env.JWT_SECRET
@@ -15,6 +16,19 @@ export function verifyPassword(password: string, hash: string): Promise<boolean>
 export function signToken(userId: string): string {
   if (!JWT_SECRET) throw new Error('JWT_SECRET is not configured')
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' })
+}
+
+// Used for password-reset and email-verification tokens — high-entropy random
+// values, not user-chosen secrets, so a fast hash (not bcrypt's deliberately slow
+// one) is the right tool: it's stored so a DB read alone can't be replayed as a
+// valid token, same principle as password_hash, without bcrypt's cost being
+// necessary here.
+export function generateRandomToken(): string {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
 }
 
 export function verifyToken(token: string): { userId: string } | null {

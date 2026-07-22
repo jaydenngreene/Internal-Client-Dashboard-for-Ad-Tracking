@@ -19,6 +19,7 @@ export interface AuthUser {
   id: string;
   email: string;
   agency_name: string;
+  email_verified: boolean;
 }
 
 async function authRequest(path: "login" | "register", body: Record<string, string>): Promise<{ token: string; user: AuthUser }> {
@@ -37,6 +38,28 @@ async function authRequest(path: "login" | "register", body: Record<string, stri
 export const login = (email: string, password: string) => authRequest("login", { email, password });
 export const register = (email: string, password: string, agencyName: string) =>
   authRequest("register", { email, password, agency_name: agencyName });
+
+async function publicPost(path: string, body: Record<string, string>): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error as string) ?? `Request failed (${res.status})`);
+  return data;
+}
+
+export const forgotPassword = (email: string) => publicPost("/auth/forgot-password", { email });
+export const resetPassword = (token: string, newPassword: string) =>
+  publicPost("/auth/reset-password", { token, new_password: newPassword });
+export const verifyEmail = (token: string) => publicPost("/auth/verify-email", { token });
+
+export function resendVerificationEmail(): Promise<void> {
+  return apiRequest(`${API_URL}/auth/resend-verification`, { method: "POST" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
 
 export function getMe(): Promise<AuthUser> {
   return apiRequest(`${API_URL}/auth/me`).then((res) => {

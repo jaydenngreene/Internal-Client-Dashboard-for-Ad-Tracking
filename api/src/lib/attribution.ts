@@ -1,6 +1,7 @@
 import { db } from '../db'
 import { sendConversionSignals } from './conversionSignals'
 import { dispatchEvent } from './outboundWebhooks'
+import { convertToBaseCurrency, getClientCurrency } from './currency'
 
 export interface NormalizedConversion {
   email: string
@@ -8,6 +9,11 @@ export interface NormalizedConversion {
   product?: string | null
   order_id?: string | null
   processor: string
+  // Step 48 — the currency `revenue` was reported in (e.g. Shopify's order
+  // currency, Stripe's session currency). Omitted entirely means "already in the
+  // client's base currency" (e.g. GoHighLevel's custom webhook schema has no
+  // reliable currency field) — no conversion happens, same as today's behavior.
+  currency?: string | null
 }
 
 type AttributionModel = 'first_click' | 'last_click' | 'linear' | 'time_decay' | 'u_shaped'
@@ -55,12 +61,15 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
 
   const email = conv.email.toLowerCase().trim()
 
+  const baseCurrency = await getClientCurrency(clientId)
+  const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
+
   const { rows: purchaseRows } = await db.query(
     `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor)
      VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
      RETURNING id`,
-    [clientId, email, conv.revenue, conv.product ?? null, conv.order_id ?? null, conv.processor]
+    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor]
   )
   if (purchaseRows.length === 0) return // duplicate (webhook retry)
 
@@ -112,7 +121,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     await db.query(
       `INSERT INTO attributions (client_id, purchase_id, session_id, model, credit_fraction, attributed_revenue)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [clientId, purchaseId, session.id, model, fraction, conv.revenue * fraction]
+      [clientId, purchaseId, session.id, model, fraction, revenue * fraction]
     )
   }
 
@@ -125,17 +134,23 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
        revenue_lifetime = customer_ltv.revenue_lifetime + EXCLUDED.revenue_lifetime,
        purchase_count   = customer_ltv.purchase_count + 1,
        last_updated     = NOW()`,
-    [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, conv.revenue]
+    [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, revenue]
   )
 
   // Signal the ad platforms using whichever click is most recently "live" for this
   // visitor (the last touch), matching how the platforms' own pixels behave — their
   // click-id cookies get overwritten by the most recent click, not the first one.
   const lastSession = sessionRows[sessionRows.length - 1]
+  // Sent in the ORIGINAL transaction currency, not the base-currency-converted
+  // `revenue` above — the ad platform's own optimization/reporting needs the real
+  // amount that changed hands, not this app's internal reporting conversion. This
+  // also fixes a latent gap: currency was never passed here before Step 48, so
+  // every conversion signal silently claimed USD regardless of the real currency.
   await sendConversionSignals(clientId, {
     eventType: 'Purchase',
     email,
     value: conv.revenue,
+    currency: conv.currency ?? baseCurrency,
     fbclid: lastSession.fbclid,
     gclid: lastSession.gclid,
     msclkid: lastSession.msclkid,
@@ -143,9 +158,13 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   })
 
   // Step 29 — notify any of the client's own systems subscribed to this event.
+  // Reports the base-currency-converted amount, matching what every internal
+  // report now shows, alongside the original for anyone downstream who wants it.
   await dispatchEvent(clientId, 'sale.attributed', {
     email,
-    revenue: conv.revenue,
+    revenue,
+    original_revenue: conv.revenue,
+    original_currency: conv.currency ?? baseCurrency,
     product: conv.product ?? null,
     order_id: conv.order_id ?? null,
     processor: conv.processor,
@@ -156,8 +175,22 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
 // Deduct a refund from the matching purchase, its attribution record(s), and customer_ltv.
 // Refund is prorated across attribution rows by credit_fraction, so linear-model
 // purchases (multiple touches) get the refund split the same way the revenue was.
-export async function recordRefund(clientId: string, orderId: string, refundAmount: number): Promise<void> {
+// `currency` (Step 48) — a refund is always issued in the same currency as the
+// original charge, but this app doesn't store what that was per-purchase (kept
+// out of scope to limit how invasive this change is), so it converts using
+// TODAY's rate rather than the rate actually in effect at purchase time — a
+// disclosed approximation, not exact, same spirit as every other "simple,
+// honest method" choice in this app (predictive LTV, creative fatigue).
+export async function recordRefund(
+  clientId: string,
+  orderId: string,
+  refundAmount: number,
+  currency?: string | null
+): Promise<void> {
   if (refundAmount <= 0) return
+
+  const baseCurrency = await getClientCurrency(clientId)
+  refundAmount = await convertToBaseCurrency(refundAmount, currency, baseCurrency)
 
   const { rows: purchaseRows } = await db.query(
     `UPDATE purchases

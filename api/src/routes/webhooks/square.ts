@@ -72,12 +72,13 @@ export async function squareWebhookRoutes(app: FastifyInstance) {
             revenue,
             order_id: payment.id,
             processor: 'square',
+            currency: payment.amount_money?.currency,
           })
         }
 
         const refundedAmount = (payment.refunded_money?.amount ?? 0) / 100
         if (refundedAmount > 0) {
-          await recordRefund(client_id, payment.id, refundedAmount)
+          await recordRefund(client_id, payment.id, refundedAmount, payment.amount_money?.currency)
         }
       }
 

@@ -10,6 +10,7 @@ interface ConversionBody {
   product?: string
   order_id?: string
   processor?: string
+  currency?: string
   // Sent by the pixel so a visitor can be resolved even if identify() wasn't
   // called first (e.g. email only captured at the moment of purchase).
   anonymous_id?: string
@@ -17,7 +18,7 @@ interface ConversionBody {
 
 export async function conversionRoutes(app: FastifyInstance) {
   app.post<{ Body: ConversionBody }>('/track/conversion', async (req, reply) => {
-    const { pixel_key, email, revenue, product, order_id, processor, anonymous_id } = req.body
+    const { pixel_key, email, revenue, product, order_id, processor, anonymous_id, currency } = req.body
 
     if (!pixel_key || !email || revenue === undefined) {
       return reply.code(400).send({ error: 'Missing required fields' })
@@ -62,6 +63,7 @@ export async function conversionRoutes(app: FastifyInstance) {
       product,
       order_id,
       processor: processor ?? 'direct',
+      currency,
     })
 
     return reply.code(200).send({ ok: true })

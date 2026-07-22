@@ -1,8 +1,30 @@
 import { db } from '../../db'
 import { AdCostRow } from './types'
+import { convertToBaseCurrency, getClientCurrency } from '../../lib/currency'
+
+// Step 48 — an ad account has one fixed currency; declared by the user per
+// integration (Settings), not detected dynamically per-request (would mean a
+// different lookup per platform's own API shape for something that never
+// changes). Missing entirely means "already in the client's base currency,"
+// same as every other currency-optional field in this app.
+async function getIntegrationCurrency(clientId: string, platform: string): Promise<string | null> {
+  const { rows } = await db.query<{ currency: string | null }>(
+    `SELECT config->>'currency' AS currency FROM client_integrations WHERE client_id = $1 AND platform = $2`,
+    [clientId, platform]
+  )
+  return rows[0]?.currency ?? null
+}
 
 export async function upsertAdCosts(clientId: string, platform: string, rows: AdCostRow[]): Promise<void> {
+  if (rows.length === 0) return
+
+  const [baseCurrency, adAccountCurrency] = await Promise.all([
+    getClientCurrency(clientId),
+    getIntegrationCurrency(clientId, platform),
+  ])
+
   for (const row of rows) {
+    const spend = await convertToBaseCurrency(row.spend, adAccountCurrency, baseCurrency)
     await db.query(
       `INSERT INTO ad_costs
          (client_id, platform, campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name, date, spend, impressions, clicks,
@@ -42,7 +64,7 @@ export async function upsertAdCosts(clientId: string, platform: string, rows: Ad
         row.ad_id,
         row.ad_name,
         row.date,
-        row.spend,
+        spend,
         row.impressions,
         row.clicks,
         row.creative_thumbnail_url ?? null,

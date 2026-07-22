@@ -66,7 +66,7 @@ interface PaypalWebhookEvent {
   event_type: string
   resource: {
     id: string
-    amount?: { total: string }
+    amount?: { total: string; currency?: string }
     sale_id?: string
     parent_payment?: string
     payer?: { payer_info?: { email?: string } }
@@ -104,6 +104,7 @@ export async function paypalWebhookRoutes(app: FastifyInstance) {
             revenue,
             order_id: event.resource.id,
             processor: 'paypal',
+            currency: event.resource.amount?.currency,
           })
         }
       } else if (event.event_type === 'PAYMENT.SALE.REFUNDED') {
@@ -114,7 +115,7 @@ export async function paypalWebhookRoutes(app: FastifyInstance) {
         const originalOrderId = event.resource.sale_id ?? event.resource.parent_payment
         const refundAmount = parseFloat(event.resource.amount?.total ?? '0')
         if (originalOrderId && refundAmount > 0) {
-          await recordRefund(client_id, originalOrderId, refundAmount)
+          await recordRefund(client_id, originalOrderId, refundAmount, event.resource.amount?.currency)
         }
       }
 

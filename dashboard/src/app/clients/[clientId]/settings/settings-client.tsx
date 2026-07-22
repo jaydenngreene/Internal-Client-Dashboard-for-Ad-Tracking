@@ -9,6 +9,7 @@ import {
   updateClientNiche,
   updateAttributionModel,
   updateClientMargin,
+  updateClientCurrency,
   updateBudgetTarget,
   generateShareLink,
   revokeShareLink,
@@ -106,6 +107,12 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
     onSuccess: invalidateClient,
   });
 
+  const [currency, setCurrency] = useState(client.currency);
+  const currencyMutation = useMutation({
+    mutationFn: () => updateClientCurrency(clientId, currency),
+    onSuccess: invalidateClient,
+  });
+
   return (
     <Card className="px-4">
       <CardHeader className="px-0">
@@ -162,6 +169,31 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">Which touchpoint gets credit for a sale.</p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Reporting currency</FieldLabel>
+            <div className="flex items-center gap-2">
+              <Input
+                className="w-20 uppercase"
+                maxLength={3}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+              />
+              <Button
+                size="sm"
+                disabled={currency === client.currency || currencyMutation.isPending}
+                onClick={() => currencyMutation.mutate()}
+              >
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ad spend/revenue in a different currency is converted to this automatically.
+            </p>
+            {currencyMutation.isError && (
+              <p className="text-xs text-status-critical">{(currencyMutation.error as Error).message}</p>
+            )}
           </div>
         </div>
 
@@ -289,6 +321,7 @@ const INTEGRATIONS: IntegrationDef[] = [
   { platform: "facebook-ads", label: "Facebook Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "ad_account_id", label: "Ad account ID" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "facebook-capi", label: "Facebook Conversions API", category: "Ad Platforms", fields: [
     { key: "pixel_id", label: "Pixel ID" },
@@ -300,35 +333,42 @@ const INTEGRATIONS: IntegrationDef[] = [
     { key: "refresh_token", label: "Refresh token", type: "password", optional: true },
     { key: "conversion_action_purchase", label: "Purchase conversion action", optional: true },
     { key: "conversion_action_lead", label: "Lead conversion action", optional: true },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "bing-ads", label: "Bing / Microsoft Ads", category: "Ad Platforms", fields: [
     { key: "customer_id", label: "Customer ID" },
     { key: "account_id", label: "Account ID" },
     { key: "refresh_token", label: "Refresh token", type: "password" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "tiktok-ads", label: "TikTok Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "advertiser_id", label: "Advertiser ID" },
     { key: "pixel_code", label: "Pixel code" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "snapchat-ads", label: "Snapchat Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "pixel_id", label: "Pixel ID" },
     { key: "ad_account_id", label: "Ad account ID" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "pinterest-ads", label: "Pinterest Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "ad_account_id", label: "Ad account ID" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "linkedin-ads", label: "LinkedIn Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "account_id", label: "Sponsored account ID", optional: true },
     { key: "conversion_id_purchase", label: "Purchase conversion ID", optional: true },
     { key: "conversion_id_lead", label: "Lead conversion ID", optional: true },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "reddit-ads", label: "Reddit Ads", category: "Ad Platforms", fields: [
     { key: "access_token", label: "Access token", type: "password" },
     { key: "account_id", label: "Account ID" },
+    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
   { platform: "twilio", label: "Twilio", category: "Call Tracking", fields: [
     { key: "account_sid", label: "Account SID" },

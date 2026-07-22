@@ -131,6 +131,9 @@ export interface Client {
   // Step 43 — account-wide, not per-campaign, matching this app's existing
   // "one number per client" simplicity (same level as the margin fields above).
   monthly_budget_target: number | null;
+  // Step 48 — the client's reporting/base currency; ad spend and purchase
+  // revenue in a different currency are converted to this at ingestion.
+  currency: string;
   // False for a client shared with this login rather than owned by it (migration
   // 028) — gates owner-only UI (collaborator management, delete) client-side; the
   // backend enforces the same restriction independently, this is just so the
@@ -238,6 +241,20 @@ export function updateClientMargin(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(margin),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function updateClientCurrency(clientId: string, currency: string): Promise<Client> {
+  return apiRequest(`${API_URL}/clients/${clientId}/currency`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currency }),
   }).then(async (res) => {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

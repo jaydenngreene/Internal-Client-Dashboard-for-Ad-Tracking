@@ -29,6 +29,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/share-link': 'client',
   '/clients/:id/utm-mismatches': 'client',
   '/clients/:id/budget-target': 'client',
+  '/clients/:id/currency': 'client',
   '/clients/:id/identity-links': 'client',
   '/clients/:id/tracking-numbers': 'client',
   '/clients/:id/webhook-subscriptions': 'client',

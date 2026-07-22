@@ -200,6 +200,20 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(await findUtmMismatches(req.params.id))
   })
 
+  // Step 48 — the client's reporting/base currency. A short ISO 4217 code check
+  // (3 uppercase letters), not a real currency-list validation — good enough to
+  // catch a typo without maintaining a hardcoded list.
+  app.patch<{ Params: { id: string }; Body: { currency: string } }>('/clients/:id/currency', async (req, reply) => {
+    const { id } = req.params
+    const currency = req.body.currency?.toUpperCase()
+    if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+      return reply.code(400).send({ error: 'currency must be a 3-letter ISO code (e.g. USD, EUR, GBP)' })
+    }
+    const { rows } = await db.query('UPDATE clients SET currency = $1 WHERE id = $2 RETURNING *', [currency, id])
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
   // Step 43 — account-wide monthly ad-spend budget target, used by the budget
   // pacing report. null clears it back to "no target set."
   app.patch<{
@@ -276,10 +290,11 @@ export async function clientRoutes(app: FastifyInstance) {
     Body: {
       access_token: string
       ad_account_id: string
+      currency?: string
     }
   }>('/clients/:id/integrations/facebook-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, ad_account_id } = req.body
+    const { access_token, ad_account_id, currency } = req.body
 
     if (!access_token || !ad_account_id) {
       return reply.code(400).send({ error: 'access_token and ad_account_id required' })
@@ -291,7 +306,7 @@ export async function clientRoutes(app: FastifyInstance) {
        ON CONFLICT (client_id, platform)
        DO UPDATE SET config = EXCLUDED.config
        RETURNING *`,
-      [id, JSON.stringify({ access_token, ad_account_id })]
+      [id, JSON.stringify({ access_token, ad_account_id, currency: currency?.toUpperCase() })]
     )
     backfillIntegration(id, 'facebook_ads', rows[0].config)
     return reply.code(200).send(rows[0])
@@ -310,10 +325,11 @@ export async function clientRoutes(app: FastifyInstance) {
       refresh_token?: string
       conversion_action_purchase?: string
       conversion_action_lead?: string
+      currency?: string
     }
   }>('/clients/:id/integrations/google-ads', async (req, reply) => {
     const { id } = req.params
-    const { customer_id, login_customer_id, refresh_token, conversion_action_purchase, conversion_action_lead } =
+    const { customer_id, login_customer_id, refresh_token, conversion_action_purchase, conversion_action_lead, currency } =
       req.body
 
     if (!customer_id) {
@@ -334,6 +350,7 @@ export async function clientRoutes(app: FastifyInstance) {
           refresh_token,
           conversion_action_purchase,
           conversion_action_lead,
+          currency: currency?.toUpperCase(),
         }),
       ]
     )
@@ -374,14 +391,14 @@ export async function clientRoutes(app: FastifyInstance) {
   // DEVELOPER_TOKEN) in .env, per-client customer_id/account_id/refresh_token here.
   app.post<{
     Params: { id: string }
-    Body: { customer_id: string; account_id: string; refresh_token: string }
+    Body: { customer_id: string; account_id: string; refresh_token: string; currency?: string }
   }>('/clients/:id/integrations/bing-ads', async (req, reply) => {
     const { id } = req.params
-    const { customer_id, account_id, refresh_token } = req.body
+    const { customer_id, account_id, refresh_token, currency } = req.body
     if (!customer_id || !account_id || !refresh_token) {
       return reply.code(400).send({ error: 'customer_id, account_id, and refresh_token required' })
     }
-    const saved = await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token })
+    const saved = await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token, currency: currency?.toUpperCase() })
     backfillIntegration(id, 'bing_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -507,14 +524,14 @@ export async function clientRoutes(app: FastifyInstance) {
   // facebook_capi — TikTok's Events API and Marketing API use the same access token.
   app.post<{
     Params: { id: string }
-    Body: { access_token: string; advertiser_id: string; pixel_code: string }
+    Body: { access_token: string; advertiser_id: string; pixel_code: string; currency?: string }
   }>('/clients/:id/integrations/tiktok-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, advertiser_id, pixel_code } = req.body
+    const { access_token, advertiser_id, pixel_code, currency } = req.body
     if (!access_token || !advertiser_id || !pixel_code) {
       return reply.code(400).send({ error: 'access_token, advertiser_id, and pixel_code required' })
     }
-    const saved = await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code })
+    const saved = await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code, currency: currency?.toUpperCase() })
     backfillIntegration(id, 'tiktok_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -522,14 +539,14 @@ export async function clientRoutes(app: FastifyInstance) {
   // Save or update a Snapchat Ads integration — Step 16 (signals) / Step 19 (cost sync).
   app.post<{
     Params: { id: string }
-    Body: { access_token: string; pixel_id: string; ad_account_id: string }
+    Body: { access_token: string; pixel_id: string; ad_account_id: string; currency?: string }
   }>('/clients/:id/integrations/snapchat-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, pixel_id, ad_account_id } = req.body
+    const { access_token, pixel_id, ad_account_id, currency } = req.body
     if (!access_token || !pixel_id || !ad_account_id) {
       return reply.code(400).send({ error: 'access_token, pixel_id, and ad_account_id required' })
     }
-    const saved = await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id })
+    const saved = await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id, currency: currency?.toUpperCase() })
     backfillIntegration(id, 'snapchat_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -537,14 +554,14 @@ export async function clientRoutes(app: FastifyInstance) {
   // Save or update a Pinterest Ads integration — Step 17 (signals) / Step 19 (cost sync).
   app.post<{
     Params: { id: string }
-    Body: { access_token: string; ad_account_id: string }
+    Body: { access_token: string; ad_account_id: string; currency?: string }
   }>('/clients/:id/integrations/pinterest-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, ad_account_id } = req.body
+    const { access_token, ad_account_id, currency } = req.body
     if (!access_token || !ad_account_id) {
       return reply.code(400).send({ error: 'access_token and ad_account_id required' })
     }
-    const saved = await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id })
+    const saved = await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id, currency: currency?.toUpperCase() })
     backfillIntegration(id, 'pinterest_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -562,16 +579,18 @@ export async function clientRoutes(app: FastifyInstance) {
       account_id?: string
       conversion_id_purchase?: string
       conversion_id_lead?: string
+      currency?: string
     }
   }>('/clients/:id/integrations/linkedin-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, account_id, conversion_id_purchase, conversion_id_lead } = req.body
+    const { access_token, account_id, conversion_id_purchase, conversion_id_lead, currency } = req.body
     if (!access_token) {
       return reply.code(400).send({ error: 'access_token required' })
     }
     const saved = await upsertIntegration(id, 'linkedin_ads', {
       access_token,
       account_id,
+      currency: currency?.toUpperCase(),
       conversion_id_purchase,
       conversion_id_lead,
     })
@@ -582,14 +601,14 @@ export async function clientRoutes(app: FastifyInstance) {
   // Save or update a Reddit Ads integration — Step 17 (signals) / Step 20 (cost sync).
   app.post<{
     Params: { id: string }
-    Body: { access_token: string; account_id: string }
+    Body: { access_token: string; account_id: string; currency?: string }
   }>('/clients/:id/integrations/reddit-ads', async (req, reply) => {
     const { id } = req.params
-    const { access_token, account_id } = req.body
+    const { access_token, account_id, currency } = req.body
     if (!access_token || !account_id) {
       return reply.code(400).send({ error: 'access_token and account_id required' })
     }
-    const saved = await upsertIntegration(id, 'reddit_ads', { access_token, account_id })
+    const saved = await upsertIntegration(id, 'reddit_ads', { access_token, account_id, currency: currency?.toUpperCase() })
     backfillIntegration(id, 'reddit_ads', saved.config)
     return reply.code(200).send(saved)
   })

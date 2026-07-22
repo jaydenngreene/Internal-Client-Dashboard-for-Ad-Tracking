@@ -110,6 +110,7 @@ export async function stripeWebhookRoutes(app: FastifyInstance) {
               product: session.metadata?.product ?? null,
               order_id: orderId,
               processor: 'stripe',
+              currency: session.currency?.toUpperCase(),
             })
           }
           // Step 21 — subscription checkouts don't carry the subscription's own
@@ -159,6 +160,7 @@ export async function stripeWebhookRoutes(app: FastifyInstance) {
               revenue: invoice.amount_paid / 100,
               order_id: orderId,
               processor: 'stripe',
+              currency: invoice.currency?.toUpperCase(),
             })
           }
           break
@@ -167,7 +169,7 @@ export async function stripeWebhookRoutes(app: FastifyInstance) {
         case 'charge.refunded': {
           const charge = event.data.object as Stripe.Charge
           const orderId = (charge.payment_intent as string) ?? charge.id
-          await recordRefund(client_id, orderId, charge.amount_refunded / 100)
+          await recordRefund(client_id, orderId, charge.amount_refunded / 100, charge.currency?.toUpperCase())
           break
         }
 

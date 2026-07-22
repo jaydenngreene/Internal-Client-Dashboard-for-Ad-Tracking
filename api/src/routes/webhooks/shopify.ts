@@ -49,6 +49,7 @@ interface ShopifyRefund {
     amount: string
     kind: string
     status: string
+    currency?: string
   }>
 }
 
@@ -118,6 +119,7 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
         product: productName,
         order_id: orderId,
         processor: 'shopify',
+        currency: order.currency,
       })
 
       return reply.code(200).send({ received: true })
@@ -141,11 +143,10 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
 
       const refund: ShopifyRefund = JSON.parse(rawBody.toString())
       const orderId = String(refund.order_id)
-      const refundAmount = refund.transactions
-        .filter((t) => t.status === 'success' && t.kind === 'refund')
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0)
+      const refundTransactions = refund.transactions.filter((t) => t.status === 'success' && t.kind === 'refund')
+      const refundAmount = refundTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0)
 
-      await recordRefund(client_id, orderId, refundAmount)
+      await recordRefund(client_id, orderId, refundAmount, refundTransactions[0]?.currency)
 
       return reply.code(200).send({ received: true })
     }

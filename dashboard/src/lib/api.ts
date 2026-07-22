@@ -271,6 +271,18 @@ export interface PublicShareOverview {
   series: { date: string; cost: number; revenue: number }[];
 }
 
+// Step 41 — likely-typo UTM naming mismatches.
+export interface UtmMismatch {
+  sessionCampaign: string;
+  platform: string;
+  closestAdCostsCampaign: string;
+  editDistance: number;
+}
+
+export function getUtmMismatches(clientId: string): Promise<UtmMismatch[]> {
+  return fetchJson<UtmMismatch[]>(`/clients/${clientId}/utm-mismatches`);
+}
+
 export function getPublicShareOverview(token: string): Promise<PublicShareOverview> {
   return fetch(`${API_URL}/public/share/${token}/overview`).then(async (res) => {
     if (!res.ok) {

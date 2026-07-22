@@ -11,6 +11,7 @@ import {
   updateClientMargin,
   generateShareLink,
   revokeShareLink,
+  getUtmMismatches,
   getIntegrations,
   saveIntegration,
   generateTagWebhookSecret,
@@ -932,6 +933,113 @@ function ShareLinkSection({ clientId, client }: { clientId: string; client: Clie
   );
 }
 
+// Step 41 — a URL builder (pure client-side, no backend needed for construction
+// itself) plus a naming-mismatch check that catches likely TYPOS between a
+// session's utm_campaign and an ad platform's own campaign_name, preventing the
+// UTM-tagging-mismatch problem at the source instead of only surfacing it after
+// the fact via the funnel breakdown's "unmatched" flag (a known, deliberate scope
+// cut documented since Step 7).
+function UtmToolsSection({ clientId }: { clientId: string }) {
+  const [baseUrl, setBaseUrl] = useState("");
+  const [source, setSource] = useState("");
+  const [medium, setMedium] = useState("cpc");
+  const [campaign, setCampaign] = useState("");
+  const [content, setContent] = useState("");
+  const [term, setTerm] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const { data: mismatches, isLoading } = useQuery({
+    queryKey: ["utm-mismatches", clientId],
+    queryFn: () => getUtmMismatches(clientId),
+  });
+
+  let builtUrl = "";
+  if (baseUrl.trim()) {
+    try {
+      const url = new URL(baseUrl.trim());
+      if (source) url.searchParams.set("utm_source", source);
+      if (medium) url.searchParams.set("utm_medium", medium);
+      if (campaign) url.searchParams.set("utm_campaign", campaign);
+      if (content) url.searchParams.set("utm_content", content);
+      if (term) url.searchParams.set("utm_term", term);
+      builtUrl = url.toString();
+    } catch {
+      builtUrl = "";
+    }
+  }
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>UTM Builder & Naming Check</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 px-0">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Destination URL</FieldLabel>
+            <Input className="w-64" placeholder="https://example.com/page" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Source</FieldLabel>
+            <Input className="w-32" placeholder="facebook" value={source} onChange={(e) => setSource(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Medium</FieldLabel>
+            <Input className="w-28" value={medium} onChange={(e) => setMedium(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Campaign</FieldLabel>
+            <Input className="w-40" placeholder="Match your ad platform exactly" value={campaign} onChange={(e) => setCampaign(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Content (optional)</FieldLabel>
+            <Input className="w-32" value={content} onChange={(e) => setContent(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Term (optional)</FieldLabel>
+            <Input className="w-32" value={term} onChange={(e) => setTerm(e.target.value)} />
+          </div>
+        </div>
+
+        {builtUrl && (
+          <div className="flex flex-wrap items-center gap-2">
+            <CodeBlock>{builtUrl}</CodeBlock>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(builtUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <p className="text-sm font-medium">Possible naming mismatches (last 90 days)</p>
+          {isLoading && <Skeleton className="h-16 w-full" />}
+          {!isLoading && (!mismatches || mismatches.length === 0) && (
+            <p className="text-xs text-muted-foreground">No likely typos found between session tagging and ad platform campaign names.</p>
+          )}
+          {mismatches && mismatches.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {mismatches.map((m, i) => (
+                <p key={i} className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+                  Session tag "{m.sessionCampaign}" ({m.platform}) doesn't exactly match your ad platform's "{m.closestAdCostsCampaign}"
+                  — likely a typo (edit distance {m.editDistance}).
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SettingsClient({ clientId }: { clientId: string }) {
   const { data: client, isLoading } = useQuery({ queryKey: ["client", clientId], queryFn: () => getClient(clientId) });
 
@@ -956,6 +1064,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <IdentityLinksSection clientId={clientId} />
           <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
           <ShareLinkSection clientId={clientId} client={client} />
+          <UtmToolsSection clientId={clientId} />
           {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
         </>
       )}

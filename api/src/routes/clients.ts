@@ -5,6 +5,7 @@ import { isValidUrl, isValidEmail } from '../lib/validation'
 import { isClientOwner } from '../lib/ownership'
 import { backfillIntegration } from '../jobs/adCosts/run'
 import { generateRandomToken } from '../lib/auth'
+import { findUtmMismatches } from '../lib/utmMismatch'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 const CLIENT_NAME_MAX_LENGTH = 200
@@ -189,6 +190,14 @@ export async function clientRoutes(app: FastifyInstance) {
     ])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])
+  })
+
+  // Step 41 — likely-typo UTM naming mismatches (session utm_campaign vs. ad
+  // platform campaign_name), distinct from the funnel breakdown's existing
+  // exact-match "matched" flag — this tries to explain WHY a row is unmatched
+  // when it's plausibly a typo, not just that it is.
+  app.get<{ Params: { id: string } }>('/clients/:id/utm-mismatches', async (req, reply) => {
+    return reply.send(await findUtmMismatches(req.params.id))
   })
 
   // Save or update a Shopify integration for a client

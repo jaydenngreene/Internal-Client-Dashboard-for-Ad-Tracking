@@ -15,16 +15,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatNumber } from "@/lib/format";
-
-// Native <select> can't render through the Input component (different element), but
-// shares its exact visual vocabulary so it still reads as the same form-control family.
-const selectClass =
-  "flex h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 const PLATFORM_LABEL: Record<AudiencePlatform, string> = {
   facebook_custom_audience: "Meta Custom Audience",
   google_customer_match: "Google Customer Match",
+};
+
+const SEGMENT_LABEL: Record<SegmentType, string> = {
+  all_customers: "All customers",
+  ltv_above: "LTV above a threshold",
+  tag: "Has a specific tag",
 };
 
 function CreateSyncForm({ clientId }: { clientId: string }) {
@@ -68,18 +70,28 @@ function CreateSyncForm({ clientId }: { clientId: string }) {
       </div>
       <div className="flex flex-col gap-1">
         <FieldLabel>Platform</FieldLabel>
-        <select className={selectClass} value={platform} onChange={(e) => setPlatform(e.target.value as AudiencePlatform)}>
-          <option value="facebook_custom_audience">Meta Custom Audience</option>
-          <option value="google_customer_match">Google Customer Match</option>
-        </select>
+        <Select value={platform} onValueChange={(v) => setPlatform(v as AudiencePlatform)}>
+          <SelectTrigger className="w-48">
+            <SelectValue>{(v: AudiencePlatform) => PLATFORM_LABEL[v]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="facebook_custom_audience">Meta Custom Audience</SelectItem>
+            <SelectItem value="google_customer_match">Google Customer Match</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex flex-col gap-1">
         <FieldLabel>Segment</FieldLabel>
-        <select className={selectClass} value={segmentType} onChange={(e) => setSegmentType(e.target.value as SegmentType)}>
-          <option value="all_customers">All customers</option>
-          <option value="ltv_above">LTV above a threshold</option>
-          <option value="tag">Has a specific tag</option>
-        </select>
+        <Select value={segmentType} onValueChange={(v) => setSegmentType(v as SegmentType)}>
+          <SelectTrigger className="w-48">
+            <SelectValue>{(v: SegmentType) => SEGMENT_LABEL[v]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all_customers">All customers</SelectItem>
+            <SelectItem value="ltv_above">LTV above a threshold</SelectItem>
+            <SelectItem value="tag">Has a specific tag</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {segmentType === "ltv_above" && (
         <div className="flex flex-col gap-1">

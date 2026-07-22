@@ -13,7 +13,9 @@ export function DateRangeSelect({
   return (
     <Select value={value} onValueChange={(v) => onChange(v as RangePreset)}>
       <SelectTrigger className="w-40">
-        <SelectValue />
+        <SelectValue>
+          {(v: RangePreset) => RANGE_PRESETS.find((preset) => preset.value === v)?.label}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {RANGE_PRESETS.map((preset) => (

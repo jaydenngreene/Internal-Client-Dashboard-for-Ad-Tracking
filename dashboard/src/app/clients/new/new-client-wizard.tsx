@@ -139,7 +139,7 @@ export function NewClientWizard() {
               <FieldLabel>Niche</FieldLabel>
               <Select value={niche} onValueChange={(v) => setNiche(v as Niche)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{(v: Niche) => NICHE_LABEL[v]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {NICHES.map((n) => (
@@ -176,7 +176,9 @@ export function NewClientWizard() {
               <FieldLabel>Processor</FieldLabel>
               <Select value={processor} onValueChange={(v) => setProcessor(v as ProcessorPlatform | "none")}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: ProcessorPlatform | "none") => PROCESSORS.find((p) => p.value === v)?.label}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PROCESSORS.map((p) => (

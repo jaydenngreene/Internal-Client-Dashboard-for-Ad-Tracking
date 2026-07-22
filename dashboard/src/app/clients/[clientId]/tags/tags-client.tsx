@@ -9,12 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/format";
-
-// Native <select> can't render through the Input component (different element), but
-// shares its exact visual vocabulary so it still reads as the same form-control family.
-const selectClass =
-  "flex h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 const TAG_TYPE_LABEL: Record<TagType, string> = {
   freeform: "Freeform",
@@ -59,15 +55,16 @@ function CreateTagForm({ clientId }: { clientId: string }) {
       </div>
       <div className="flex flex-col gap-1">
         <FieldLabel>Type</FieldLabel>
-        <select
-          className={selectClass}
-          value={tagType}
-          onChange={(e) => setTagType(e.target.value as TagType)}
-        >
-          <option value="freeform">Freeform</option>
-          <option value="funnel_stage">Funnel Stage</option>
-          <option value="product">Product (auto-sale)</option>
-        </select>
+        <Select value={tagType} onValueChange={(v) => setTagType(v as TagType)}>
+          <SelectTrigger className="w-44">
+            <SelectValue>{(v: TagType) => TAG_TYPE_LABEL[v]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="freeform">Freeform</SelectItem>
+            <SelectItem value="funnel_stage">Funnel Stage</SelectItem>
+            <SelectItem value="product">Product (auto-sale)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {tagType === "funnel_stage" && (
         <div className="flex flex-col gap-1">
@@ -160,14 +157,20 @@ function ApplyTagPanel({ clientId, tags }: { clientId: string; tags: Tag[] }) {
           </div>
           <div className="flex flex-col gap-1">
             <FieldLabel>Tag</FieldLabel>
-            <select className={selectClass} value={selectedTagId} onChange={(e) => setSelectedTagId(e.target.value)}>
-              <option value="">Select a tag…</option>
-              {tags.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <Select value={selectedTagId} onValueChange={(v) => setSelectedTagId(v ?? "")}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Select a tag…">
+                  {(v: string) => tags.find((t) => t.id === v)?.name ?? "Select a tag…"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {tags.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button
             size="sm"

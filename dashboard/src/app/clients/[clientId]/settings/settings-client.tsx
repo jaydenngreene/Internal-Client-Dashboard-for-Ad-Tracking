@@ -11,6 +11,7 @@ import {
   updateClientMargin,
   updateClientCurrency,
   updateReportSchedule,
+  updateClientBranding,
   updateBudgetTarget,
   generateShareLink,
   revokeShareLink,
@@ -1048,6 +1049,72 @@ function ShareLinkSection({ clientId, client }: { clientId: string; client: Clie
   );
 }
 
+// Step 58 — white-label branding shown on the public share link. No file-upload
+// storage exists in this app, so the logo is a URL the agency hosts themselves —
+// same "paste a URL" pattern as every other asset field here. Both fields are
+// independently clearable back to this app's own default branding.
+function BrandingSection({ clientId, client }: { clientId: string; client: Client }) {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["client", clientId] });
+  const [logoUrl, setLogoUrl] = useState(client.brand_logo_url ?? "");
+  const [accentColor, setAccentColor] = useState(client.brand_accent_color ?? "");
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateClientBranding(clientId, {
+        brand_logo_url: logoUrl.trim() === "" ? null : logoUrl.trim(),
+        brand_accent_color: accentColor.trim() === "" ? null : accentColor.trim(),
+      }),
+    onSuccess: invalidate,
+  });
+  const dirty = logoUrl !== (client.brand_logo_url ?? "") || accentColor !== (client.brand_accent_color ?? "");
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>White-Label Branding</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Replace this app&apos;s own logo/name on the public share link above with your own. Leave blank to use the
+          default branding.
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Logo URL</FieldLabel>
+            <Input
+              className="w-72"
+              placeholder="https://yoursite.com/logo.png"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Accent color</FieldLabel>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                className="h-9 w-9 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+                value={/^#[0-9a-fA-F]{6}$/.test(accentColor) ? accentColor : "#3987e5"}
+                onChange={(e) => setAccentColor(e.target.value)}
+              />
+              <Input
+                className="w-28 uppercase"
+                placeholder="#3987e5"
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button size="sm" disabled={!dirty || mutation.isPending} onClick={() => mutation.mutate()}>
+            Save
+          </Button>
+        </div>
+        {mutation.isError && <p className="text-xs text-status-critical">{(mutation.error as Error).message}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Step 41 — a URL builder (pure client-side, no backend needed for construction
 // itself) plus a naming-mismatch check that catches likely TYPOS between a
 // session's utm_campaign and an ad platform's own campaign_name, preventing the
@@ -1179,6 +1246,7 @@ export function SettingsClient({ clientId }: { clientId: string }) {
           <IdentityLinksSection clientId={clientId} />
           <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
           <ShareLinkSection clientId={clientId} client={client} />
+          <BrandingSection clientId={clientId} client={client} />
           <UtmToolsSection clientId={clientId} />
           <AuditLogSection queryKey={["client-audit-log", clientId]} fetcher={() => getClientAuditLog(clientId)} />
           {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}

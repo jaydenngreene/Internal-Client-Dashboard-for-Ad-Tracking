@@ -233,6 +233,31 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   )
 
+  // Step 58 — white-label branding for the public share link. Both fields are
+  // nullable/clearable (send null to remove) so an agency can revert to this
+  // app's own default branding at any time.
+  app.patch<{
+    Params: { id: string }
+    Body: { brand_logo_url?: string | null; brand_accent_color?: string | null }
+  }>('/clients/:id/branding', async (req, reply) => {
+    const { id } = req.params
+    const { brand_logo_url = null, brand_accent_color = null } = req.body
+
+    if (brand_logo_url !== null && !isValidUrl(brand_logo_url)) {
+      return reply.code(400).send({ error: 'brand_logo_url must be a valid http(s) URL' })
+    }
+    if (brand_accent_color !== null && !/^#[0-9a-fA-F]{6}$/.test(brand_accent_color)) {
+      return reply.code(400).send({ error: 'brand_accent_color must be a 6-digit hex color (e.g. #3987e5)' })
+    }
+
+    const { rows } = await db.query(
+      'UPDATE clients SET brand_logo_url = $1, brand_accent_color = $2 WHERE id = $3 RETURNING *',
+      [brand_logo_url, brand_accent_color, id]
+    )
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
   // Step 43 — account-wide monthly ad-spend budget target, used by the budget
   // pacing report. null clears it back to "no target set."
   app.patch<{

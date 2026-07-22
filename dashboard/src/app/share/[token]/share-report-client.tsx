@@ -21,8 +21,15 @@ export function ShareReportClient({ token }: { token: string }) {
   return (
     <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 p-6">
       <div className="flex items-center gap-2 pt-4">
-        <Radar className="size-5 text-chart-4" />
-        <span className="text-sm font-medium text-muted-foreground">Ad Tracking</span>
+        {data?.brandLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- agency-hosted URL, not a local asset Next can optimize
+          <img src={data.brandLogoUrl} alt={data.clientName} className="h-6 max-w-40 object-contain" />
+        ) : (
+          <>
+            <Radar className="size-5 text-chart-4" />
+            <span className="text-sm font-medium text-muted-foreground">Ad Tracking</span>
+          </>
+        )}
       </div>
 
       {isLoading && (
@@ -45,8 +52,10 @@ export function ShareReportClient({ token }: { token: string }) {
 
       {data && (
         <>
-          <div>
-            <h1 className="text-xl font-semibold">{data.clientName}</h1>
+          <div style={data.brandAccentColor ? { borderLeft: `3px solid ${data.brandAccentColor}`, paddingLeft: "0.75rem" } : undefined}>
+            <h1 className="text-xl font-semibold" style={data.brandAccentColor ? { color: data.brandAccentColor } : undefined}>
+              {data.clientName}
+            </h1>
             <p className="text-sm text-muted-foreground">
               {formatDateShort(data.from)} - {formatDateShort(data.to)}
             </p>

@@ -21,8 +21,10 @@ export async function publicShareRoutes(app: FastifyInstance) {
         cogs_percent: string | null
         payment_fee_percent: string | null
         fulfillment_cost_flat: string | null
+        brand_logo_url: string | null
+        brand_accent_color: string | null
       }>(
-        `SELECT id, name, cogs_percent, payment_fee_percent, fulfillment_cost_flat
+        `SELECT id, name, cogs_percent, payment_fee_percent, fulfillment_cost_flat, brand_logo_url, brand_accent_color
          FROM clients WHERE public_share_token = $1`,
         [req.params.token]
       )
@@ -86,6 +88,8 @@ export async function publicShareRoutes(app: FastifyInstance) {
 
       return reply.send({
         clientName: client.name,
+        brandLogoUrl: client.brand_logo_url,
+        brandAccentColor: client.brand_accent_color,
         from,
         to,
         cost,

@@ -40,6 +40,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/budget-target': 'client',
   '/clients/:id/currency': 'client',
   '/clients/:id/report-schedule': 'client',
+  '/clients/:id/branding': 'client',
   '/clients/:id/audit-log': 'client',
   '/account/audit-log': 'skip',
   '/clients/:id/identity-links': 'client',

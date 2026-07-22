@@ -585,6 +585,33 @@ export function getMmm(clientId: string): Promise<MmmResult> {
   return fetchJson<MmmResult>(`/clients/${clientId}/reports/mmm`);
 }
 
+// Step 59 — data-driven ("algorithmic") attribution via a Markov chain removal-
+// effect model — a channel-level comparison view, computed over the account's
+// aggregate history, deliberately separate from whichever rule-based model
+// actually drives the revenue numbers shown everywhere else in the dashboard.
+export interface MarkovChannelResult {
+  channel: string;
+  touchpoints: number;
+  removalEffect: number;
+  creditShare: number;
+  attributedRevenue: number;
+}
+
+export interface MarkovAttributionResult {
+  available: boolean;
+  reason?: string;
+  from?: string;
+  to?: string;
+  totalConversionProbability?: number;
+  visitorsAnalyzed?: number;
+  totalRevenue?: number;
+  channels?: MarkovChannelResult[];
+}
+
+export function getMarkovAttribution(clientId: string, range?: DateRange): Promise<MarkovAttributionResult> {
+  return fetchJson<MarkovAttributionResult>(`/clients/${clientId}/reports/markov-attribution${rangeQuery(range)}`);
+}
+
 // Step 56 — invalid-traffic visibility, advisory only.
 export interface InvalidTrafficReport {
   from: string;

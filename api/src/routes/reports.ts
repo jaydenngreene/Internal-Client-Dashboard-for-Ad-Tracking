@@ -5,6 +5,7 @@ import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv
 import { projectSum } from '../lib/forecasting'
 import { computeMMM } from '../lib/mmm'
 import { getOverviewSummary } from '../lib/overviewSummary'
+import { computeMarkovAttribution } from '../lib/markovAttribution'
 
 export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -785,6 +786,19 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/clients/:id/reports/mmm', async (req, reply) => {
     return reply.send(await computeMMM(req.params.id))
   })
+
+  // Step 59 — data-driven ("algorithmic") attribution via a Markov chain
+  // removal-effect model. See lib/markovAttribution.ts for the full methodology
+  // disclosure — this is a channel-level comparison view computed over the
+  // account's aggregate history, deliberately separate from whichever rule-based
+  // model (Steps 6/30) actually drives the revenue numbers shown everywhere else.
+  app.get<{ Params: { id: string }; Querystring: OverviewQuery }>(
+    '/clients/:id/reports/markov-attribution',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      return reply.send(await computeMarkovAttribution(req.params.id, from, to))
+    }
+  )
 
   // Step 56 — invalid-traffic visibility. Advisory only, same "flag, don't
   // silently act" pattern as pause candidates/creative fatigue — nothing here

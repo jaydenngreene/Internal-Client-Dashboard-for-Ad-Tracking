@@ -79,6 +79,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/email-sms': 'client',
   '/clients/:id/reports/forecast': 'client',
   '/clients/:id/reports/mmm': 'client',
+  '/clients/:id/reports/markov-attribution': 'client',
   '/clients/:id/reports/invalid-traffic': 'client',
   '/clients/:id/reports/subscriptions': 'client',
   '/clients/:id/campaigns/:platform/:campaignName': 'client',

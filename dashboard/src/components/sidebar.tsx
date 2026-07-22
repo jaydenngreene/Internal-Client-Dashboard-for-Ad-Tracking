@@ -22,6 +22,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "funnel", label: "Funnel", enabled: true },
   { slug: "mmm", label: "Media Mix Model", enabled: true },
+  { slug: "data-driven-attribution", label: "Data-Driven Attribution", enabled: true },
   { slug: "leads", label: "Leads", enabled: true },
   { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
   { slug: "email-sms", label: "Email & SMS", enabled: true },

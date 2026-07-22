@@ -50,6 +50,31 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
+  // Rename a client. Deliberately separate from the niche/attribution-model PATCHes
+  // above rather than one combined PATCH — each already has its own validation and
+  // this keeps a bad niche value from ever blocking a plain rename.
+  app.patch<{
+    Params: { id: string }
+    Body: { name: string }
+  }>('/clients/:id', async (req, reply) => {
+    const { id } = req.params
+    const { name } = req.body
+    if (!name || !name.trim()) return reply.code(400).send({ error: 'name required' })
+
+    const { rows } = await db.query('UPDATE clients SET name = $1 WHERE id = $2 RETURNING *', [name.trim(), id])
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.send(rows[0])
+  })
+
+  // Delete a client. Every table referencing clients(id) does so with ON DELETE
+  // CASCADE (verified across every migration), so this one statement is sufficient —
+  // no manual cleanup of sessions/leads/purchases/etc. needed.
+  app.delete<{ Params: { id: string } }>('/clients/:id', async (req, reply) => {
+    const { rows } = await db.query('DELETE FROM clients WHERE id = $1 RETURNING id', [req.params.id])
+    if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
+    return reply.code(204).send()
+  })
+
   // Change a client's attribution model (first_click / last_click / linear)
   app.patch<{
     Params: { id: string }
@@ -533,6 +558,16 @@ export async function clientRoutes(app: FastifyInstance) {
     ])
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.code(204).send()
+  })
+
+  // Generate (or rotate) the shared secret an external CRM/Zapier zap needs to call
+  // POST /webhooks/tags/:client_id. Server-generated rather than user-typed, like
+  // pixel_key — returned once in full here; every other read of this integration
+  // (GET /clients/:id/integrations) redacts it same as every other webhook_secret.
+  app.post<{ Params: { id: string } }>('/clients/:id/integrations/tag-webhook/generate', async (req, reply) => {
+    const webhookSecret = uuidv4()
+    const integration = await upsertIntegration(req.params.id, 'tag_webhook', { webhook_secret: webhookSecret })
+    return reply.code(200).send(integration)
   })
 
   // Get all integrations for a client

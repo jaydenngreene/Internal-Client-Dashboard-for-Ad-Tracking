@@ -50,6 +50,120 @@ function postIntegration(clientId: string, platform: string, body: Record<string
   });
 }
 
+// Generic version of the above for Settings — every ad-platform/CRM integration
+// (17 of them) already shares the same upsertIntegration() shape on the backend,
+// so one function covers all of them instead of a bespoke wrapper per platform.
+export const saveIntegration = postIntegration;
+
+export interface IntegrationSummary {
+  platform: string;
+  created_at: string;
+  config: Record<string, unknown>;
+}
+
+export function getIntegrations(clientId: string): Promise<IntegrationSummary[]> {
+  return fetch(`${API_URL}/clients/${clientId}/integrations`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function updateClientName(clientId: string, name: string): Promise<Client> {
+  return fetch(`${API_URL}/clients/${clientId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function updateClientNiche(clientId: string, niche: Niche): Promise<Client> {
+  return fetch(`${API_URL}/clients/${clientId}/niche`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ niche }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function updateAttributionModel(
+  clientId: string,
+  attribution_model: Client["attribution_model"]
+): Promise<Client> {
+  return fetch(`${API_URL}/clients/${clientId}/attribution-model`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ attribution_model }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function deleteClient(clientId: string): Promise<void> {
+  return fetch(`${API_URL}/clients/${clientId}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
+export function generateTagWebhookSecret(clientId: string): Promise<IntegrationSummary & { config: { webhook_secret: string } }> {
+  return fetch(`${API_URL}/clients/${clientId}/integrations/tag-webhook/generate`, { method: "POST" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export interface OutboundWebhookEventType {
+  value: "sale.attributed" | "lead.opted.in" | "call.qualified";
+  label: string;
+}
+
+export const OUTBOUND_WEBHOOK_EVENT_TYPES: OutboundWebhookEventType[] = [
+  { value: "sale.attributed", label: "Sale attributed" },
+  { value: "lead.opted.in", label: "Lead opted in" },
+  { value: "call.qualified", label: "Call qualified" },
+];
+
+export interface OutboundWebhookSubscription {
+  id: string;
+  client_id: string;
+  target_url: string;
+  event_types: string[];
+  active: boolean;
+  created_at: string;
+}
+
+export function getWebhookSubscriptions(clientId: string): Promise<OutboundWebhookSubscription[]> {
+  return fetch(`${API_URL}/clients/${clientId}/webhook-subscriptions`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function createWebhookSubscription(
+  clientId: string,
+  body: { target_url: string; event_types: string[] }
+): Promise<OutboundWebhookSubscription & { signing_secret: string }> {
+  return fetch(`${API_URL}/clients/${clientId}/webhook-subscriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
+}
+
+export function deleteWebhookSubscription(subId: string): Promise<void> {
+  return fetch(`${API_URL}/webhook-subscriptions/${subId}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 export const saveShopifyIntegration = (clientId: string, body: { webhook_secret: string; shop_domain: string }) =>
   postIntegration(clientId, "shopify", body);
 
@@ -263,6 +377,13 @@ function rangeQuery(range?: DateRange, extra?: Record<string, string>): string {
   const params = new URLSearchParams({ ...(range ? { from: range.from, to: range.to } : {}), ...extra });
   const qs = params.toString();
   return qs ? `?${qs}` : "";
+}
+
+export function getClient(clientId: string): Promise<Client> {
+  return fetch(`${API_URL}/clients/${clientId}`).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
 }
 
 export function getClients(): Promise<Client[]> {

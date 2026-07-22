@@ -1,0 +1,571 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  getClient,
+  updateClientName,
+  updateClientNiche,
+  updateAttributionModel,
+  getIntegrations,
+  saveIntegration,
+  generateTagWebhookSecret,
+  getWebhookSubscriptions,
+  createWebhookSubscription,
+  deleteWebhookSubscription,
+  deleteClient,
+  OUTBOUND_WEBHOOK_EVENT_TYPES,
+  Client,
+  Niche,
+} from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { FieldLabel } from "@/components/ui/field-label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClientKicker } from "@/components/client-kicker";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const NICHE_LABEL: Record<Niche, string> = {
+  ecommerce: "Ecommerce",
+  call: "Call-based / local service",
+  lead_gen: "Lead generation",
+  saas: "SaaS",
+  info_product: "Info product / education",
+  other: "Other",
+};
+
+const ATTRIBUTION_LABEL: Record<Client["attribution_model"], string> = {
+  first_click: "First Click",
+  last_click: "Last Click",
+  linear: "Linear",
+};
+
+function CodeBlock({ children }: { children: string }) {
+  return (
+    <pre className="overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+      <code>{children}</code>
+    </pre>
+  );
+}
+
+function GeneralSection({ clientId, client }: { clientId: string; client: Client }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(client.name);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+  const invalidateClient = () => {
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+    queryClient.invalidateQueries({ queryKey: ["client", clientId] });
+  };
+  const nameMutation = useMutation({
+    mutationFn: () => updateClientName(clientId, name.trim()),
+    onSuccess: invalidateClient,
+  });
+  const nicheMutation = useMutation({
+    mutationFn: (niche: Niche) => updateClientNiche(clientId, niche),
+    onSuccess: invalidateClient,
+  });
+  const attributionMutation = useMutation({
+    mutationFn: (model: Client["attribution_model"]) => updateAttributionModel(clientId, model),
+    onSuccess: invalidateClient,
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>General</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 px-0">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Client name</FieldLabel>
+            <Input className="w-64" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <Button
+            size="sm"
+            disabled={!name.trim() || name.trim() === client.name || nameMutation.isPending}
+            onClick={() => nameMutation.mutate()}
+          >
+            Save
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Niche</FieldLabel>
+            <Select value={client.niche} onValueChange={(v) => nicheMutation.mutate(v as Niche)}>
+              <SelectTrigger className="w-56">
+                <SelectValue>{(v: Niche) => NICHE_LABEL[v]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(NICHE_LABEL) as Niche[]).map((n) => (
+                  <SelectItem key={n} value={n}>
+                    {NICHE_LABEL[n]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Controls which report tabs and KPIs apply.</p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Attribution model</FieldLabel>
+            <Select
+              value={client.attribution_model}
+              onValueChange={(v) => attributionMutation.mutate(v as Client["attribution_model"])}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue>{(v: Client["attribution_model"]) => ATTRIBUTION_LABEL[v]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(ATTRIBUTION_LABEL) as Client["attribution_model"][]).map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {ATTRIBUTION_LABEL[m]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Which touchpoint gets credit for a sale.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <FieldLabel>Pixel install</FieldLabel>
+          <CodeBlock>{`Pixel key: ${client.pixel_key}\nAPI URL:   ${apiUrl}`}</CodeBlock>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface IntegrationFieldDef {
+  key: string;
+  label: string;
+  type?: "text" | "password" | "checkbox";
+  optional?: boolean;
+}
+interface IntegrationDef {
+  platform: string;
+  label: string;
+  category: string;
+  fields: IntegrationFieldDef[];
+}
+
+const INTEGRATIONS: IntegrationDef[] = [
+  { platform: "shopify", label: "Shopify", category: "Payment Processors", fields: [
+    { key: "shop_domain", label: "Shop domain" },
+    { key: "webhook_secret", label: "Webhook signing secret", type: "password" },
+  ] },
+  { platform: "stripe", label: "Stripe", category: "Payment Processors", fields: [
+    { key: "webhook_secret", label: "Signing secret (whsec_...)", type: "password" },
+  ] },
+  { platform: "paypal", label: "PayPal", category: "Payment Processors", fields: [
+    { key: "client_id", label: "App Client ID" },
+    { key: "client_secret", label: "App Client Secret", type: "password" },
+    { key: "webhook_id", label: "Webhook ID" },
+  ] },
+  { platform: "square", label: "Square", category: "Payment Processors", fields: [
+    { key: "signature_key", label: "Signature key", type: "password" },
+    { key: "notification_url", label: "Notification URL" },
+  ] },
+  { platform: "gohighlevel", label: "GoHighLevel", category: "Payment Processors", fields: [
+    { key: "webhook_secret", label: "Shared secret", type: "password" },
+  ] },
+  { platform: "facebook-ads", label: "Facebook Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "ad_account_id", label: "Ad account ID" },
+  ] },
+  { platform: "facebook-capi", label: "Facebook Conversions API", category: "Ad Platforms", fields: [
+    { key: "pixel_id", label: "Pixel ID" },
+    { key: "access_token", label: "Access token", type: "password" },
+  ] },
+  { platform: "google-ads", label: "Google Ads", category: "Ad Platforms", fields: [
+    { key: "customer_id", label: "Customer ID" },
+    { key: "login_customer_id", label: "Login customer ID (MCC)", optional: true },
+    { key: "refresh_token", label: "Refresh token", type: "password", optional: true },
+    { key: "conversion_action_purchase", label: "Purchase conversion action", optional: true },
+    { key: "conversion_action_lead", label: "Lead conversion action", optional: true },
+  ] },
+  { platform: "bing-ads", label: "Bing / Microsoft Ads", category: "Ad Platforms", fields: [
+    { key: "customer_id", label: "Customer ID" },
+    { key: "account_id", label: "Account ID" },
+    { key: "refresh_token", label: "Refresh token", type: "password" },
+  ] },
+  { platform: "tiktok-ads", label: "TikTok Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "advertiser_id", label: "Advertiser ID" },
+    { key: "pixel_code", label: "Pixel code" },
+  ] },
+  { platform: "snapchat-ads", label: "Snapchat Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "pixel_id", label: "Pixel ID" },
+    { key: "ad_account_id", label: "Ad account ID" },
+  ] },
+  { platform: "pinterest-ads", label: "Pinterest Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "ad_account_id", label: "Ad account ID" },
+  ] },
+  { platform: "linkedin-ads", label: "LinkedIn Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "account_id", label: "Sponsored account ID", optional: true },
+    { key: "conversion_id_purchase", label: "Purchase conversion ID", optional: true },
+    { key: "conversion_id_lead", label: "Lead conversion ID", optional: true },
+  ] },
+  { platform: "reddit-ads", label: "Reddit Ads", category: "Ad Platforms", fields: [
+    { key: "access_token", label: "Access token", type: "password" },
+    { key: "account_id", label: "Account ID" },
+  ] },
+  { platform: "twilio", label: "Twilio", category: "Call Tracking", fields: [
+    { key: "account_sid", label: "Account SID" },
+    { key: "auth_token", label: "Auth token", type: "password" },
+  ] },
+  { platform: "customers-ai", label: "Customers.ai", category: "CRM & Remarketing", fields: [
+    { key: "webhook_secret", label: "Shared secret", type: "password" },
+  ] },
+  { platform: "klaviyo", label: "Klaviyo", category: "CRM & Remarketing", fields: [
+    { key: "api_key", label: "API key", type: "password" },
+    { key: "list_id", label: "List ID" },
+  ] },
+];
+
+function IntegrationRow({
+  clientId,
+  def,
+  connected,
+}: {
+  clientId: string;
+  def: IntegrationDef;
+  connected: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => saveIntegration(clientId, def.platform, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", clientId] });
+      setOpen(false);
+      setValues({});
+    },
+  });
+
+  const requiredFilled = def.fields.every((f) => f.optional || values[f.key]?.trim());
+
+  return (
+    <div className="rounded-lg border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
+      >
+        <span className="font-medium">{def.label}</span>
+        <span className="flex items-center gap-2">
+          <Badge variant={connected ? "secondary" : "outline"}>{connected ? "Connected" : "Not connected"}</Badge>
+          <span className="text-xs text-muted-foreground">{open ? "Hide" : connected ? "Edit" : "Connect"}</span>
+        </span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-border p-3">
+          <div className="flex flex-wrap gap-2">
+            {def.fields.map((f) => (
+              <div key={f.key} className="flex flex-col gap-1">
+                <FieldLabel>
+                  {f.label}
+                  {f.optional && <span className="normal-case"> (optional)</span>}
+                </FieldLabel>
+                <Input
+                  className="w-56"
+                  type={f.type === "password" ? "password" : "text"}
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          {mutation.isError && <p className="text-xs text-status-critical">Failed to save. Check the values and try again.</p>}
+          <div>
+            <Button size="sm" disabled={!requiredFilled || mutation.isPending} onClick={() => mutation.mutate()}>
+              {mutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntegrationsSection({ clientId }: { clientId: string }) {
+  const { data: integrations, isLoading } = useQuery({
+    queryKey: ["integrations", clientId],
+    queryFn: () => getIntegrations(clientId),
+  });
+  const connectedPlatforms = new Set((integrations ?? []).map((i) => i.platform.replace(/_/g, "-")));
+
+  const categories = Array.from(new Set(INTEGRATIONS.map((i) => i.category)));
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Integrations</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5 px-0">
+        {isLoading && <Skeleton className="h-32 w-full" />}
+        {!isLoading &&
+          categories.map((category) => (
+            <div key={category} className="flex flex-col gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{category}</p>
+              <div className="flex flex-col gap-2">
+                {INTEGRATIONS.filter((i) => i.category === category).map((def) => (
+                  <IntegrationRow
+                    key={def.platform}
+                    clientId={clientId}
+                    def={def}
+                    connected={connectedPlatforms.has(def.platform)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TagWebhookSection({ clientId }: { clientId: string }) {
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+  const { data: integrations } = useQuery({
+    queryKey: ["integrations", clientId],
+    queryFn: () => getIntegrations(clientId),
+  });
+  const hasSecret = integrations?.some((i) => i.platform === "tag_webhook");
+
+  const mutation = useMutation({
+    mutationFn: () => generateTagWebhookSecret(clientId),
+    onSuccess: (integration) => setRevealedSecret(integration.config.webhook_secret),
+  });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>CRM / Zapier Tag Webhook</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Lets an external CRM or a Zapier &quot;Webhooks&quot; action apply a tag to a lead by email — used for
+          revenue that closes outside this software (see Tags & Stages). Requires a secret so only calls that know
+          it can apply tags.
+        </p>
+        <CodeBlock>{`POST ${apiUrl}/webhooks/tags/${clientId}\n{ "secret": "...", "email": "...", "tag_name": "..." }`}</CodeBlock>
+        {revealedSecret ? (
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Secret (copy it now — it won&apos;t be shown again)</FieldLabel>
+            <CodeBlock>{revealedSecret}</CodeBlock>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {hasSecret ? "A secret is already configured for this client." : "No secret configured yet."}
+          </p>
+        )}
+        <div>
+          <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? "Generating…" : hasSecret ? "Regenerate secret" : "Generate secret"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OutboundWebhooksSection({ clientId }: { clientId: string }) {
+  const [targetUrl, setTargetUrl] = useState("");
+  const [eventTypes, setEventTypes] = useState<string[]>([]);
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: subscriptions, isLoading } = useQuery({
+    queryKey: ["webhook-subscriptions", clientId],
+    queryFn: () => getWebhookSubscriptions(clientId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => createWebhookSubscription(clientId, { target_url: targetUrl.trim(), event_types: eventTypes }),
+    onSuccess: (sub) => {
+      setRevealedSecret(sub.signing_secret);
+      setTargetUrl("");
+      setEventTypes([]);
+      queryClient.invalidateQueries({ queryKey: ["webhook-subscriptions", clientId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteWebhookSubscription(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["webhook-subscriptions", clientId] }),
+  });
+
+  function toggleEvent(value: string) {
+    setEventTypes((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  }
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>Outbound Webhooks</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Push events (a sale, an opted-in lead, a qualified call) to your own endpoint as they happen, HMAC-signed.
+          Deliveries aren&apos;t retried — a failed delivery is logged and dropped.
+        </p>
+
+        {isLoading && <Skeleton className="h-16 w-full" />}
+        {!isLoading && subscriptions?.length === 0 && (
+          <p className="text-xs text-muted-foreground">No webhook subscriptions yet.</p>
+        )}
+        {subscriptions && subscriptions.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {subscriptions.map((sub) => (
+              <div key={sub.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <div className="flex flex-col gap-1">
+                  <span className="truncate text-sm font-medium">{sub.target_url}</span>
+                  <div className="flex flex-wrap gap-1">
+                    {sub.event_types.map((et) => (
+                      <Badge key={et} variant="outline" className="text-[10px]">
+                        {et}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <Button size="xs" variant="ghost" onClick={() => deleteMutation.mutate(sub.id)}>
+                  ×
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {revealedSecret && (
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Signing secret for the subscription just created (copy it now)</FieldLabel>
+            <CodeBlock>{revealedSecret}</CodeBlock>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Target URL</FieldLabel>
+            <Input
+              className="w-full"
+              value={targetUrl}
+              onChange={(e) => setTargetUrl(e.target.value)}
+              placeholder="https://yourapp.com/webhooks/ad-tracking"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Events</FieldLabel>
+            <div className="flex flex-wrap gap-3">
+              {OUTBOUND_WEBHOOK_EVENT_TYPES.map((et) => (
+                <label key={et.value} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={eventTypes.includes(et.value)}
+                    onChange={() => toggleEvent(et.value)}
+                  />
+                  {et.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          {createMutation.isError && <p className="text-xs text-status-critical">Failed to create subscription.</p>}
+          <div>
+            <Button
+              size="sm"
+              disabled={!targetUrl.trim() || eventTypes.length === 0 || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              Add subscription
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DangerZoneSection({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const [confirmText, setConfirmText] = useState("");
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => deleteClient(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      router.push("/agency");
+    },
+  });
+
+  return (
+    <Card className="border-status-critical/40 px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="text-status-critical">Danger Zone</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-0">
+        <p className="text-xs text-muted-foreground">
+          Permanently deletes this client and everything tied to it — sessions, leads, purchases, integrations,
+          reports. This cannot be undone. Type <span className="font-medium text-foreground">{clientName}</span> to
+          confirm.
+        </p>
+        <Input
+          className="w-64"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={clientName}
+        />
+        {mutation.isError && <p className="text-xs text-status-critical">Failed to delete client.</p>}
+        <div>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={confirmText !== clientName || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Deleting…" : "Delete this client"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function SettingsClient({ clientId }: { clientId: string }) {
+  const { data: client, isLoading } = useQuery({ queryKey: ["client", clientId], queryFn: () => getClient(clientId) });
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <div>
+        <ClientKicker clientId={clientId} />
+        <h1 className="text-lg font-semibold">Settings</h1>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Client details, ad platform and processor connections, and integrations that reach outside this software.
+        </p>
+      </div>
+
+      {isLoading && <Skeleton className="h-64 w-full" />}
+      {client && (
+        <>
+          <GeneralSection clientId={clientId} client={client} />
+          <IntegrationsSection clientId={clientId} />
+          <TagWebhookSection clientId={clientId} />
+          <OutboundWebhooksSection clientId={clientId} />
+          <DangerZoneSection clientId={clientId} clientName={client.name} />
+        </>
+      )}
+    </div>
+  );
+}

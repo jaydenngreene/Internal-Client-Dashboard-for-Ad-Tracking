@@ -16,6 +16,7 @@ import { squareWebhookRoutes } from './routes/webhooks/square'
 import { goHighLevelWebhookRoutes } from './routes/webhooks/gohighlevel'
 import { twilioWebhookRoutes } from './routes/webhooks/twilio'
 import { customersAiWebhookRoutes } from './routes/webhooks/customersAi'
+import { tagWebhookRoutes } from './routes/webhooks/tags'
 import { clientRoutes } from './routes/clients'
 import { reportRoutes } from './routes/reports'
 import { dniRoutes } from './routes/dni'
@@ -41,7 +42,7 @@ app.register(cors, {
       cb(new Error('Not allowed by CORS'), false)
     }
   },
-  methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
 })
 
 app.register(helmet)
@@ -60,6 +61,7 @@ app.register(squareWebhookRoutes)
 app.register(goHighLevelWebhookRoutes)
 app.register(twilioWebhookRoutes)
 app.register(customersAiWebhookRoutes)
+app.register(tagWebhookRoutes)
 app.register(clientRoutes)
 app.register(reportRoutes)
 app.register(dniRoutes)

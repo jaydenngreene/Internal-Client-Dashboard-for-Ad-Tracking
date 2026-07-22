@@ -116,7 +116,7 @@ export interface Client {
   name: string;
   pixel_key: string;
   timezone: string;
-  attribution_model: "first_click" | "last_click" | "linear";
+  attribution_model: "first_click" | "last_click" | "linear" | "time_decay" | "u_shaped";
   niche: Niche;
   created_at: string;
   // True-profit inputs (Step 31) — % of revenue for cogs/payment_fee, flat $ per

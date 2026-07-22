@@ -49,6 +49,8 @@ const ATTRIBUTION_LABEL: Record<Client["attribution_model"], string> = {
   first_click: "First Click",
   last_click: "Last Click",
   linear: "Linear",
+  time_decay: "Time Decay",
+  u_shaped: "U-Shaped (Position-Based)",
 };
 
 function CodeBlock({ children }: { children: string }) {

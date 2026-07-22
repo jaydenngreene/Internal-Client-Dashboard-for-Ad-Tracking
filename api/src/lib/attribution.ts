@@ -10,7 +10,7 @@ export interface NormalizedConversion {
   processor: string
 }
 
-type AttributionModel = 'first_click' | 'last_click' | 'linear'
+type AttributionModel = 'first_click' | 'last_click' | 'linear' | 'time_decay' | 'u_shaped'
 
 interface TouchSession {
   id: string
@@ -20,6 +20,32 @@ interface TouchSession {
   fbclid: string | null
   gclid: string | null
   msclkid: string | null
+  started_at: string
+}
+
+// 7-day half-life: a touch a week before conversion gets half the credit of one
+// on the day of conversion. Weights are normalized to sum to 1 afterward, so the
+// half-life value only controls how sharply credit skews toward recency, not the
+// absolute scale.
+const TIME_DECAY_HALF_LIFE_DAYS = 7
+
+function timeDecayWeights(sessions: TouchSession[], purchaseTime: Date): number[] {
+  const rawWeights = sessions.map((s) => {
+    const daysBefore = (purchaseTime.getTime() - new Date(s.started_at).getTime()) / (1000 * 60 * 60 * 24)
+    return Math.pow(2, -Math.max(daysBefore, 0) / TIME_DECAY_HALF_LIFE_DAYS)
+  })
+  const total = rawWeights.reduce((a, b) => a + b, 0)
+  return rawWeights.map((w) => w / total)
+}
+
+// Standard position-based/U-shaped split: 40% first touch, 40% last touch, the
+// remaining 20% divided evenly across whatever touches fall in between. Collapses
+// sensibly for 1 touch (100%) and 2 touches (50/50, no middle to split).
+function uShapedWeights(count: number): number[] {
+  if (count === 1) return [1]
+  if (count === 2) return [0.5, 0.5]
+  const middleWeight = 0.2 / (count - 2)
+  return Array.from({ length: count }, (_, i) => (i === 0 || i === count - 1 ? 0.4 : middleWeight))
 }
 
 // Insert a purchase, walk back through the customer's ad sessions, split revenue
@@ -49,7 +75,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   const visitorId = identityRows[0].visitor_id
 
   const { rows: sessionRows } = await db.query<TouchSession>(
-    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid
+    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid, started_at
      FROM sessions
      WHERE visitor_id = $1
        AND started_at >= NOW() - INTERVAL '90 days'
@@ -68,12 +94,19 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   // attribution model — the model only changes how revenue credit is split for ROAS.
   const firstSession = sessionRows[0]
 
+  const timeDecayWeightsForSessions = model === 'time_decay' ? timeDecayWeights(sessionRows, new Date()) : null
+  const uShapedWeightsForSessions = model === 'u_shaped' ? uShapedWeights(sessionRows.length) : null
+
   const creditedTouches: Array<{ session: TouchSession; fraction: number }> =
     model === 'last_click'
       ? [{ session: sessionRows[sessionRows.length - 1], fraction: 1 }]
       : model === 'linear'
         ? sessionRows.map((session) => ({ session, fraction: 1 / sessionRows.length }))
-        : [{ session: firstSession, fraction: 1 }]
+        : timeDecayWeightsForSessions
+          ? sessionRows.map((session, i) => ({ session, fraction: timeDecayWeightsForSessions[i] }))
+          : uShapedWeightsForSessions
+            ? sessionRows.map((session, i) => ({ session, fraction: uShapedWeightsForSessions[i] }))
+            : [{ session: firstSession, fraction: 1 }]
 
   for (const { session, fraction } of creditedTouches) {
     await db.query(

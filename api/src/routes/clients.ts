@@ -110,8 +110,9 @@ export async function clientRoutes(app: FastifyInstance) {
     const { id } = req.params
     const { attribution_model } = req.body
 
-    if (!['first_click', 'last_click', 'linear'].includes(attribution_model)) {
-      return reply.code(400).send({ error: 'attribution_model must be first_click, last_click, or linear' })
+    const VALID_ATTRIBUTION_MODELS = ['first_click', 'last_click', 'linear', 'time_decay', 'u_shaped']
+    if (!VALID_ATTRIBUTION_MODELS.includes(attribution_model)) {
+      return reply.code(400).send({ error: `attribution_model must be one of: ${VALID_ATTRIBUTION_MODELS.join(', ')}` })
     }
 
     const { rows } = await db.query(

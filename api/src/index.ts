@@ -27,6 +27,7 @@ import { customCostsRoutes } from './routes/customCosts'
 import { tagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
 import { insightsRoutes } from './routes/insights'
+import { journeyRoutes } from './routes/journey'
 import { startScheduledJobs } from './lib/scheduler'
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') })
@@ -73,6 +74,7 @@ app.register(customCostsRoutes)
 app.register(tagRoutes)
 app.register(audienceSyncRoutes)
 app.register(insightsRoutes)
+app.register(journeyRoutes)
 
 // Public Attribution API (Step 11) — the same report routes, mounted again under
 // /api/v1 with bearer-token auth, so this data can feed other tools without going

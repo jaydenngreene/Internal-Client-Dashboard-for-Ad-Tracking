@@ -20,6 +20,7 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "insights", label: "Insights", enabled: true },
   { slug: "campaigns", label: "Campaigns", enabled: true },
   { slug: "funnel", label: "Funnel", enabled: true },
+  { slug: "leads", label: "Leads", enabled: true },
   { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
   { slug: "remarketing", label: "Remarketing", enabled: true },
   { slug: "tags", label: "Tags & Stages", enabled: true },

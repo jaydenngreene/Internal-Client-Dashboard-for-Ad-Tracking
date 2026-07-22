@@ -426,6 +426,73 @@ export function getAgencyOverview(range?: DateRange): Promise<AgencyOverviewRepo
   return fetchJson<AgencyOverviewReport>(`/reports/agency-overview${rangeQuery(range)}`);
 }
 
+export interface JourneySession {
+  id: string;
+  started_at: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
+  landing_page: string | null;
+  referrer: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  ttclid: string | null;
+}
+
+export interface JourneyPurchaseAttribution {
+  session_id: string;
+  model: string;
+  credit_fraction: number;
+  attributed_revenue: number;
+}
+
+export interface JourneyPurchase {
+  id: string;
+  revenue: number;
+  product: string | null;
+  order_id: string | null;
+  processor: string | null;
+  refunded: boolean;
+  refunded_at: string | null;
+  purchased_at: string;
+  attributed: boolean;
+  attributions: JourneyPurchaseAttribution[];
+}
+
+export interface JourneyTag {
+  name: string;
+  tag_type: TagType;
+  applied_at: string;
+  applied_by: string;
+}
+
+export interface JourneyCall {
+  id: string;
+  session_id: string | null;
+  status: string | null;
+  duration_seconds: number | null;
+  qualified: boolean | null;
+  disposition: string | null;
+  started_at: string;
+}
+
+export interface Journey {
+  email: string;
+  identified: boolean;
+  identified_at: string | null;
+  identified_on_page: string | null;
+  sessions: JourneySession[];
+  purchases: JourneyPurchase[];
+  tags: JourneyTag[];
+  calls: JourneyCall[];
+}
+
+export function getJourney(clientId: string, email: string): Promise<Journey> {
+  return fetchJson<Journey>(`/clients/${clientId}/leads/${encodeURIComponent(email)}/journey`);
+}
+
 // Step 12 — AI remarketing agent. Candidates are deanonymized visitors (via Customers.ai)
 // with an AI-drafted outreach message awaiting human review. Approve/reject only change
 // review status here — nothing on this page ever sends anything to a real inbox; see

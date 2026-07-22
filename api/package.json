@@ -9,7 +9,8 @@
     "migrate": "node -r tsx/cjs src/db/migrate.ts",
     "sync:ad-costs": "node -r tsx/cjs src/jobs/adCosts/run.ts",
     "refresh:ltv": "node -r tsx/cjs src/jobs/ltv/run.ts",
-    "sync:audiences": "node -r tsx/cjs src/jobs/audienceSync/run.ts"
+    "sync:audiences": "node -r tsx/cjs src/jobs/audienceSync/run.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.4",
@@ -36,6 +37,7 @@
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
   }
 }

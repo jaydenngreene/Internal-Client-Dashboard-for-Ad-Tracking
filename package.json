@@ -19,7 +19,8 @@
     "migrate": "npm run migrate --workspace=api",
     "sync:ad-costs": "npm run sync:ad-costs --workspace=api",
     "refresh:ltv": "npm run refresh:ltv --workspace=api",
-    "sync:audiences": "npm run sync:audiences --workspace=api"
+    "sync:audiences": "npm run sync:audiences --workspace=api",
+    "test": "npm run test --workspace=api"
   },
   "devDependencies": {
     "tsx": "^4.16.2",

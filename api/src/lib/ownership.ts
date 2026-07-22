@@ -20,7 +20,7 @@ async function clientIdFrom(table: string, idColumn: string, idValue: string): P
 // This table is deliberately exhaustive and explicit rather than pattern-matched,
 // so a new route added later without an entry here fails closed (see the fallback
 // in requireOwnership below) instead of silently going unprotected.
-const RESOLVERS: Record<string, Resolver> = {
+export const RESOLVERS: Record<string, Resolver> = {
   '/clients': 'skip',
   '/clients/:id': 'client',
   '/clients/:id/attribution-model': 'client',
@@ -66,6 +66,7 @@ const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/insights/regenerate': 'client',
   '/clients/:id/remarketing/candidates': 'client',
   '/reports/agency-overview': 'skip',
+  '/jobs/status': 'skip',
 
   '/webhook-subscriptions/:subId': (req) =>
     clientIdFrom('outbound_webhook_subscriptions', 'id', (req.params as { subId: string }).subId),

@@ -78,6 +78,18 @@ export function deleteAccount(): Promise<void> {
   });
 }
 
+export interface JobRun {
+  job_name: string;
+  status: "success" | "failure";
+  error: string | null;
+  started_at: string;
+  finished_at: string;
+}
+
+export function getJobStatus(): Promise<JobRun[]> {
+  return fetchJson<JobRun[]>("/jobs/status");
+}
+
 export type Niche = "ecommerce" | "call" | "lead_gen" | "saas" | "info_product" | "other";
 
 export interface Client {

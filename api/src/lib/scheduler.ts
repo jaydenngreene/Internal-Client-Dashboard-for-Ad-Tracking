@@ -1,7 +1,32 @@
 import cron from 'node-cron'
+import { db } from '../db'
 import { runAdCostSync } from '../jobs/adCosts/run'
 import { refreshCustomerLtv } from '../jobs/ltv/run'
 import { runAudienceSyncs } from '../jobs/audienceSync/run'
+
+// Records one row per job run so a failure is queryable (GET /jobs/status)
+// instead of vanishing into a console.error nobody's watching. Recording the run
+// itself never blocks or fails the job — if this insert throws, it's logged and
+// swallowed, same never-block philosophy as everything else in this app.
+async function runAndRecord(jobName: string, fn: () => Promise<unknown>): Promise<void> {
+  const startedAt = new Date()
+  try {
+    await fn()
+    await db
+      .query(`INSERT INTO job_runs (job_name, status, started_at) VALUES ($1, 'success', $2)`, [jobName, startedAt])
+      .catch((err) => console.error(`[scheduler] failed to record success for ${jobName}:`, err.message))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[scheduler] ${jobName} failed:`, message)
+    await db
+      .query(`INSERT INTO job_runs (job_name, status, error, started_at) VALUES ($1, 'failure', $2, $3)`, [
+        jobName,
+        message,
+        startedAt,
+      ])
+      .catch((recordErr) => console.error(`[scheduler] failed to record failure for ${jobName}:`, recordErr.message))
+  }
+}
 
 // These three jobs (ad-cost sync, LTV refresh, audience sync) previously only ran
 // when someone manually invoked their npm script — nothing in this repo triggered
@@ -14,23 +39,23 @@ export function startScheduledJobs(): void {
   // ROAS/CPC close to live without hammering any platform's rate limits.
   cron.schedule('0 */6 * * *', () => {
     console.log('[scheduler] running ad cost sync')
-    runAdCostSync().catch((err) => console.error('[scheduler] ad cost sync failed:', err.message))
+    runAndRecord('ad_cost_sync', runAdCostSync)
   })
 
   // LTV windows and audience segments don't need to be as fresh — once a day is
   // what their own code comments already assumed ("nightly refresh").
   cron.schedule('0 2 * * *', () => {
     console.log('[scheduler] refreshing customer LTV')
-    refreshCustomerLtv().catch((err) => console.error('[scheduler] LTV refresh failed:', err.message))
+    runAndRecord('ltv_refresh', refreshCustomerLtv)
   })
 
   cron.schedule('0 3 * * *', () => {
     console.log('[scheduler] running audience syncs')
-    runAudienceSyncs().catch((err) => console.error('[scheduler] audience sync failed:', err.message))
+    runAndRecord('audience_sync', runAudienceSyncs)
   })
 
   // Run once immediately on startup too, so data isn't stale from a cold start
   // (e.g. right after a deploy) until the next scheduled tick.
   console.log('[scheduler] running initial ad cost sync on startup')
-  runAdCostSync().catch((err) => console.error('[scheduler] initial ad cost sync failed:', err.message))
+  runAndRecord('ad_cost_sync', runAdCostSync)
 }

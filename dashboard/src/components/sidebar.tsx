@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Radar } from "lucide-react";
+import { Radar, X } from "lucide-react";
 import { getClients, getMe } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,10 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
   { slug: "settings", label: "Settings", enabled: true },
 ];
 
-export function Sidebar() {
+// Always in the DOM; a fixed off-canvas drawer below the md breakpoint (slides
+// in via `open`), a normal in-flow sidebar at md+ regardless of `open` — the
+// same component serves both, no duplicated nav markup.
+export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const params = useParams<{ clientId?: string }>();
@@ -54,7 +57,16 @@ export function Sidebar() {
   const visibleNavItems = NAV_ITEMS.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche)));
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <>
+      {open && (
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onClose} aria-hidden="true" />
+      )}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 md:static md:z-auto md:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
           <Radar className="size-4" strokeWidth={2.25} />
@@ -62,9 +74,17 @@ export function Sidebar() {
         <span className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
           {me?.agency_name ?? "Ad Tracking"}
         </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close menu"
+          className="ml-auto shrink-0 text-muted-foreground hover:text-sidebar-foreground md:hidden"
+        >
+          <X className="size-4" />
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4" onClick={onClose}>
         <div className="mb-6">
           <Link
             href="/agency"
@@ -209,6 +229,7 @@ export function Sidebar() {
           Log out
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

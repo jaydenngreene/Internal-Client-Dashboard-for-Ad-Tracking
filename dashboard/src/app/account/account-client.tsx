@@ -3,13 +3,72 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getMe, updateMe, updatePassword, deleteAccount } from "@/lib/api";
+import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const JOB_LABEL: Record<string, string> = {
+  ad_cost_sync: "Ad cost sync",
+  ltv_refresh: "LTV refresh",
+  audience_sync: "Audience sync",
+};
+
+function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function SystemStatusSection() {
+  const { data: runs, isLoading } = useQuery({ queryKey: ["job-status"], queryFn: getJobStatus });
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle>System Status</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 px-0">
+        <p className="text-xs text-muted-foreground">
+          Background jobs run automatically while the API server is up — this is when each last ran, across every
+          client, not just yours.
+        </p>
+        {isLoading && <Skeleton className="h-16 w-full" />}
+        {!isLoading && runs?.length === 0 && (
+          <p className="text-xs text-muted-foreground">No jobs have run yet.</p>
+        )}
+        {runs && runs.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {runs.map((run) => (
+              <div key={run.job_name} className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{JOB_LABEL[run.job_name] ?? run.job_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{formatDateTime(run.finished_at)}</span>
+                    <Badge
+                      variant={run.status === "success" ? "secondary" : "destructive"}
+                      className="text-[10px]"
+                    >
+                      {run.status}
+                    </Badge>
+                  </div>
+                </div>
+                {run.error && <p className="text-xs text-status-critical">{run.error}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ProfileSection({ agencyName, email }: { agencyName: string; email: string }) {
   const queryClient = useQueryClient();
@@ -191,6 +250,7 @@ export function AccountClient() {
         <>
           <ProfileSection agencyName={me.agency_name} email={me.email} />
           <PasswordSection />
+          <SystemStatusSection />
           <SessionSection />
           <DangerZoneSection email={me.email} />
         </>

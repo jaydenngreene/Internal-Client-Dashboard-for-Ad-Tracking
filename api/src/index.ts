@@ -29,6 +29,7 @@ import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
 import { insightsRoutes } from './routes/insights'
 import { journeyRoutes } from './routes/journey'
+import { jobRoutes } from './routes/jobs'
 import { authRoutes } from './routes/auth'
 import { authenticate } from './lib/auth'
 import { requireOwnership } from './lib/ownership'
@@ -112,6 +113,7 @@ app.register(
     instance.register(audienceSyncRoutes)
     instance.register(insightsRoutes)
     instance.register(journeyRoutes)
+    instance.register(jobRoutes)
   }
 )
 

@@ -56,6 +56,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/calls': 'client',
   '/clients/:id/reports/cohorts': 'client',
   '/clients/:id/reports/subscriptions': 'client',
+  '/clients/:id/campaigns/:platform/:campaignName': 'client',
+  '/clients/:id/campaigns/:platform/:campaignName/creatives/:creativeName': 'client',
   '/clients/:id/tags': 'client',
   '/clients/:id/leads/:email/tags': 'client',
   '/clients/:id/leads/:email/tags/:tagId': 'client',
@@ -64,6 +66,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/audience-syncs': 'client',
   '/clients/:id/insights': 'client',
   '/clients/:id/insights/regenerate': 'client',
+  '/clients/:id/collaborators': 'client',
+  '/clients/:id/collaborators/:userId': 'client',
   '/clients/:id/remarketing/candidates': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
@@ -81,7 +85,25 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/tags/:tagId': (req) => clientIdFrom('tags', 'id', (req.params as { tagId: string }).tagId),
 }
 
-async function ownsClient(clientId: string, userId: string): Promise<boolean> {
+// True if this user owns the client OR is a collaborator on it (migration 028) —
+// collaborators get the exact same data access as the owner everywhere this gate
+// is checked; only the owner-only routes below (collaborator management, client
+// deletion) additionally check ownership specifically, on top of this.
+async function hasClientAccess(clientId: string, userId: string): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT 1 FROM clients WHERE id = $1 AND (
+       owner_user_id = $2
+       OR EXISTS (SELECT 1 FROM client_collaborators WHERE client_id = $1 AND user_id = $2)
+     )`,
+    [clientId, userId]
+  )
+  return rows.length > 0
+}
+
+// Stricter than hasClientAccess above — only the actual owner, never a collaborator.
+// Route handlers call this themselves for the handful of actions collaborators
+// shouldn't get: deleting the client outright, and managing who else has access.
+export async function isClientOwner(clientId: string, userId: string): Promise<boolean> {
   const { rows } = await db.query('SELECT 1 FROM clients WHERE id = $1 AND owner_user_id = $2', [clientId, userId])
   return rows.length > 0
 }
@@ -101,7 +123,7 @@ export async function requireOwnership(req: FastifyRequest, reply: FastifyReply)
 
   const clientId = resolver === 'client' ? (req.params as { id: string }).id : await resolver(req)
 
-  if (!clientId || !(await ownsClient(clientId, req.userId!))) {
+  if (!clientId || !(await hasClientAccess(clientId, req.userId!))) {
     return reply.code(404).send({ error: 'Not found' })
   }
 }

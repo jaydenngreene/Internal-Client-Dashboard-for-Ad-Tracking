@@ -1,49 +1,56 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getInsights, regenerateInsights, Insight } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getFunnel, campaignGoalForNiche, getClients } from "@/lib/api";
+import { InsightsPanel } from "@/components/insights-panel";
+import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
+import { RangePreset, resolveRange } from "@/lib/date-range";
+import { DateRangeSelect } from "@/components/date-range-select";
+import { SegmentedToggle } from "@/components/segmented-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { formatPlatformLabel } from "@/lib/format";
 
-const PRIORITY_VARIANT: Record<Insight["priority"], "destructive" | "outline" | "secondary"> = {
-  high: "destructive",
-  medium: "outline",
-  low: "secondary",
-};
+const ALL_PLATFORMS = "__all__";
 
-function InsightCard({ insight }: { insight: Insight }) {
-  return (
-    <Card className="px-4 py-3">
-      <CardContent className="flex flex-col gap-1.5 px-0">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium">{insight.title}</p>
-          <Badge variant={PRIORITY_VARIANT[insight.priority]} className="shrink-0">
-            {insight.priority}
-          </Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">{insight.detail}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
+// The old version of this tab was one whole-account insight and nothing else. Per the
+// user's explicit ask: "overall insights should be per platform as well not overall
+// overall" — a client running Facebook + Google + TikTok wants a separate insight per
+// platform, plus the ability to browse into any individual campaign's own insight
+// (generated fresh on that campaign's detail page) rather than only ever seeing one
+// blended account-wide number.
 export function InsightsClient({ clientId }: { clientId: string }) {
-  const queryClient = useQueryClient();
+  const [preset, setPreset] = useState<RangePreset>("30d");
+  const [platform, setPlatform] = useState<string>(ALL_PLATFORMS);
+  const range = resolveRange(preset);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["insights", clientId],
-    queryFn: () => getInsights(clientId),
+  const funnelQuery = useQuery({
+    queryKey: ["campaigns", clientId, range.from, range.to, "campaign"],
+    queryFn: () => getFunnel(clientId, range, "campaign"),
   });
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
+  const niche = clients?.find((c) => c.id === clientId)?.niche;
+  const goal = campaignGoalForNiche(niche ?? "other");
 
-  const mutation = useMutation({
-    mutationFn: () => regenerateInsights(clientId),
-    onSuccess: (result) => {
-      queryClient.setQueryData(["insights", clientId], result);
-    },
-  });
+  const platforms = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of funnelQuery.data?.campaigns ?? []) {
+      if (row.platform) seen.set(row.platform, formatPlatformLabel(row.platform) ?? row.platform);
+    }
+    return Array.from(seen.entries());
+  }, [funnelQuery.data]);
+
+  const platformOptions = [
+    { value: ALL_PLATFORMS, label: "All Platforms" },
+    ...platforms.map(([value, label]) => ({ value, label })),
+  ];
+
+  const filteredCampaigns = useMemo(() => {
+    const rows = funnelQuery.data?.campaigns ?? [];
+    if (platform === ALL_PLATFORMS) return rows;
+    return rows.filter((r) => r.platform === platform);
+  }, [funnelQuery.data, platform]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -52,67 +59,46 @@ export function InsightsClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Insights</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            AI-generated recommendations from the last 30 days of this client&apos;s data. Generated on demand,
-            cached until you regenerate.
+            AI-generated recommendations, scoped to the whole account or a single platform. Click into any
+            campaign below for its own campaign- and creative-level insights.
           </p>
         </div>
-        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          {mutation.isPending ? "Generating…" : data ? "Regenerate" : "Generate insights"}
-        </Button>
+        <DateRangeSelect value={preset} onChange={setPreset} />
       </div>
 
-      {isLoading && (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
+      {platformOptions.length > 1 && (
+        <SegmentedToggle value={platform} onChange={setPlatform} options={platformOptions} />
       )}
 
-      {mutation.isPending && (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      )}
+      <InsightsPanel
+        clientId={clientId}
+        scope={platform === ALL_PLATFORMS ? { type: "client" } : { type: "platform", platform }}
+        queryKeyExtra={platform === ALL_PLATFORMS ? ["client"] : ["platform", platform]}
+        title={platform === ALL_PLATFORMS ? "Whole Account" : `${formatPlatformLabel(platform) ?? platform} Overview`}
+      />
 
-      {!isLoading && !mutation.isPending && !data && (
-        <Card className="px-4 py-8">
-          <CardContent className="px-0 text-center text-sm text-muted-foreground">
-            No insights generated yet for this client. Click &quot;Generate insights&quot; to analyze the last 30
-            days.
-          </CardContent>
-        </Card>
-      )}
-
-      {!mutation.isPending && data?.error && (
-        <p className="text-sm text-status-critical">Last generation failed: {data.error}</p>
-      )}
-
-      {!mutation.isPending && data && !data.error && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            Generated {new Date(data.generated_at).toLocaleString()}
-          </p>
-          {data.insights.length === 0 ? (
-            <Card className="px-4 py-8">
-              <CardHeader className="px-0">
-                <CardTitle className="text-sm">No recommendations</CardTitle>
-              </CardHeader>
-              <CardContent className="px-0 text-sm text-muted-foreground">
-                Not enough data in the last 30 days to generate meaningful recommendations yet.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {data.insights.map((insight, i) => (
-                <InsightCard key={i} insight={insight} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold">
+          Campaigns{platform !== ALL_PLATFORMS ? ` — ${formatPlatformLabel(platform) ?? platform}` : ""}
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Click a campaign to see its own KPIs, creatives, and campaign-level insight.
+        </p>
+        {funnelQuery.isLoading && <Skeleton className="h-64 w-full" />}
+        {!funnelQuery.isLoading && (
+          <CampaignBreakdownTable
+            rows={filteredCampaigns}
+            nameColumnLabel="Campaign"
+            goal={goal}
+            showPlatformBadge={platform === ALL_PLATFORMS}
+            getHref={(row) =>
+              row.platform
+                ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`
+                : null
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

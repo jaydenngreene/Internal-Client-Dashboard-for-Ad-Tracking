@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getJourney,
@@ -231,8 +232,16 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
 }
 
 export function LeadsClient({ clientId }: { clientId: string }) {
-  const [email, setEmail] = useState("");
-  const [searchedEmail, setSearchedEmail] = useState("");
+  const searchParams = useSearchParams();
+  // Lets a campaign/creative detail page's converted-customer list deep-link straight
+  // into that customer's full ad-touch history (the "customer lifetime journey") instead
+  // of only supporting a manually-typed search. Lazy-initialized from the URL rather
+  // than synced via an effect — every deep link here arrives via a cross-route
+  // navigation from a campaign/creative page, which always mounts a fresh instance of
+  // this component, so the initial value is all that's ever needed.
+  const emailFromUrl = searchParams.get("email");
+  const [email, setEmail] = useState(emailFromUrl ?? "");
+  const [searchedEmail, setSearchedEmail] = useState(emailFromUrl?.trim().toLowerCase() ?? "");
 
   const { data: journey, isLoading, isError } = useQuery({
     queryKey: ["journey", clientId, searchedEmail],

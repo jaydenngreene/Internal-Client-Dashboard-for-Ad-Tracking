@@ -21,6 +21,7 @@ import { customersAiWebhookRoutes } from './routes/webhooks/customersAi'
 import { tagWebhookRoutes } from './routes/webhooks/tags'
 import { clientRoutes } from './routes/clients'
 import { reportRoutes } from './routes/reports'
+import { campaignDetailRoutes } from './routes/campaignDetail'
 import { dniRoutes } from './routes/dni'
 import { callRoutes } from './routes/calls'
 import { shopifyAppRoutes } from './routes/shopifyApp'
@@ -119,6 +120,7 @@ app.register(
     instance.addHook('preHandler', requireOwnership)
     instance.register(clientRoutes)
     instance.register(reportRoutes)
+    instance.register(campaignDetailRoutes)
     instance.register(callRoutes)
     instance.register(remarketingRoutes)
     instance.register(customCostsRoutes)

@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams, useRouter } from "next/navigation";
+import { usePathname, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Radar, X } from "lucide-react";
+import { Radar, X, Settings, Users } from "lucide-react";
 import { getClients, getMe } from "@/lib/api";
-import { clearToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -35,7 +34,6 @@ const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: strin
 // same component serves both, no duplicated nav markup.
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const router = useRouter();
   const params = useParams<{ clientId?: string }>();
   const activeClientId = params?.clientId;
   const isAgencyOverview = pathname === "/agency";
@@ -46,11 +44,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     queryFn: getClients,
   });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-
-  function handleLogout() {
-    clearToken();
-    router.replace("/login");
-  }
 
   const activeClient = clients?.find((c) => c.id === activeClientId);
   const activeNiche = activeClient?.niche;
@@ -104,24 +97,6 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             />
             Agency Overview
           </Link>
-          <Link
-            href="/account"
-            className={cn(
-              navLinkBase,
-              "font-medium",
-              isAccountSettings
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-            )}
-          >
-            <span
-              className={cn(
-                "h-1.5 w-1.5 shrink-0 rounded-full",
-                isAccountSettings ? "bg-primary" : "bg-muted-foreground/40"
-              )}
-            />
-            Account Settings
-          </Link>
         </div>
 
         <div className="mb-6">
@@ -168,6 +143,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                       )}
                     />
                     <span className="truncate">{client.name}</span>
+                    {!client.is_owner && (
+                      <span className="ml-auto shrink-0" title="Shared with you">
+                        <Users className="size-3 text-muted-foreground" aria-label="Shared with you" />
+                      </span>
+                    )}
                   </Link>
                 </li>
               );
@@ -213,21 +193,20 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t border-sidebar-border px-4 py-3">
+      <div className={cn("flex items-center justify-between border-t border-sidebar-border px-4 py-3", isAccountSettings && "bg-sidebar-accent")}>
+        <span className="truncate text-xs text-muted-foreground">{me?.email}</span>
         <Link
           href="/account"
-          className="truncate text-xs text-muted-foreground hover:text-sidebar-foreground"
+          onClick={onClose}
+          aria-label="Account settings"
           title="Account settings"
+          className={cn(
+            "shrink-0 rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+            isAccountSettings && "text-primary"
+          )}
         >
-          {me?.email}
+          <Settings className="size-4" />
         </Link>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="shrink-0 text-xs font-medium text-muted-foreground hover:text-sidebar-foreground"
-        >
-          Log out
-        </button>
       </div>
       </aside>
     </>

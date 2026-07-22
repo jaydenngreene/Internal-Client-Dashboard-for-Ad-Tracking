@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -42,6 +43,7 @@ export function CampaignBreakdownTable({
   nameColumnLabel,
   goal,
   showPlatformBadge = true,
+  getHref,
 }: {
   rows: FunnelRow[];
   nameColumnLabel: string;
@@ -51,7 +53,12 @@ export function CampaignBreakdownTable({
   // (campaign, creative) benefits from it since a client running the same-named
   // campaign on two platforms would otherwise look like one merged row.
   showPlatformBadge?: boolean;
+  // Only the campaign breakdown has a drill-down page to link to (source/keyword/
+  // creative rows aren't a single scoped entity the same way) — omitted entirely means
+  // rows render as plain (non-clickable) table rows, same as before this prop existed.
+  getHref?: (row: FunnelRow) => string | null;
 }) {
+  const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
 
@@ -144,8 +151,14 @@ export function CampaignBreakdownTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((row) => (
-            <TableRow key={row.name}>
+          {sorted.map((row) => {
+            const href = getHref?.(row) ?? null;
+            return (
+            <TableRow
+              key={`${row.name}::${row.platform ?? ""}`}
+              onClick={href ? () => router.push(href) : undefined}
+              className={href ? "cursor-pointer hover:bg-accent/40" : undefined}
+            >
               <TableCell className="max-w-64 truncate font-medium">
                 <div className="flex items-center gap-2">
                   <span className="truncate">{row.name}</span>
@@ -193,7 +206,8 @@ export function CampaignBreakdownTable({
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatRoas(row.roas)}</TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
       </div>

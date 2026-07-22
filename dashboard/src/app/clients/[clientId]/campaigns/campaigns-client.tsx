@@ -114,6 +114,14 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
               nameColumnLabel={BREAKDOWN_COLUMN_LABEL[view as FunnelBreakdown]}
               goal={goal}
               showPlatformBadge={view !== "source"}
+              getHref={
+                view === "campaign"
+                  ? (row) =>
+                      row.platform
+                        ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`
+                        : null
+                  : undefined
+              }
             />
           </CardContent>
         </Card>

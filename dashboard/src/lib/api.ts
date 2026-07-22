@@ -22,11 +22,11 @@ export interface AuthUser {
   email_verified: boolean;
 }
 
-async function authRequest(path: "login" | "register", body: Record<string, string>): Promise<{ token: string; user: AuthUser }> {
-  const res = await fetch(`${API_URL}/auth/${path}`, {
+export async function login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
@@ -34,10 +34,6 @@ async function authRequest(path: "login" | "register", body: Record<string, stri
   }
   return res.json();
 }
-
-export const login = (email: string, password: string) => authRequest("login", { email, password });
-export const register = (email: string, password: string, agencyName: string) =>
-  authRequest("register", { email, password, agency_name: agencyName });
 
 async function publicPost(path: string, body: Record<string, string>): Promise<Record<string, unknown>> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -123,6 +119,11 @@ export interface Client {
   attribution_model: "first_click" | "last_click" | "linear";
   niche: Niche;
   created_at: string;
+  // False for a client shared with this login rather than owned by it (migration
+  // 028) — gates owner-only UI (collaborator management, delete) client-side; the
+  // backend enforces the same restriction independently, this is just so the
+  // dashboard doesn't show controls that would 403.
+  is_owner: boolean;
 }
 
 // Which funnel-stage metrics matter depends on what the client is actually selling.
@@ -218,8 +219,48 @@ export function updateAttributionModel(
 }
 
 export function deleteClient(clientId: string): Promise<void> {
-  return apiRequest(`${API_URL}/clients/${clientId}`, { method: "DELETE" }).then((res) => {
-    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return apiRequest(`${API_URL}/clients/${clientId}`, { method: "DELETE" }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+  });
+}
+
+// Client sharing (migration 028) — a collaborator gets the exact same data access as
+// the owner; only the owner can add/remove who else has it (enforced server-side,
+// this UI just hides the controls for a non-owner rather than showing a 403).
+export interface Collaborator {
+  user_id: string;
+  email: string;
+  agency_name: string;
+  added_at: string;
+}
+
+export function getCollaborators(clientId: string): Promise<Collaborator[]> {
+  return fetchJson<Collaborator[]>(`/clients/${clientId}/collaborators`);
+}
+
+export function addCollaborator(clientId: string, email: string): Promise<{ user_id: string; email: string }> {
+  return apiRequest(`${API_URL}/clients/${clientId}/collaborators`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export function removeCollaborator(clientId: string, userId: string): Promise<void> {
+  return apiRequest(`${API_URL}/clients/${clientId}/collaborators/${userId}`, { method: "DELETE" }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Request failed (${res.status})`);
+    }
   });
 }
 
@@ -373,14 +414,31 @@ export interface ClientInsights {
   insights: Insight[];
   model: string;
   error: string | null;
+  scope_type?: "client" | "platform" | "campaign" | "creative";
+  scope_platform?: string | null;
+  scope_key?: string | null;
 }
 
-export function getInsights(clientId: string): Promise<ClientInsights | null> {
-  return fetchJson<ClientInsights | null>(`/clients/${clientId}/insights`);
+export type InsightScope =
+  | { type: "client" }
+  | { type: "platform"; platform: string }
+  | { type: "campaign"; platform: string; campaignName: string }
+  | { type: "creative"; platform: string; campaignName: string; creativeName: string };
+
+function scopeQuery(scope?: InsightScope): string {
+  if (!scope || scope.type === "client") return "";
+  const params = new URLSearchParams({ scope: scope.type, platform: scope.platform });
+  if (scope.type === "campaign" || scope.type === "creative") params.set("campaign", scope.campaignName);
+  if (scope.type === "creative") params.set("creative", scope.creativeName);
+  return `?${params.toString()}`;
 }
 
-export function regenerateInsights(clientId: string): Promise<ClientInsights> {
-  return mutateJson<ClientInsights>(`/clients/${clientId}/insights/regenerate`, "POST");
+export function getInsights(clientId: string, scope?: InsightScope): Promise<ClientInsights | null> {
+  return fetchJson<ClientInsights | null>(`/clients/${clientId}/insights${scopeQuery(scope)}`);
+}
+
+export function regenerateInsights(clientId: string, scope?: InsightScope): Promise<ClientInsights> {
+  return mutateJson<ClientInsights>(`/clients/${clientId}/insights/regenerate${scopeQuery(scope)}`, "POST");
 }
 
 export interface DateRange {
@@ -602,6 +660,94 @@ export function getFunnel(
 
 export function getAgencyOverview(range?: DateRange): Promise<AgencyOverviewReport> {
   return fetchJson<AgencyOverviewReport>(`/reports/agency-overview${rangeQuery(range)}`);
+}
+
+export interface CampaignDetailKpis {
+  cost: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  sales: number;
+  revenue: number;
+  profit: number;
+  roas: number | null;
+  cpl: number | null;
+  ctr: number | null;
+}
+
+export interface CampaignCreativeRow {
+  name: string;
+  cost: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  sales: number;
+  revenue: number;
+  thumbnailUrl: string | null;
+  assetUrl: string | null;
+  assetType: "image" | "video" | null;
+  cpl: number | null;
+  roas: number | null;
+  ctr: number | null;
+  matched: boolean;
+}
+
+export interface CampaignDetail {
+  platform: string;
+  campaignName: string;
+  from: string;
+  to: string;
+  kpis: CampaignDetailKpis;
+  creatives: CampaignCreativeRow[];
+}
+
+export function getCampaignDetail(clientId: string, platform: string, campaignName: string, range?: DateRange): Promise<CampaignDetail> {
+  return fetchJson<CampaignDetail>(
+    `/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}${rangeQuery(range)}`
+  );
+}
+
+export interface CreativeDetailAsset {
+  thumbnailUrl: string | null;
+  assetUrl: string | null;
+  assetType: "image" | "video" | null;
+}
+
+export interface CreativeDetailCustomer {
+  email: string;
+  purchasedAt: string;
+  revenue: number;
+}
+
+export interface CreativeDetailCopy {
+  headline: string | null;
+  primaryText: string | null;
+  description: string | null;
+  landingPageUrl: string | null;
+}
+
+export interface CreativeDetail {
+  platform: string;
+  campaignName: string;
+  creativeName: string;
+  from: string;
+  to: string;
+  asset: CreativeDetailAsset;
+  copy: CreativeDetailCopy;
+  kpis: CampaignDetailKpis;
+  customers: CreativeDetailCustomer[];
+}
+
+export function getCreativeDetail(
+  clientId: string,
+  platform: string,
+  campaignName: string,
+  creativeName: string,
+  range?: DateRange
+): Promise<CreativeDetail> {
+  return fetchJson<CreativeDetail>(
+    `/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}/creatives/${encodeURIComponent(creativeName)}${rangeQuery(range)}`
+  );
 }
 
 export interface JourneySession {

@@ -296,6 +296,7 @@ const INTEGRATIONS: IntegrationDef[] = [
   { platform: "twilio", label: "Twilio", category: "Call Tracking", fields: [
     { key: "account_sid", label: "Account SID" },
     { key: "auth_token", label: "Auth token", type: "password" },
+    { key: "voice_intelligence_service_sid", label: "Voice Intelligence Service SID (for call transcription)", optional: true },
   ] },
   { platform: "customers-ai", label: "Customers.ai", category: "CRM & Remarketing", fields: [
     { key: "webhook_secret", label: "Shared secret", type: "password" },

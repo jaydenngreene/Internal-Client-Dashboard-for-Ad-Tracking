@@ -50,6 +50,10 @@ interface CallRow {
   qualified: boolean | null
   disposition: string | null
   started_at: string
+  transcript: string | null
+  ai_qualification_score: string | null
+  ai_disposition: string | null
+  ai_summary: string | null
 }
 
 // One place to see everything this app knows about a single lead — every session/
@@ -110,7 +114,8 @@ export async function journeyRoutes(app: FastifyInstance) {
         sessionIds.length > 0
           ? (
               await db.query<CallRow>(
-                `SELECT id, session_id, status, duration_seconds, qualified, disposition, started_at
+                `SELECT id, session_id, status, duration_seconds, qualified, disposition, started_at,
+                        transcript, ai_qualification_score, ai_disposition, ai_summary
                  FROM calls WHERE client_id = $1 AND session_id = ANY($2::uuid[]) ORDER BY started_at ASC`,
                 [clientId, sessionIds]
               )
@@ -132,6 +137,11 @@ export async function journeyRoutes(app: FastifyInstance) {
           })),
       }))
 
+      const callsOut = calls.map((c) => ({
+        ...c,
+        ai_qualification_score: c.ai_qualification_score === null ? null : parseFloat(c.ai_qualification_score),
+      }))
+
       return reply.send({
         email,
         identified: identity !== null,
@@ -140,7 +150,7 @@ export async function journeyRoutes(app: FastifyInstance) {
         sessions,
         purchases,
         tags: tagRows,
-        calls,
+        calls: callsOut,
       })
     }
   )

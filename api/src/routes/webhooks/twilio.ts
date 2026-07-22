@@ -97,7 +97,45 @@ export async function twilioWebhookRoutes(app: FastifyInstance) {
         [client_id, trackingNumber.id, sessionId, params.From, params.CallSid, params.CallStatus]
       )
 
-      return reply.type('text/xml').send(xml(`<Response><Dial>${trackingNumber.forward_to}</Dial></Response>`))
+      // Records the forwarded call (both legs) so Step 36's transcription job has
+      // something to work with. recordingStatusCallback fires once the recording
+      // itself is ready — separate from the call status callback above, which
+      // fires on call-state changes, not on recording completion.
+      const recordingCallbackUrl = `${req.protocol}://${req.headers.host}/webhooks/twilio/${client_id}/recording-status`
+      return reply.type('text/xml').send(
+        xml(
+          `<Response><Dial record="record-from-answer-dual" recordingStatusCallback="${recordingCallbackUrl}" recordingStatusCallbackEvent="completed">${trackingNumber.forward_to}</Dial></Response>`
+        )
+      )
+    }
+  )
+
+  // Recording-completed callback (separate from the call-status callback above) —
+  // stores the recording so the Step 36 transcription job can pick it up. Doesn't
+  // request a transcription itself; that job owns pacing those requests so a
+  // recording-heavy day doesn't fire dozens of transcription requests inline.
+  app.post(
+    '/webhooks/twilio/:client_id/recording-status',
+    async (req: FastifyRequest<{ Params: { client_id: string } }>, reply: FastifyReply) => {
+      const { client_id } = req.params
+      const rawBody = req.body as Buffer
+      const params = parseFormBody(rawBody)
+
+      const config = await getIntegration(client_id)
+      if (config?.auth_token) {
+        const signature = req.headers['x-twilio-signature'] as string | undefined
+        const fullUrl = `${req.protocol}://${req.headers.host}${req.url}`
+        if (!signature || !verifyTwilioSignature(fullUrl, params, signature, config.auth_token)) {
+          return reply.code(401).send({ error: 'Invalid signature' })
+        }
+      }
+
+      await db.query(
+        `UPDATE calls SET recording_url = $2, recording_sid = $3 WHERE call_sid = $1`,
+        [params.CallSid, params.RecordingUrl, params.RecordingSid]
+      )
+
+      return reply.code(200).send({ received: true })
     }
   )
 

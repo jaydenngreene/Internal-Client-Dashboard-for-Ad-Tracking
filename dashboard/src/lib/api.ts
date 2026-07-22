@@ -834,6 +834,12 @@ export interface JourneyCall {
   qualified: boolean | null;
   disposition: string | null;
   started_at: string;
+  // Step 36 — Twilio-transcribed + Claude-scored, a suggestion alongside the
+  // human-set qualified/disposition above, never overwriting them.
+  transcript: string | null;
+  ai_qualification_score: number | null;
+  ai_disposition: string | null;
+  ai_summary: string | null;
 }
 
 export interface Journey {

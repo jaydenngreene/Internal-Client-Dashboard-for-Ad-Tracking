@@ -4,6 +4,7 @@ import { runAdCostSync } from '../jobs/adCosts/run'
 import { refreshCustomerLtv } from '../jobs/ltv/run'
 import { runAudienceSyncs } from '../jobs/audienceSync/run'
 import { detectAnomalies } from '../jobs/anomalyDetection/run'
+import { transcribeAndScoreCalls } from '../jobs/callTranscription/run'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -61,6 +62,14 @@ export function startScheduledJobs(): void {
   cron.schedule('0 7 * * *', () => {
     console.log('[scheduler] running anomaly detection')
     runAndRecord('anomaly_detection', detectAnomalies)
+  })
+
+  // Every 15 minutes: recordings finish within seconds of a call ending, but
+  // Twilio's transcription itself is async on their end, so this runs often
+  // enough to both request new ones promptly and pick up completions quickly.
+  cron.schedule('*/15 * * * *', () => {
+    console.log('[scheduler] running call transcription')
+    runAndRecord('call_transcription', transcribeAndScoreCalls)
   })
 
   // Run once immediately on startup too, so data isn't stale from a cold start

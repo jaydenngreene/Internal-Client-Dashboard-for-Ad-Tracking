@@ -89,37 +89,53 @@ function CallRow({ call, clientId, email }: { call: JourneyCall; clientId: strin
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm">
-      <span>{formatDateTime(call.started_at)}</span>
-      {call.status && <Badge variant="outline" className="text-[10px]">{call.status}</Badge>}
-      {call.duration_seconds != null && (
-        <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>{formatDateTime(call.started_at)}</span>
+        {call.status && <Badge variant="outline" className="text-[10px]">{call.status}</Badge>}
+        {call.duration_seconds != null && (
+          <span className="text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</span>
+        )}
+        <Select
+          value={call.disposition ?? ""}
+          onValueChange={(v) => mutation.mutate({ disposition: v as CallDisposition })}
+        >
+          <SelectTrigger className="h-7 w-40">
+            <SelectValue placeholder="Set disposition…">
+              {(v: string) => (v ? DISPOSITION_LABEL[v as CallDisposition] : "Set disposition…")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {CALL_DISPOSITIONS.map((d) => (
+              <SelectItem key={d} value={d}>
+                {DISPOSITION_LABEL[d]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="xs"
+          variant={call.qualified ? "secondary" : "outline"}
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ qualification_score: call.qualified ? 0 : 1 })}
+        >
+          {call.qualified ? "Qualified" : "Mark qualified"}
+        </Button>
+      </div>
+
+      {call.ai_summary && (
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+          <p className="font-medium uppercase tracking-wider text-muted-foreground">
+            AI assessment
+            {call.ai_disposition && ` — ${DISPOSITION_LABEL[call.ai_disposition as CallDisposition] ?? call.ai_disposition}`}
+            {call.ai_qualification_score !== null && ` (${(call.ai_qualification_score * 100).toFixed(0)}%)`}
+          </p>
+          <p className="mt-1 text-foreground/90">{call.ai_summary}</p>
+        </div>
       )}
-      <Select
-        value={call.disposition ?? ""}
-        onValueChange={(v) => mutation.mutate({ disposition: v as CallDisposition })}
-      >
-        <SelectTrigger className="h-7 w-40">
-          <SelectValue placeholder="Set disposition…">
-            {(v: string) => (v ? DISPOSITION_LABEL[v as CallDisposition] : "Set disposition…")}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {CALL_DISPOSITIONS.map((d) => (
-            <SelectItem key={d} value={d}>
-              {DISPOSITION_LABEL[d]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        size="xs"
-        variant={call.qualified ? "secondary" : "outline"}
-        disabled={mutation.isPending}
-        onClick={() => mutation.mutate({ qualification_score: call.qualified ? 0 : 1 })}
-      >
-        {call.qualified ? "Qualified" : "Mark qualified"}
-      </Button>
+      {call.transcript && !call.ai_summary && call.transcript !== "(transcription failed)" && (
+        <p className="text-xs text-muted-foreground">Transcript ready, AI scoring pending…</p>
+      )}
     </div>
   );
 }

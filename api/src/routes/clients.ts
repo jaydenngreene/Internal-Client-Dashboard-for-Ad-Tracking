@@ -339,14 +339,16 @@ export async function clientRoutes(app: FastifyInstance) {
   // (and any purchased numbers) lives entirely in the client's own Twilio account.
   app.post<{
     Params: { id: string }
-    Body: { account_sid: string; auth_token: string }
+    Body: { account_sid: string; auth_token: string; voice_intelligence_service_sid?: string }
   }>('/clients/:id/integrations/twilio', async (req, reply) => {
     const { id } = req.params
-    const { account_sid, auth_token } = req.body
+    const { account_sid, auth_token, voice_intelligence_service_sid } = req.body
     if (!account_sid || !auth_token) {
       return reply.code(400).send({ error: 'account_sid and auth_token required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'twilio', { account_sid, auth_token }))
+    return reply
+      .code(200)
+      .send(await upsertIntegration(id, 'twilio', { account_sid, auth_token, voice_intelligence_service_sid }))
   })
 
   // Alert delivery config (Step 32) — any subset of Slack/email/SMS. SMS reuses

@@ -19,4 +19,12 @@ export interface AdCostRow {
   creative_primary_text?: string | null
   creative_description?: string | null
   creative_landing_page_url?: string | null
+  // Video engagement (Step 42) — same Facebook-only-for-now disclosure as the
+  // creative asset/copy fields above. Null for image creatives and for every
+  // platform whose fetcher doesn't populate these yet.
+  video_plays?: number | null
+  video_p25_watched?: number | null
+  video_p50_watched?: number | null
+  video_p75_watched?: number | null
+  video_p100_watched?: number | null
 }

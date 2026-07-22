@@ -2,6 +2,11 @@ import { AdCostRow } from './types'
 
 const GRAPH_VERSION = process.env.FB_GRAPH_API_VERSION ?? 'v21.0'
 
+interface FacebookActionValue {
+  action_type: string
+  value: string
+}
+
 interface FacebookInsightRow {
   campaign_id?: string
   campaign_name?: string
@@ -13,6 +18,19 @@ interface FacebookInsightRow {
   impressions?: string
   clicks?: string
   date_start: string
+  // Video engagement (Step 42) — only present on rows for video creatives; each is
+  // an array (usually one entry) rather than a scalar, same shape as Facebook's
+  // conversion action fields elsewhere in this app.
+  video_play_actions?: FacebookActionValue[]
+  video_p25_watched_actions?: FacebookActionValue[]
+  video_p50_watched_actions?: FacebookActionValue[]
+  video_p75_watched_actions?: FacebookActionValue[]
+  video_p100_watched_actions?: FacebookActionValue[]
+}
+
+function sumActionValues(actions?: FacebookActionValue[]): number | null {
+  if (!actions || actions.length === 0) return null
+  return actions.reduce((sum, a) => sum + (parseInt(a.value, 10) || 0), 0)
 }
 
 interface FacebookInsightsResponse {
@@ -125,7 +143,8 @@ export async function fetchFacebookAdCosts(
     `?level=ad&time_increment=1` +
     `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
     `&fields=${encodeURIComponent(
-      'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,clicks'
+      'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,clicks,' +
+        'video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions'
     )}` +
     `&limit=500` +
     `&access_token=${encodeURIComponent(accessToken)}`
@@ -150,6 +169,11 @@ export async function fetchFacebookAdCosts(
         spend: parseFloat(r.spend ?? '0'),
         impressions: parseInt(r.impressions ?? '0', 10),
         clicks: parseInt(r.clicks ?? '0', 10),
+        video_plays: sumActionValues(r.video_play_actions),
+        video_p25_watched: sumActionValues(r.video_p25_watched_actions),
+        video_p50_watched: sumActionValues(r.video_p50_watched_actions),
+        video_p75_watched: sumActionValues(r.video_p75_watched_actions),
+        video_p100_watched: sumActionValues(r.video_p100_watched_actions),
       })
     }
 

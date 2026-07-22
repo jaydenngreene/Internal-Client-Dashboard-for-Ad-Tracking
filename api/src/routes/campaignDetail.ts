@@ -267,6 +267,26 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
            AND LOWER(TRIM(ad_name)) = LOWER(TRIM($6))`,
         [clientId, from, to, platform, campaignName, creativeName]
       )
+
+      // Video engagement (Step 42) — null across the board for image creatives and
+      // every platform besides Facebook, same disclosure as the asset/copy fields.
+      const { rows: videoRows } = await db.query<{
+        video_plays: string | null
+        video_p25_watched: string | null
+        video_p50_watched: string | null
+        video_p75_watched: string | null
+        video_p100_watched: string | null
+      }>(
+        `SELECT SUM(video_plays) AS video_plays, SUM(video_p25_watched) AS video_p25_watched,
+                SUM(video_p50_watched) AS video_p50_watched, SUM(video_p75_watched) AS video_p75_watched,
+                SUM(video_p100_watched) AS video_p100_watched
+         FROM ad_costs
+         WHERE client_id = $1 AND date BETWEEN $2 AND $3
+           AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($4, '_ads$', ''))
+           AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($5))
+           AND LOWER(TRIM(ad_name)) = LOWER(TRIM($6))`,
+        [clientId, from, to, platform, campaignName, creativeName]
+      )
       const { rows: leadRows } = await db.query<{ leads: string }>(
         `SELECT COUNT(DISTINCT l.id) AS leads
          FROM leads l
@@ -322,6 +342,26 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const marginConfig = await getMarginConfig(clientId)
       const { trueProfit } = computeTrueProfit(marginConfig, revenue, cost, sales)
 
+      const videoPlays = videoRows[0]?.video_plays ? parseInt(videoRows[0].video_plays, 10) : null
+      const p25 = videoRows[0]?.video_p25_watched ? parseInt(videoRows[0].video_p25_watched, 10) : null
+      const p50 = videoRows[0]?.video_p50_watched ? parseInt(videoRows[0].video_p50_watched, 10) : null
+      const p75 = videoRows[0]?.video_p75_watched ? parseInt(videoRows[0].video_p75_watched, 10) : null
+      const p100 = videoRows[0]?.video_p100_watched ? parseInt(videoRows[0].video_p100_watched, 10) : null
+      // Hook rate: of everyone who SAW the ad, what fraction pressed play at all.
+      // View-through rates: of everyone who started watching, what fraction reached
+      // each quartile — the standard "completion funnel" framing, not "of impressions."
+      const videoMetrics =
+        videoPlays === null
+          ? null
+          : {
+              plays: videoPlays,
+              hookRate: impressions > 0 ? (videoPlays / impressions) * 100 : null,
+              p25Rate: p25 !== null && videoPlays > 0 ? (p25 / videoPlays) * 100 : null,
+              p50Rate: p50 !== null && videoPlays > 0 ? (p50 / videoPlays) * 100 : null,
+              p75Rate: p75 !== null && videoPlays > 0 ? (p75 / videoPlays) * 100 : null,
+              p100Rate: p100 !== null && videoPlays > 0 ? (p100 / videoPlays) * 100 : null,
+            }
+
       return reply.send({
         platform,
         campaignName,
@@ -333,6 +373,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           assetUrl: assetRows[0]?.creative_asset_url ?? null,
           assetType: (assetRows[0]?.creative_type as 'image' | 'video' | null) ?? null,
         },
+        videoMetrics,
         copy: {
           headline: assetRows[0]?.creative_headline ?? null,
           primaryText: assetRows[0]?.creative_primary_text ?? null,

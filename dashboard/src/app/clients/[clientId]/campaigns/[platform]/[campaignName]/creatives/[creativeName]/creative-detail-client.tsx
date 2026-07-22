@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ImageIcon } from "lucide-react";
-import { getCreativeDetail, getClients, campaignGoalForNiche, CreativeDetailCopy } from "@/lib/api";
+import { getCreativeDetail, getClients, campaignGoalForNiche, CreativeDetailCopy, CreativeVideoMetrics } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { InsightsPanel } from "@/components/insights-panel";
@@ -77,6 +77,36 @@ function AdCopy({ copy }: { copy: CreativeDetailCopy }) {
   );
 }
 
+// Hook rate + quartile view-through (Step 42) — null across the board for image
+// creatives and every platform besides Facebook, same "not synced for this
+// platform yet" pattern as AdCopy/AssetPreview above.
+function VideoMetricsPanel({ metrics }: { metrics: CreativeVideoMetrics | null }) {
+  if (!metrics) return null;
+  const rows: { label: string; value: number | null }[] = [
+    { label: "Hook rate (played / saw ad)", value: metrics.hookRate },
+    { label: "Watched to 25%", value: metrics.p25Rate },
+    { label: "Watched to 50%", value: metrics.p50Rate },
+    { label: "Watched to 75%", value: metrics.p75Rate },
+    { label: "Watched to 100%", value: metrics.p100Rate },
+  ];
+  return (
+    <Card className="px-4 py-4">
+      <CardHeader className="px-0">
+        <CardTitle className="text-sm">Video Engagement</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1.5 px-0">
+        <p className="text-xs text-muted-foreground">{formatNumber(metrics.plays)} plays</p>
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="tabular-nums">{r.value === null ? "-" : formatPercent(r.value)}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -134,6 +164,8 @@ export function CreativeDetailClient({
       {data && (
         <>
           <AssetPreview asset={data.asset} />
+
+          <VideoMetricsPanel metrics={data.videoMetrics} />
 
           <AdCopy copy={data.copy} />
 

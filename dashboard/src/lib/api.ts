@@ -818,6 +818,18 @@ export interface CreativeDetailCopy {
   landingPageUrl: string | null;
 }
 
+// Step 42 — Facebook only for now (null everywhere else), same disclosure as
+// asset/copy. Rates are all "of everyone who pressed play," not "of impressions"
+// (that's what hookRate already covers).
+export interface CreativeVideoMetrics {
+  plays: number;
+  hookRate: number | null;
+  p25Rate: number | null;
+  p50Rate: number | null;
+  p75Rate: number | null;
+  p100Rate: number | null;
+}
+
 export interface CreativeDetail {
   platform: string;
   campaignName: string;
@@ -825,6 +837,7 @@ export interface CreativeDetail {
   from: string;
   to: string;
   asset: CreativeDetailAsset;
+  videoMetrics: CreativeVideoMetrics | null;
   copy: CreativeDetailCopy;
   kpis: CampaignDetailKpis;
   customers: CreativeDetailCustomer[];

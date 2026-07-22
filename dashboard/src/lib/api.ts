@@ -469,6 +469,28 @@ export function sendChatMessage(clientId: string, message: string): Promise<{ an
   });
 }
 
+// Step 52 — Media Mix Modeling via a straightforward multiple linear regression
+// (not Bayesian MMM+ with adstock/saturation curves). rSquared/sampleSizeDays are
+// always shown alongside the coefficients so a low-confidence fit is visible.
+export interface MmmChannel {
+  platform: string;
+  coefficientPerDollar: number;
+  avgDailySpend: number;
+}
+
+export interface MmmResult {
+  available: boolean;
+  reason?: string;
+  sampleSizeDays?: number;
+  rSquared?: number;
+  intercept?: number;
+  channels?: MmmChannel[];
+}
+
+export function getMmm(clientId: string): Promise<MmmResult> {
+  return fetchJson<MmmResult>(`/clients/${clientId}/reports/mmm`);
+}
+
 export function getIncrementalityTests(clientId: string): Promise<IncrementalityTestWithResult[]> {
   return fetchJson<IncrementalityTestWithResult[]>(`/clients/${clientId}/incrementality-tests`);
 }

@@ -3,6 +3,7 @@ import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
 import { projectSum } from '../lib/forecasting'
+import { computeMMM } from '../lib/mmm'
 
 export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -802,6 +803,13 @@ export async function reportRoutes(app: FastifyInstance) {
       forecast7d: buildForecast(7),
       forecast30d: buildForecast(30),
     })
+  })
+
+  // Step 52 — Media Mix Modeling. See lib/mmm.ts for the full methodology
+  // disclosure (a straightforward multiple linear regression, not Northbeam-style
+  // Bayesian MMM+ with adstock/saturation curves).
+  app.get<{ Params: { id: string } }>('/clients/:id/reports/mmm', async (req, reply) => {
+    return reply.send(await computeMMM(req.params.id))
   })
 
   app.get<{ Params: { id: string }; Querystring: LtvQuery }>(

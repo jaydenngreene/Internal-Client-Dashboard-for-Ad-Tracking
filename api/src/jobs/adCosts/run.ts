@@ -8,6 +8,7 @@ import { fetchPinterestAdCosts } from './pinterest'
 import { fetchLinkedInAdCosts } from './linkedin'
 import { fetchRedditAdCosts } from './reddit'
 import { upsertAdCosts } from './upsert'
+import { withRetry } from '../../lib/retry'
 
 export type AdPlatform =
   | 'facebook_ads'
@@ -97,11 +98,19 @@ export async function runAdCostSync(daysBack = 3): Promise<void> {
 
   for (const integration of integrations) {
     try {
-      const count = await syncOneIntegration(integration, sinceStr, untilStr)
+      // Retries only on a rate-limit-shaped failure (429/"too many requests") —
+      // a bad token or a genuinely wrong parameter should fail immediately, not
+      // burn 3 attempts' worth of backoff delay for no reason.
+      const count = await withRetry(() => syncOneIntegration(integration, sinceStr, untilStr))
       console.log(`  ✓ ${integration.platform} client=${integration.client_id}: ${count} row(s)`)
     } catch (err) {
       console.error(`  ✗ ${integration.platform} client=${integration.client_id} failed:`, (err as Error).message)
     }
+    // Small stagger between every integration in the same run — this app is
+    // multi-tenant, so without this, N clients on the same platform would all hit
+    // that platform's API back-to-back with zero spacing, a real rate-limit risk
+    // at scale that a single client's own retry/backoff above doesn't address.
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
 }
 
@@ -119,7 +128,9 @@ export async function backfillIntegration(clientId: string, platform: AdPlatform
   since.setUTCDate(since.getUTCDate() - 179)
 
   try {
-    const count = await syncOneIntegration({ client_id: clientId, platform, config }, isoDate(since), isoDate(until))
+    const count = await withRetry(() =>
+      syncOneIntegration({ client_id: clientId, platform, config }, isoDate(since), isoDate(until))
+    )
     console.log(`[backfill] ${platform} client=${clientId}: ${count} row(s) over 180 days`)
   } catch (err) {
     console.error(`[backfill] ${platform} client=${clientId} failed:`, (err as Error).message)

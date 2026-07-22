@@ -5,6 +5,7 @@ import { refreshCustomerLtv } from '../jobs/ltv/run'
 import { runAudienceSyncs } from '../jobs/audienceSync/run'
 import { detectAnomalies } from '../jobs/anomalyDetection/run'
 import { transcribeAndScoreCalls } from '../jobs/callTranscription/run'
+import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 
 // Records one row per job run so a failure is queryable (GET /jobs/status)
 // instead of vanishing into a console.error nobody's watching. Recording the run
@@ -70,6 +71,13 @@ export function startScheduledJobs(): void {
   cron.schedule('*/15 * * * *', () => {
     console.log('[scheduler] running call transcription')
     runAndRecord('call_transcription', transcribeAndScoreCalls)
+  })
+
+  // Matches the shortest backoff delay (1 minute) closely enough that a fast-
+  // recovering endpoint gets retried promptly, without polling so often it's
+  // pointless overhead for deliveries whose next_retry_at is hours out.
+  cron.schedule('*/2 * * * *', () => {
+    runAndRecord('webhook_retry', retryFailedWebhookDeliveries)
   })
 
   // Run once immediately on startup too, so data isn't stale from a cold start

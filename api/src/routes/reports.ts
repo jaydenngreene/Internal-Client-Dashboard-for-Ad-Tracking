@@ -121,13 +121,17 @@ function getSpendByCampaign(clientId: string, from: string, to: string) {
 // was created (first-touch-per-lead, same acquisition convention as customer_ltv) —
 // independent of the client's purchase attribution_model, since a lead isn't
 // revenue to split, just a single acquisition event.
+// utm_source travels alongside utm_campaign here (not just utm_campaign) so the
+// funnel route below can key on (campaign, platform) together, not campaign name
+// alone — otherwise a client running same-named campaigns on two platforms (e.g.
+// "Summer Sale" on both Facebook and Google) would collapse into one blended row.
 function getLeadsByCampaign(clientId: string, from: string, to: string) {
-  return db.query<{ utm_campaign: string | null; leads: string }>(
-    `SELECT s.utm_campaign, COUNT(DISTINCT l.id) AS leads
+  return db.query<{ utm_campaign: string | null; utm_source: string | null; leads: string }>(
+    `SELECT s.utm_campaign, s.utm_source, COUNT(DISTINCT l.id) AS leads
      FROM leads l
      JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
      JOIN LATERAL (
-       SELECT utm_campaign FROM sessions
+       SELECT utm_campaign, utm_source FROM sessions
        WHERE visitor_id = i.visitor_id
          AND started_at <= l.created_at
          AND started_at >= l.created_at - INTERVAL '90 days'
@@ -135,19 +139,19 @@ function getLeadsByCampaign(clientId: string, from: string, to: string) {
        LIMIT 1
      ) s ON true
      WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
-     GROUP BY s.utm_campaign`,
+     GROUP BY s.utm_campaign, s.utm_source`,
     [clientId, from, to]
   )
 }
 
 function getRevenueByCampaign(clientId: string, from: string, to: string) {
-  return db.query<{ utm_campaign: string | null; revenue: string; sales: string }>(
-    `SELECT s.utm_campaign, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+  return db.query<{ utm_campaign: string | null; utm_source: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_campaign, s.utm_source, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
      FROM attributions a
      JOIN sessions s ON s.id = a.session_id
      JOIN purchases p ON p.id = a.purchase_id
      WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
-     GROUP BY s.utm_campaign`,
+     GROUP BY s.utm_campaign, s.utm_source`,
     [clientId, from, to]
   )
 }
@@ -259,12 +263,12 @@ function getSpendByCreative(clientId: string, from: string, to: string) {
 }
 
 function getLeadsByCreative(clientId: string, from: string, to: string) {
-  return db.query<{ utm_content: string | null; leads: string }>(
-    `SELECT s.utm_content, COUNT(DISTINCT l.id) AS leads
+  return db.query<{ utm_content: string | null; utm_source: string | null; leads: string }>(
+    `SELECT s.utm_content, s.utm_source, COUNT(DISTINCT l.id) AS leads
      FROM leads l
      JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
      JOIN LATERAL (
-       SELECT utm_content FROM sessions
+       SELECT utm_content, utm_source FROM sessions
        WHERE visitor_id = i.visitor_id
          AND started_at <= l.created_at
          AND started_at >= l.created_at - INTERVAL '90 days'
@@ -272,19 +276,19 @@ function getLeadsByCreative(clientId: string, from: string, to: string) {
        LIMIT 1
      ) s ON true
      WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
-     GROUP BY s.utm_content`,
+     GROUP BY s.utm_content, s.utm_source`,
     [clientId, from, to]
   )
 }
 
 function getRevenueByCreative(clientId: string, from: string, to: string) {
-  return db.query<{ utm_content: string | null; revenue: string; sales: string }>(
-    `SELECT s.utm_content, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+  return db.query<{ utm_content: string | null; utm_source: string | null; revenue: string; sales: string }>(
+    `SELECT s.utm_content, s.utm_source, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
      FROM attributions a
      JOIN sessions s ON s.id = a.session_id
      JOIN purchases p ON p.id = a.purchase_id
      WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
-     GROUP BY s.utm_content`,
+     GROUP BY s.utm_content, s.utm_source`,
     [clientId, from, to]
   )
 }
@@ -918,6 +922,23 @@ export async function reportRoutes(app: FastifyInstance) {
               ? normalizeCreative
               : normalizeCampaignName
 
+      // Campaign and creative names are frequently reused across ad platforms (e.g.
+      // "Summer Sale" on both Facebook and Google) — keying on the name alone made
+      // those platforms silently overwrite each other's cost/leads/revenue in one
+      // blended row. For these two breakdowns the key also folds in the platform
+      // (ad_costs.platform on the spend side, utm_source on the lead/revenue side,
+      // both run through normalizeSource so "facebook_ads" and "facebook" compare
+      // equal) so same-named campaigns/creatives on different platforms land in
+      // separate rows. Source breakdown already keys on platform alone (the name IS
+      // the platform), and keyword breakdown never carries ad_costs/platform data,
+      // so neither needs this.
+      const keyIncludesPlatform = breakdown === 'campaign' || breakdown === 'creative'
+      const buildKey = (name: string | null, platformValue: string | null): string => {
+        const base = normalize(name)
+        if (!keyIncludesPlatform) return base
+        return `${base}::${platformValue ? normalizeSource(platformValue) : ''}`
+      }
+
       interface Row {
         name: string
         platform: string | null
@@ -945,10 +966,10 @@ export async function reportRoutes(app: FastifyInstance) {
           breakdown === 'source'
             ? (r as { platform: string }).platform
             : breakdown === 'creative'
-              ? (r as { ad_name: string | null }).ad_name
+              ? (r as unknown as { ad_name: string | null }).ad_name
               : (r as SpendRow).campaign_name
         const platform = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).platform
-        const key = normalize(name)
+        const key = buildKey(name, platform)
         const row = getOrCreate(key, name ?? (breakdown === 'creative' ? '(unnamed creative)' : '(unnamed campaign)'))
         row.platform = platform
         row.cost = parseFloat(r.cost)
@@ -973,17 +994,31 @@ export async function reportRoutes(app: FastifyInstance) {
               ? '(no utm_content)'
               : '(no utm_campaign)'
 
+      // Only campaign/creative rows carry a separate utm_source column (added
+      // alongside utm_campaign/utm_content specifically so this key can be built) —
+      // source breakdown's own utm_source IS fieldFor(r) already, and keyword rows
+      // never had one to begin with.
+      const sourceFieldFor = (r: unknown): string | null =>
+        keyIncludesPlatform ? (r as { utm_source: string | null }).utm_source : null
+
       for (const r of leadRows.rows) {
         const name = fieldFor(r)
-        const key = normalize(name)
+        const source = sourceFieldFor(r)
+        const key = buildKey(name, source)
         const row = getOrCreate(key, name ?? fallbackFor())
+        // Rows with no matching ad_costs (never hit the spend loop above) would
+        // otherwise show no platform badge at all, even though the raw utm_source
+        // tells us what platform the lead actually came from.
+        if (row.platform === null && source) row.platform = source
         row.leads = parseInt(r.leads, 10)
       }
 
       for (const r of revenueRows.rows) {
         const name = fieldFor(r)
-        const key = normalize(name)
+        const source = sourceFieldFor(r)
+        const key = buildKey(name, source)
         const row = getOrCreate(key, name ?? fallbackFor())
+        if (row.platform === null && source) row.platform = source
         row.revenue = parseFloat(r.revenue)
         row.sales = parseInt(r.sales, 10)
       }

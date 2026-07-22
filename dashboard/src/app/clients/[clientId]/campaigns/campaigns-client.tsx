@@ -77,7 +77,12 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
             <CardTitle>{BREAKDOWN_TITLE[breakdown]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <CampaignBreakdownTable rows={data.campaigns} nameColumnLabel={BREAKDOWN_COLUMN_LABEL[breakdown]} goal={goal} />
+            <CampaignBreakdownTable
+              rows={data.campaigns}
+              nameColumnLabel={BREAKDOWN_COLUMN_LABEL[breakdown]}
+              goal={goal}
+              showPlatformBadge={breakdown !== "source"}
+            />
           </CardContent>
         </Card>
       )}

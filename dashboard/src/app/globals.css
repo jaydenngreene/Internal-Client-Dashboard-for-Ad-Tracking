@@ -87,6 +87,12 @@
 }
 
 .dark {
+  /* Tells the browser to render its own native controls (select dropdown lists,
+     date pickers, scrollbars) with dark-appropriate default colors — without this,
+     an open <select> list ignores our text-foreground/bg-card classes entirely and
+     falls back to black-on-white, which is why the niche dropdown was unreadable. */
+  color-scheme: dark;
+
   /* Navy-dark theme, colors validated with the dataviz skill's palette validator
      against surface #10162a (card) — see api-less scripts/validate_palette.js run:
      revenue #009a00 / cost #e66767 / profit #9085e9 all pass CVD + contrast checks. */

@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const NICHE_LABEL: Record<Niche, string> = {
   ecommerce: "Ecommerce",
@@ -38,9 +39,6 @@ const PROCESSORS: { value: ProcessorPlatform | "none"; label: string }[] = [
   { value: "none", label: "Skip for now" },
 ];
 
-const selectClass =
-  "flex h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
-
 function CodeBlock({ children }: { children: string }) {
   return (
     <pre className="overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
@@ -58,10 +56,10 @@ export function NewClientWizard() {
   const [client, setClient] = useState<Client | null>(null);
   const [processor, setProcessor] = useState<ProcessorPlatform | "none">("none");
 
-  // Step 1 fields
+  // Step 1 fields — timezone isn't asked here, the API defaults to America/New_York
+  // and can be changed later if it ever matters for a specific client.
   const [name, setName] = useState("");
   const [niche, setNiche] = useState<Niche>("ecommerce");
-  const [timezone, setTimezone] = useState("America/New_York");
 
   // Step 2 fields, one set per processor
   const [shopDomain, setShopDomain] = useState("");
@@ -72,7 +70,7 @@ export function NewClientWizard() {
   const [squareSignatureKey, setSquareSignatureKey] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: () => createClient({ name: name.trim(), niche, timezone }),
+    mutationFn: () => createClient({ name: name.trim(), niche }),
     onSuccess: (created) => {
       setClient(created);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -139,21 +137,22 @@ export function NewClientWizard() {
             </div>
             <div className="flex flex-col gap-1">
               <FieldLabel>Niche</FieldLabel>
-              <select className={selectClass} value={niche} onChange={(e) => setNiche(e.target.value as Niche)}>
-                {NICHES.map((n) => (
-                  <option key={n} value={n}>
-                    {NICHE_LABEL[n]}
-                  </option>
-                ))}
-              </select>
+              <Select value={niche} onValueChange={(v) => setNiche(v as Niche)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NICHES.map((n) => (
+                    <SelectItem key={n} value={n}>
+                      {NICHE_LABEL[n]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="mt-1 text-xs text-muted-foreground">
                 Controls which report tabs and KPIs show up for this client (e.g. cost-per-lead vs.
                 cost-per-purchase).
               </p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <FieldLabel>Timezone</FieldLabel>
-              <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
             </div>
             {createMutation.isError && (
               <p className="text-xs text-status-critical">Failed to create client. Is the API running?</p>
@@ -175,17 +174,18 @@ export function NewClientWizard() {
           <CardContent className="flex flex-col gap-4 px-0">
             <div className="flex flex-col gap-1">
               <FieldLabel>Processor</FieldLabel>
-              <select
-                className={selectClass}
-                value={processor}
-                onChange={(e) => setProcessor(e.target.value as ProcessorPlatform | "none")}
-              >
-                {PROCESSORS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={processor} onValueChange={(v) => setProcessor(v as ProcessorPlatform | "none")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROCESSORS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {processor === "shopify" && (

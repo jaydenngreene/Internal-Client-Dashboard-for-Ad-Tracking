@@ -26,7 +26,7 @@ export const NICHES: Niche[] = ["ecommerce", "call", "lead_gen", "saas", "info_p
 // Add Client wizard — ports the scripts/setup-*.ts CLI wizards into the dashboard.
 // Every one of these calls an endpoint that already existed for the CLI scripts;
 // no backend changes needed, this is purely a new frontend surface on top of them.
-export function createClient(input: { name: string; niche: Niche; timezone: string }): Promise<Client> {
+export function createClient(input: { name: string; niche: Niche; timezone?: string }): Promise<Client> {
   return fetch(`${API_URL}/clients`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

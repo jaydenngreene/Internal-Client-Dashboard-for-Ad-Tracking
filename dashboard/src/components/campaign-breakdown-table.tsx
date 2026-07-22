@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { FunnelRow } from "@/lib/api";
-import { formatCurrency, formatNumber, formatRoas, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatRoas, formatPercent, formatPlatformLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type SortKey =
@@ -39,10 +39,16 @@ export function CampaignBreakdownTable({
   rows,
   nameColumnLabel,
   goal,
+  showPlatformBadge = true,
 }: {
   rows: FunnelRow[];
   nameColumnLabel: string;
   goal: CampaignGoal;
+  // Source-breakdown rows are already grouped BY platform (the row name IS the
+  // platform), so a badge there would just repeat the name — every other breakdown
+  // (campaign, creative) benefits from it since a client running the same-named
+  // campaign on two platforms would otherwise look like one merged row.
+  showPlatformBadge?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
@@ -127,6 +133,11 @@ export function CampaignBreakdownTable({
               <TableCell className="max-w-64 truncate font-medium">
                 <div className="flex items-center gap-2">
                   <span className="truncate">{row.name}</span>
+                  {showPlatformBadge && formatPlatformLabel(row.platform) && (
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {formatPlatformLabel(row.platform)}
+                    </Badge>
+                  )}
                   {!row.matched && (
                     <Badge variant="outline" className="shrink-0 text-[10px] text-status-warning border-status-warning/40">
                       unmatched

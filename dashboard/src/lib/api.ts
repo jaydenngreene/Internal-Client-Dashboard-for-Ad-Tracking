@@ -1,6 +1,31 @@
-import { getToken, redirectToLogin } from "./auth";
+import { getToken, setToken, redirectToLogin, getTokenExpiryMs } from "./auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+const REFRESH_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // renew once under 3 days from expiry
+let refreshInFlight = false;
+
+// "Remember me" in practice: a session token is good for 30 days (see
+// api/src/lib/auth.ts's signToken), but rather than letting an active user's
+// login silently expire mid-use, every authenticated request opportunistically
+// renews the token once it's down to its last few days — so anyone opening this
+// dashboard at least once every few weeks is never forced back to /login, while a
+// genuinely abandoned token still expires on schedule instead of living forever.
+function maybeRefreshToken(token: string): void {
+  if (refreshInFlight) return;
+  const expiresAt = getTokenExpiryMs(token);
+  if (expiresAt === null || expiresAt - Date.now() > REFRESH_THRESHOLD_MS) return;
+  refreshInFlight = true;
+  fetch(`${API_URL}/auth/refresh`, { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (data?.token) setToken(data.token);
+    })
+    .catch(() => {})
+    .finally(() => {
+      refreshInFlight = false;
+    });
+}
 
 // Drop-in replacement for fetch() — every call site in this file uses this instead
 // so the auth token is attached automatically and a 401 (expired/invalid/missing
@@ -11,6 +36,7 @@ function apiRequest(input: string, init?: RequestInit): Promise<Response> {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(input, { ...init, headers }).then((res) => {
     if (res.status === 401) redirectToLogin();
+    else if (token) maybeRefreshToken(token);
     return res;
   });
 }
@@ -491,6 +517,33 @@ export function getCreativeFatigueSignals(
 
 export function dismissCreativeFatigueSignal(id: string): Promise<CreativeFatigueSignal> {
   return mutateJson<CreativeFatigueSignal>(`/creative-fatigue/${id}/dismiss`, "PATCH");
+}
+
+// Tracking/pixel health — watches the data pipeline itself (silent pixel, a
+// traffic collapse, a platform's ad spend with no matching sessions), distinct
+// from creative fatigue's performance-trend signal. Same active/dismissed,
+// advisory-only shape.
+export interface TrackingHealthSignal {
+  id: string;
+  client_id: string;
+  signal_type: "pixel_silent" | "traffic_drop" | "platform_orphaned_spend";
+  platform: string | null;
+  severity: "warning" | "critical";
+  message: string;
+  status: FatigueStatus;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export function getTrackingHealthSignals(
+  clientId: string,
+  status: FatigueStatus = "active"
+): Promise<TrackingHealthSignal[]> {
+  return fetchJson<TrackingHealthSignal[]>(`/clients/${clientId}/tracking-health${rangeQuery(undefined, { status })}`);
+}
+
+export function dismissTrackingHealthSignal(id: string): Promise<TrackingHealthSignal> {
+  return mutateJson<TrackingHealthSignal>(`/tracking-health/${id}/dismiss`, "PATCH");
 }
 
 // Step 50 — confirm-first budget reallocation suggestions.

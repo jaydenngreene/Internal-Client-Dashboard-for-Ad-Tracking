@@ -185,6 +185,16 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send(rows[0])
   })
 
+  // Sliding-session "remember me" — the dashboard calls this in the background
+  // whenever the token it's holding is getting close to its 30-day expiry (see
+  // dashboard/src/lib/api.ts's apiRequest), so an account in regular use never
+  // hits a forced re-login. Requires an already-valid token to get a new one
+  // (authenticate already ran), so this doesn't extend a stolen token's reach
+  // beyond what that token could already do.
+  app.post('/auth/refresh', { preHandler: authenticate }, async (req, reply) => {
+    return reply.send({ token: signToken(req.userId as string) })
+  })
+
   // Update account-level profile fields. Deliberately separate from /auth/password
   // below — changing your agency name shouldn't require re-typing your password,
   // and vice versa.

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { login, forgotPassword, verifyMfaCode } from "@/lib/api";
 import { setToken } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth-shell";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
@@ -110,15 +111,17 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="flex h-full items-center justify-center bg-background p-6">
-      <Card className="w-full max-w-sm px-4">
-        <CardHeader className="px-0">
-          <CardTitle>
-            {mode === "login" ? "Log in" : mode === "mfa" ? "Verify your identity" : "Reset your password"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-0">
-          {mode === "mfa" && mfaToken ? (
+    <AuthShell>
+      <CardHeader className="px-0">
+        <CardTitle className="text-lg">
+          {mode === "login" ? "Log in" : mode === "mfa" ? "Verify your identity" : "Reset your password"}
+        </CardTitle>
+        {mode === "login" && (
+          <p className="text-sm text-muted-foreground">Welcome back — enter your credentials to continue.</p>
+        )}
+      </CardHeader>
+      <CardContent className="px-0 pb-5">
+        {mode === "mfa" && mfaToken ? (
             <MfaForm mfaToken={mfaToken} onBack={() => setMode("login")} />
           ) : mode === "forgot" ? (
             <ForgotPasswordForm onBack={() => setMode("login")} />
@@ -151,8 +154,7 @@ export default function LoginPage() {
               </button>
             </form>
           )}
-        </CardContent>
-      </Card>
-    </div>
+      </CardContent>
+    </AuthShell>
   );
 }

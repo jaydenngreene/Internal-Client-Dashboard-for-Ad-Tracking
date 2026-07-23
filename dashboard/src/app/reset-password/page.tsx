@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { resetPassword } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth-shell";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
@@ -22,13 +23,12 @@ export default function ResetPasswordPage() {
   const mismatch = newPassword.length > 0 && confirmPassword.length > 0 && newPassword !== confirmPassword;
 
   return (
-    <div className="flex h-full items-center justify-center bg-background p-6">
-      <Card className="w-full max-w-sm px-4">
-        <CardHeader className="px-0">
-          <CardTitle>Set a new password</CardTitle>
-        </CardHeader>
-        <CardContent className="px-0">
-          {!token ? (
+    <AuthShell>
+      <CardHeader className="px-0">
+        <CardTitle className="text-lg">Set a new password</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pb-5">
+        {!token ? (
             <p className="text-sm text-status-critical">This link is missing its reset token.</p>
           ) : mutation.isSuccess ? (
             <div className="flex flex-col gap-3">
@@ -59,8 +59,7 @@ export default function ResetPasswordPage() {
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
-    </div>
+      </CardContent>
+    </AuthShell>
   );
 }

@@ -22,3 +22,15 @@ export function redirectToLogin(): void {
     window.location.href = "/login";
   }
 }
+
+// Returns a JWT's exp claim in epoch ms, or null if it can't be parsed — purely a
+// client-side heuristic for "is this getting old" (see lib/api.ts's opportunistic
+// refresh), never a substitute for the server's own verification.
+export function getTokenExpiryMs(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}

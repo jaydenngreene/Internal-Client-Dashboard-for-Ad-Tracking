@@ -9,6 +9,7 @@ import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 import { runWarehouseExports } from '../lib/bigqueryExport'
 import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
 import { detectCreativeFatigue } from '../jobs/creativeFatigue/run'
+import { detectTrackingHealthIssues } from '../jobs/trackingHealth/run'
 import { detectReallocationOpportunities } from '../lib/budgetReallocation'
 import { sendWeeklyReports, sendMonthlyReports } from '../jobs/scheduledReports/run'
 
@@ -96,6 +97,15 @@ export function startScheduledJobs(): void {
   cron.schedule('10 7 * * *', () => {
     console.log('[scheduler] running budget reallocation detection')
     runAndRecord('budget_reallocation', detectReallocationOpportunities)
+  })
+
+  // Same daily 7am family, but a different question from the other three: those
+  // check performance assuming the data pipeline is trustworthy, this checks
+  // whether the pipeline itself is intact (silent pixel, a traffic collapse, or
+  // one specific ad platform's spend with no matching tracking).
+  cron.schedule('15 7 * * *', () => {
+    console.log('[scheduler] running tracking health checks')
+    runAndRecord('tracking_health', detectTrackingHealthIssues)
   })
 
   // Every 15 minutes: recordings finish within seconds of a call ending, but

@@ -24,6 +24,7 @@ const JOB_LABEL: Record<string, string> = {
   klaviyo_sync: "Klaviyo campaign sync",
   creative_fatigue: "Creative fatigue detection",
   budget_reallocation: "Budget reallocation detection",
+  tracking_health: "Tracking health checks",
 };
 
 function formatDateTime(iso: string): string {

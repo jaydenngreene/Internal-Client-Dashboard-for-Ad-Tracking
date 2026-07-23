@@ -30,6 +30,7 @@ import { pauseCandidateRoutes } from './routes/pauseCandidates'
 import { publicShareRoutes } from './routes/publicShare'
 import { incrementalityRoutes } from './routes/incrementality'
 import { creativeFatigueRoutes } from './routes/creativeFatigue'
+import { trackingHealthRoutes } from './routes/trackingHealth'
 import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { chatRoutes } from './routes/chat'
 import { geoLiftRoutes } from './routes/geoLift'
@@ -151,6 +152,7 @@ app.register(
     instance.register(pauseCandidateRoutes)
     instance.register(incrementalityRoutes)
     instance.register(creativeFatigueRoutes)
+    instance.register(trackingHealthRoutes)
     instance.register(budgetReallocationRoutes)
     instance.register(chatRoutes)
     instance.register(geoLiftRoutes)

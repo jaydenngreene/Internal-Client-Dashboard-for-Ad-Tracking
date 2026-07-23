@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PlatformIcon } from "@/components/platform-icon";
 import { FunnelRow } from "@/lib/api";
 import { formatCurrency, formatNumber, formatRoas, formatPercent, formatPlatformLabel } from "@/lib/format";
 import { downloadCsv } from "@/lib/csv";
@@ -134,7 +135,7 @@ export function CampaignBreakdownTable({
       <div className="overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="hover:bg-transparent">
+          <TableRow className="bg-muted hover:bg-muted">
             {columns.map((col) => (
               <TableHead
                 key={col.key}
@@ -146,7 +147,7 @@ export function CampaignBreakdownTable({
                   // table scrolls horizontally — otherwise a campaign/creative name
                   // scrolls out of view along with which row's numbers you're
                   // even looking at.
-                  col.key === "name" && "sticky left-0 z-20 bg-card"
+                  col.key === "name" && "sticky left-0 z-20 bg-muted"
                 )}
               >
                 {col.label}
@@ -166,6 +167,7 @@ export function CampaignBreakdownTable({
             >
               <TableCell className="sticky left-0 z-10 max-w-64 truncate bg-card font-medium group-hover:bg-muted/50">
                 <div className="flex items-center gap-2">
+                  {showPlatformBadge && <PlatformIcon platform={row.platform} />}
                   <span className="truncate">{row.name}</span>
                   {showPlatformBadge && formatPlatformLabel(row.platform) && (
                     <Badge variant="secondary" className="shrink-0 text-[10px]">

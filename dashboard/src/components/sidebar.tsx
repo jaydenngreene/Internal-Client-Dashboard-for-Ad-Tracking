@@ -1,17 +1,99 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Radar, X, Settings, Users } from "lucide-react";
+import { Radar, X, Settings, Users, BarChart3, ChevronDown } from "lucide-react";
 import { getClients, getMe } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CommandPalette } from "@/components/command-palette";
-import { NAV_SECTIONS } from "@/lib/nav-items";
+import { NAV_SECTIONS, type NavItem } from "@/lib/nav-items";
 
 const navLinkBase =
   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar";
+
+function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActive: boolean }) {
+  const Icon = item.icon;
+  if (!item.enabled) {
+    return (
+      <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
+        <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+        <span className="truncate">{item.label}</span>
+        <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className={cn(
+        navLinkBase,
+        isActive
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+      )}
+    >
+      <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+      <span className="truncate">{item.label}</span>
+    </Link>
+  );
+}
+
+// A collapsible cluster within a section (currently only "Reporting") so a
+// dozen report-type pages don't all sit flat in the top-level nav — mirrors
+// Hyros's own sidebar, where report-type depth lives inside one "Reporting"
+// entry rather than as separate top-level links. Auto-expands whenever the
+// active route is one of its own children; a manual toggle overrides that
+// until the next time the active-route check would flip it.
+function NavGroup({
+  label,
+  items,
+  activeClientId,
+  pathname,
+}: {
+  label: string;
+  items: NavItem[];
+  activeClientId: string;
+  pathname: string;
+}) {
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const isGroupActive = items.some((item) => pathname === `/clients/${activeClientId}/${item.slug}`);
+  const isOpen = manualOpen ?? isGroupActive;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setManualOpen(!isOpen)}
+        className={cn(
+          navLinkBase,
+          "w-full",
+          isGroupActive
+            ? "text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+        )}
+      >
+        <BarChart3 className="size-3.5 shrink-0" strokeWidth={2} />
+        <span className="flex-1 truncate text-left">{label}</span>
+        <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", !isOpen && "-rotate-90")} />
+      </button>
+      {isOpen && (
+        <ul className="mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
+          {items.map((item) => {
+            const href = `/clients/${activeClientId}/${item.slug}`;
+            return (
+              <li key={item.slug}>
+                <NavLink item={item} href={href} isActive={pathname === href} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 // Always in the DOM; a fixed off-canvas drawer below the md breakpoint (slides
 // in via `open`), a normal in-flow sidebar at md+ regardless of `open` — the
@@ -162,44 +244,37 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 {activeClient.name}
               </p>
             )}
-            {visibleSections.map((section) => (
-              <div key={section.label}>
-                <p className="mb-1.5 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                  {section.label}
-                </p>
-                <ul className="space-y-0.5">
-                  {section.items.map((item) => {
-                    const href = `/clients/${activeClientId}/${item.slug}`;
-                    const isActive = pathname === href;
-                    const Icon = item.icon;
-                    return (
-                      <li key={item.slug}>
-                        {item.enabled ? (
-                          <Link
-                            href={href}
-                            className={cn(
-                              navLinkBase,
-                              isActive
-                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                            )}
-                          >
-                            <Icon className="size-3.5 shrink-0" strokeWidth={2} />
-                            <span className="truncate">{item.label}</span>
-                          </Link>
-                        ) : (
-                          <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
-                            <Icon className="size-3.5 shrink-0" strokeWidth={2} />
-                            <span className="truncate">{item.label}</span>
-                            <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+            {visibleSections.map((section) => {
+              const ungrouped = section.items.filter((item) => !item.group);
+              const groupNames = [...new Set(section.items.map((item) => item.group).filter(Boolean))] as string[];
+              return (
+                <div key={section.label}>
+                  <p className="mb-1.5 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    {section.label}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {ungrouped.map((item) => {
+                      const href = `/clients/${activeClientId}/${item.slug}`;
+                      return (
+                        <li key={item.slug}>
+                          <NavLink item={item} href={href} isActive={pathname === href} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {groupNames.map((groupName) => (
+                    <div key={groupName} className="mt-0.5">
+                      <NavGroup
+                        label={groupName}
+                        items={section.items.filter((item) => item.group === groupName)}
+                        activeClientId={activeClientId}
+                        pathname={pathname}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

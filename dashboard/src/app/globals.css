@@ -70,11 +70,20 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Light-mode counterpart to .dark's chart palette below, same hue
+     assignments (revenue=green, cost=red, profit=purple, chart-4=blue,
+     chart-5=amber), validated against this surface (#ffffff = --card) with
+     the dataviz skill's validate_palette.js --mode light --pairs all: all
+     checks pass; chart-5 vs chart-2 sits in the 6-8 CVD warn band, legal
+     since every chart pairing them also carries a legend/direct label. */
+  --chart-1: #0a6b30;
+  --chart-2: #e35a6a;
+  --chart-3: #8347d9;
+  --chart-4: #0f8fd6;
+  --chart-5: #9c7d0a;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);

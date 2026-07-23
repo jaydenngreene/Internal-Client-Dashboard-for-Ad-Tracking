@@ -1270,6 +1270,10 @@ export type FunnelBreakdown = "campaign" | "source" | "keyword" | "creative";
 export interface FunnelRow {
   name: string;
   platform: string | null;
+  // Only ever set for the "creative" breakdown (which campaign this ad belongs
+  // to) — null for every other breakdown, and null for a creative row with no
+  // ad-platform spend backing it (nothing to link a detail page to).
+  campaignName?: string | null;
   cost: number;
   impressions: number;
   clicks: number;

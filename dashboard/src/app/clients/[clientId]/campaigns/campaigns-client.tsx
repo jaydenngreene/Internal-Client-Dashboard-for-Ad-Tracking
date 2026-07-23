@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getFunnel, getLtv, getClients, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
@@ -42,9 +43,21 @@ const BREAKDOWN_COLUMN_LABEL: Record<FunnelBreakdown, string> = {
   creative: "Creative",
 };
 
+const VIEW_VALUES = VIEW_OPTIONS.map((o) => o.value);
+
 export function CampaignsClient({ clientId }: { clientId: string }) {
+  // Lets a link from elsewhere (e.g. Overview's Best Performing Ads "View all")
+  // land directly on a specific breakdown, e.g. /campaigns?view=creative, instead
+  // of always opening on the Campaign tab. Read once on mount — the toggle itself
+  // is the source of truth after that, same as every other page's own state.
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const initialView = (VIEW_VALUES as string[]).includes(requestedView ?? "")
+    ? (requestedView as ViewMode)
+    : "campaign";
+
   const [preset, setPreset] = useState<RangePreset>("30d");
-  const [view, setView] = useState<ViewMode>("campaign");
+  const [view, setView] = useState<ViewMode>(initialView);
   const range = resolveRange(preset);
   const isLtv = view === "ltv";
 
@@ -120,7 +133,12 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
                       row.platform
                         ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`
                         : null
-                  : undefined
+                  : view === "creative"
+                    ? (row) =>
+                        row.platform && row.campaignName
+                          ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.campaignName)}/creatives/${encodeURIComponent(row.name)}`
+                          : null
+                    : undefined
               }
             />
           </CardContent>

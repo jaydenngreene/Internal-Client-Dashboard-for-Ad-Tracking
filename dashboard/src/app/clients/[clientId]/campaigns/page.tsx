@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { CampaignsClient } from "./campaigns-client";
 
 export default async function CampaignsPage({
@@ -6,5 +7,9 @@ export default async function CampaignsPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <CampaignsClient clientId={clientId} />;
+  return (
+    <Suspense>
+      <CampaignsClient clientId={clientId} />
+    </Suspense>
+  );
 }

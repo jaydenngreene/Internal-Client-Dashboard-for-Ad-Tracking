@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu } from "lucide-react";
 import { Sidebar } from "./sidebar";
+import { HeaderBar } from "./header-bar";
 import { getToken } from "@/lib/auth";
 
 // These get no sidebar/chrome and no token requirement — they're reachable from
@@ -51,16 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <>
       <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-12 shrink-0 items-center border-b border-border px-3 md:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Open menu"
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Menu className="size-5" />
-          </button>
-        </div>
+        <HeaderBar onMenuClick={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </>

@@ -21,6 +21,7 @@ import {
   Users,
   Settings2,
   Sparkles,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,6 +31,10 @@ export interface NavItem {
   icon: LucideIcon;
   enabled: boolean;
   niches?: string[];
+  // Clusters this item under a collapsible sub-header within its section (e.g.
+  // "Reporting") instead of rendering it as a flat top-level link — see
+  // Sidebar's grouping logic. Items without a group render exactly as before.
+  group?: string;
 }
 
 export interface NavSection {
@@ -51,15 +56,28 @@ export const NAV_SECTIONS: NavSection[] = [
       { slug: "overview", label: "Overview", icon: LayoutDashboard, enabled: true },
       { slug: "insights", label: "Insights", icon: Lightbulb, enabled: true },
       { slug: "chat", label: "Ask Your Data", icon: Bot, enabled: true },
-      { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true },
-      { slug: "funnel", label: "Funnel", icon: Filter, enabled: true },
-      { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true },
-      { slug: "creative-patterns", label: "Creative Patterns", icon: Sparkles, enabled: true },
-      { slug: "data-driven-attribution", label: "Data-Driven Attribution", icon: Waypoints, enabled: true },
-      { slug: "leads", label: "Leads", icon: UserSearch, enabled: true },
-      { slug: "subscriptions", label: "Subscriptions", icon: RefreshCw, enabled: true, niches: ["saas"] },
-      { slug: "email-sms", label: "Email & SMS", icon: Mail, enabled: true },
-      { slug: "cohorts", label: "Cohorts", icon: Layers, enabled: true },
+      { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true, group: "Reporting" },
+      { slug: "funnel", label: "Funnel", icon: Filter, enabled: true, group: "Reporting" },
+      { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true, group: "Reporting" },
+      { slug: "creative-patterns", label: "Creative Patterns", icon: Sparkles, enabled: true, group: "Reporting" },
+      {
+        slug: "data-driven-attribution",
+        label: "Data-Driven Attribution",
+        icon: Waypoints,
+        enabled: true,
+        group: "Reporting",
+      },
+      { slug: "leads", label: "Leads", icon: UserSearch, enabled: true, group: "Reporting" },
+      {
+        slug: "subscriptions",
+        label: "Subscriptions",
+        icon: RefreshCw,
+        enabled: true,
+        niches: ["saas"],
+        group: "Reporting",
+      },
+      { slug: "email-sms", label: "Email & SMS", icon: Mail, enabled: true, group: "Reporting" },
+      { slug: "cohorts", label: "Cohorts", icon: Layers, enabled: true, group: "Reporting" },
     ],
   },
   {
@@ -81,6 +99,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { slug: "tags", label: "Tags & Stages", icon: Tag, enabled: true },
       { slug: "audiences", label: "Audiences", icon: Users, enabled: true },
       { slug: "settings", label: "Settings", icon: Settings2, enabled: true },
+      { slug: "help", label: "Help & Info", icon: HelpCircle, enabled: true },
     ],
   },
 ];

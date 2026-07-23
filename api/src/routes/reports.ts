@@ -255,12 +255,20 @@ function getRevenueByKeyword(clientId: string, from: string, to: string) {
 // utm_term was in before the Step 27 keyword breakdown), normalized the same way
 // source/keyword already are since both sides are marketer-set labels, not a shared id.
 function getSpendByCreative(clientId: string, from: string, to: string) {
-  return db.query<{ ad_id: string; ad_name: string | null; platform: string; cost: string; impressions: string; clicks: string }>(
-    `SELECT ad_id, ad_name, platform,
+  return db.query<{
+    ad_id: string
+    ad_name: string | null
+    campaign_name: string | null
+    platform: string
+    cost: string
+    impressions: string
+    clicks: string
+  }>(
+    `SELECT ad_id, ad_name, campaign_name, platform,
             SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks
      FROM ad_costs
      WHERE client_id = $1 AND date BETWEEN $2 AND $3
-     GROUP BY ad_id, ad_name, platform`,
+     GROUP BY ad_id, ad_name, campaign_name, platform`,
     [clientId, from, to]
   )
 }
@@ -1170,6 +1178,11 @@ export async function reportRoutes(app: FastifyInstance) {
       interface Row {
         name: string
         platform: string | null
+        // Only ever set for the creative breakdown, from the matching ad_costs row —
+        // the campaign a specific ad belongs to, so the dashboard can link straight to
+        // that ad's detail page. A creative row with no spend backing it (unmatched,
+        // leads/revenue only) has no campaign to point at, stays null.
+        campaignName: string | null
         cost: number
         impressions: number
         clicks: number
@@ -1183,7 +1196,17 @@ export async function reportRoutes(app: FastifyInstance) {
       const getOrCreate = (key: string, fallbackName: string): Row => {
         let row = rows.get(key)
         if (!row) {
-          row = { name: fallbackName, platform: null, cost: 0, impressions: 0, clicks: 0, leads: 0, sales: 0, revenue: 0 }
+          row = {
+            name: fallbackName,
+            platform: null,
+            campaignName: null,
+            cost: 0,
+            impressions: 0,
+            clicks: 0,
+            leads: 0,
+            sales: 0,
+            revenue: 0,
+          }
           rows.set(key, row)
         }
         return row
@@ -1200,6 +1223,7 @@ export async function reportRoutes(app: FastifyInstance) {
         const key = buildKey(name, platform)
         const row = getOrCreate(key, name ?? (breakdown === 'creative' ? '(unnamed creative)' : '(unnamed campaign)'))
         row.platform = platform
+        if (breakdown === 'creative') row.campaignName = (r as unknown as { campaign_name: string | null }).campaign_name
         row.cost = parseFloat(r.cost)
         row.impressions = parseInt((r as { impressions: string }).impressions ?? '0', 10)
         row.clicks = parseInt((r as { clicks: string }).clicks ?? '0', 10)

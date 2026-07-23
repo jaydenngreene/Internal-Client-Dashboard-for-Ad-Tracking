@@ -1,0 +1,100 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import { HELP_SECTIONS, HelpEntry } from "@/lib/help-content";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ClientKicker } from "@/components/client-kicker";
+
+function matches(entry: HelpEntry, query: string): boolean {
+  const q = query.toLowerCase();
+  if (entry.title.toLowerCase().includes(q) || entry.purpose.toLowerCase().includes(q)) return true;
+  return (entry.metrics ?? []).some(
+    (m) => m.term.toLowerCase().includes(q) || m.definition.toLowerCase().includes(q)
+  );
+}
+
+function HelpCard({ entry, forceOpen }: { entry: HelpEntry; forceOpen: boolean }) {
+  return (
+    <Card className="px-0 py-0">
+      <details open={forceOpen || undefined} className="group/details">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium marker:content-none">
+          {entry.title}
+          <span className="text-muted-foreground transition-transform group-open/details:rotate-180">⌄</span>
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
+          <p className="text-sm text-muted-foreground">{entry.purpose}</p>
+          {entry.metrics && entry.metrics.length > 0 && (
+            <dl className="flex flex-col gap-2">
+              {entry.metrics.map((m) => (
+                <div key={m.term} className="text-sm">
+                  <dt className="inline font-medium text-foreground">{m.term}</dt>
+                  <dd className="inline text-muted-foreground"> — {m.definition}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {entry.howToUse && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">How to use it: </span>
+              {entry.howToUse}
+            </p>
+          )}
+        </div>
+      </details>
+    </Card>
+  );
+}
+
+export function HelpClient({ clientId }: { clientId: string }) {
+  const [query, setQuery] = useState("");
+  const trimmed = query.trim();
+
+  const sections = useMemo(() => {
+    if (!trimmed) return HELP_SECTIONS;
+    return HELP_SECTIONS.map((section) => ({
+      ...section,
+      entries: section.entries.filter((e) => matches(e, trimmed)),
+    })).filter((section) => section.entries.length > 0);
+  }, [trimmed]);
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <div>
+        <ClientKicker clientId={clientId} />
+        <h1 className="text-lg font-semibold">Help & Info</h1>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          What every tab does and what its numbers mean — for anyone new to this dashboard.
+        </p>
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search a tab or metric…"
+          className="pl-8"
+        />
+      </div>
+
+      {sections.length === 0 && <p className="text-sm text-muted-foreground">No matches for &quot;{trimmed}&quot;.</p>}
+
+      <div className="flex flex-col gap-6">
+        {sections.map((section) => (
+          <div key={section.label} className="flex flex-col gap-2">
+            <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {section.label}
+            </p>
+            <div className="flex flex-col gap-2">
+              {section.entries.map((entry) => (
+                <HelpCard key={entry.slug} entry={entry} forceOpen={!!trimmed} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

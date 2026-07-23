@@ -141,7 +141,12 @@ export function CampaignBreakdownTable({
                 onClick={() => toggleSort(col.key)}
                 className={cn(
                   "cursor-pointer select-none text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
-                  col.align === "right" && "text-right"
+                  col.align === "right" && "text-right",
+                  // The name column stays pinned while the rest of a wide breakdown
+                  // table scrolls horizontally — otherwise a campaign/creative name
+                  // scrolls out of view along with which row's numbers you're
+                  // even looking at.
+                  col.key === "name" && "sticky left-0 z-20 bg-card"
                 )}
               >
                 {col.label}
@@ -157,9 +162,9 @@ export function CampaignBreakdownTable({
             <TableRow
               key={`${row.name}::${row.platform ?? ""}`}
               onClick={href ? () => router.push(href) : undefined}
-              className={href ? "cursor-pointer hover:bg-accent/40" : undefined}
+              className={cn("group", href && "cursor-pointer hover:bg-accent/40")}
             >
-              <TableCell className="max-w-64 truncate font-medium">
+              <TableCell className="sticky left-0 z-10 max-w-64 truncate bg-card font-medium group-hover:bg-muted/50">
                 <div className="flex items-center gap-2">
                   <span className="truncate">{row.name}</span>
                   {showPlatformBadge && formatPlatformLabel(row.platform) && (

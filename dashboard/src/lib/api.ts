@@ -1202,6 +1202,11 @@ export interface TofReport {
   to: string;
   totalLeads: number;
   cpl: number | null;
+  // Ecommerce/info-product clients don't think in "leads" — TOF for them means
+  // purchases, not opt-ins. Populated the same way regardless of niche; which
+  // pair the UI shows is a frontend decision.
+  totalPurchases: number;
+  costPerPurchase: number | null;
 }
 
 export interface MofReport {

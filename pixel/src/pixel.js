@@ -1,8 +1,13 @@
 ;(function (window, document) {
   'use strict'
 
-  var API_URL = '__API_URL__'      // replaced at build/deploy time
-  var PIXEL_KEY = '__PIXEL_KEY__'  // replaced per client
+  // Read from window.ADT_CONFIG (set by the small inline snippet on the host
+  // page — see theme-snippet.liquid / the Settings pixel install block) rather
+  // than a build-time placeholder — this file is built once and served as-is
+  // from the API at /pixel.js, configured per page instead of rebuilt per client.
+  var config = window.ADT_CONFIG || {}
+  var API_URL = config.apiUrl || ''
+  var PIXEL_KEY = config.pixelKey || ''
 
   var COOKIE_NAME = '_adt_vid'
   var COOKIE_DAYS = 180

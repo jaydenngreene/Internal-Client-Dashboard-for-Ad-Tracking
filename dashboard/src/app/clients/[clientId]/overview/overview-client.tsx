@@ -12,6 +12,7 @@ import {
   getMof,
   getSubscriptions,
   getCalls,
+  getLtv,
   campaignGoalForNiche,
   ForecastWindow,
   Niche,
@@ -209,9 +210,57 @@ function ForecastSection({ clientId }: { clientId: string }) {
   );
 }
 
+// Delegates to the same leads-vs-sales split campaignGoalForNiche already uses
+// for column choice on the breakdown tables — a single source of truth for
+// "does this niche think in leads or in purchases" reused everywhere that
+// distinction matters (Overview, Funnel's TOF), instead of a second
+// independently-maintained list that could quietly drift out of sync with it.
+function isEcomLike(niche: Niche | undefined): boolean {
+  return campaignGoalForNiche(niche ?? "other") === "sales";
+}
+
+// Ecommerce/info-product's Overview conversion widget: checkouts that
+// completed vs. abandoned, built from the same MOF fields Funnel's own
+// ecommerce section already surfaces (no new endpoint needed) — the "part of
+// a whole" widget these niches actually care about, replacing the
+// leads-framed ConversionCard below which doesn't apply to them.
+function CartConversionCard({ clientId, range }: { clientId: string; range: { from: string; to: string } }) {
+  const { data } = useQuery({
+    queryKey: ["mof", clientId, range.from, range.to],
+    queryFn: () => getMof(clientId, range),
+  });
+
+  if (!data) return null;
+  const completed = Math.max(data.initiateCheckoutCount - data.abandonedCartCount, 0);
+  const completionRate = data.cartAbandonmentRate === null ? null : 100 - data.cartAbandonmentRate;
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="text-sm">Cart → Purchase Conversion</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0">
+        {data.initiateCheckoutCount > 0 ? (
+          <DonutChart
+            centerValue={completionRate === null ? "-" : formatPercent(completionRate)}
+            centerLabel={`${formatNumber(completed)} of ${formatNumber(data.initiateCheckoutCount)} checkouts`}
+            segments={[
+              { key: "completed", label: "Completed", value: completed, color: "var(--color-chart-1)" },
+              { key: "abandoned", label: "Abandoned", value: data.abandonedCartCount, color: "var(--color-chart-2)" },
+            ]}
+          />
+        ) : (
+          <p className="py-8 text-center text-sm text-muted-foreground">No checkouts started in this range yet.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Leads that went on to buy vs. leads that haven't (yet) — the same "part of a
 // whole" shape as Hyros's Cart/Lead Conversion donut, built from numbers the
-// overview report already returns (no new endpoint needed).
+// overview report already returns (no new endpoint needed). Shown for
+// non-ecommerce-like niches only — see CartConversionCard above.
 function ConversionCard({ leads, sales }: { leads: number; sales: number }) {
   const converted = Math.min(sales, leads);
   const remaining = Math.max(leads - sales, 0);
@@ -265,11 +314,34 @@ function SnapshotStat({ label, value, tone }: { label: string; value: string; to
 // cart-funnel fields and BOF's calls section to niche; Overview didn't do the
 // same until now). Nothing renders for lead_gen/info_product/other, same as
 // funnel-client.tsx today.
-function EcommerceSnapshotCard({ clientId, range }: { clientId: string; range: { from: string; to: string } }) {
+function EcommerceSnapshotCard({
+  clientId,
+  range,
+  aov,
+}: {
+  clientId: string;
+  range: { from: string; to: string };
+  aov: number | null;
+}) {
   const { data } = useQuery({
     queryKey: ["mof", clientId, range.from, range.to],
     queryFn: () => getMof(clientId, range),
   });
+  // Weighted by customer count, not a plain average of campaigns — a campaign
+  // with 2 customers and one with 200 shouldn't count equally toward the
+  // account-wide figure.
+  const { data: ltv } = useQuery({
+    queryKey: ["ltv", clientId, range.from, range.to],
+    queryFn: () => getLtv(clientId, range),
+  });
+  const avgLtv = useMemo(() => {
+    if (!ltv || ltv.campaigns.length === 0) return null;
+    const totalCustomers = ltv.campaigns.reduce((sum, c) => sum + c.customers, 0);
+    if (totalCustomers === 0) return null;
+    const weighted = ltv.campaigns.reduce((sum, c) => sum + c.avgLtvLifetime * c.customers, 0);
+    return weighted / totalCustomers;
+  }, [ltv]);
+
   if (!data) return null;
 
   return (
@@ -281,6 +353,8 @@ function EcommerceSnapshotCard({ clientId, range }: { clientId: string; range: {
         </Link>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-6 px-0">
+        <SnapshotStat label="AOV" value={aov === null ? "-" : formatCurrency(aov)} tone="positive" />
+        <SnapshotStat label="Avg Customer LTV" value={avgLtv === null ? "-" : formatCurrency(avgLtv)} tone="positive" />
         <SnapshotStat label="Add to Cart" value={formatNumber(data.addToCartCount)} />
         <SnapshotStat label="Checkout Initiated" value={formatNumber(data.initiateCheckoutCount)} />
         <SnapshotStat label="Cart Abandonment" value={formatPercent(data.cartAbandonmentRate)} tone="negative" />
@@ -347,12 +421,14 @@ function NicheSnapshotRow({
   clientId,
   range,
   niche,
+  aov,
 }: {
   clientId: string;
   range: { from: string; to: string };
   niche: Niche | undefined;
+  aov: number | null;
 }) {
-  if (niche === "ecommerce") return <EcommerceSnapshotCard clientId={clientId} range={range} />;
+  if (isEcomLike(niche)) return <EcommerceSnapshotCard clientId={clientId} range={range} aov={aov} />;
   if (niche === "saas") return <SaasSnapshotCard clientId={clientId} range={range} />;
   if (niche === "call" || niche === "lead_gen") return <CallsSnapshotCard clientId={clientId} range={range} />;
   return null;
@@ -457,10 +533,25 @@ export function OverviewClient({ clientId }: { clientId: string }) {
           <HeroKpiRow data={data} />
 
           <div className="flex flex-col gap-3">
-            <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Funnel</p>
+            <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {isEcomLike(niche) ? "Orders" : "Funnel"}
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <KpiTile label="Leads" value={formatNumber(data.leads)} fromDate={data.from} />
-              <KpiTile label="Sales" value={formatNumber(data.sales)} fromDate={data.from} />
+              {isEcomLike(niche) ? (
+                <>
+                  <KpiTile label="Orders" value={formatNumber(data.sales)} fromDate={data.from} />
+                  <KpiTile
+                    label="AOV"
+                    value={data.sales > 0 ? formatCurrency(data.revenue / data.sales) : "-"}
+                    fromDate={data.from}
+                  />
+                </>
+              ) : (
+                <>
+                  <KpiTile label="Leads" value={formatNumber(data.leads)} fromDate={data.from} />
+                  <KpiTile label="Sales" value={formatNumber(data.sales)} fromDate={data.from} />
+                </>
+              )}
             </div>
           </div>
         </>
@@ -487,25 +578,19 @@ export function OverviewClient({ clientId }: { clientId: string }) {
                 ]}
               />
             </div>
-            <ConversionCard leads={data.leads} sales={data.sales} />
+            {isEcomLike(niche) ? (
+              <CartConversionCard clientId={clientId} range={range} />
+            ) : (
+              <ConversionCard leads={data.leads} sales={data.sales} />
+            )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Card className="px-4">
-              <CardContent className="flex items-baseline gap-6 px-0">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Leads</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(data.leads)}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Sales</p>
-                  <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(data.sales)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <NicheSnapshotRow clientId={clientId} range={range} niche={niche} />
+          <NicheSnapshotRow
+            clientId={clientId}
+            range={range}
+            niche={niche}
+            aov={data.sales > 0 ? data.revenue / data.sales : null}
+          />
 
           <BudgetPacingCard clientId={clientId} />
 

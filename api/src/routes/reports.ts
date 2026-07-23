@@ -390,9 +390,14 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [totalRow, spendRows, leadsByCampaign] = await Promise.all([
+      const [totalRow, purchasesRow, spendRows, leadsByCampaign] = await Promise.all([
         db.query<{ total: string }>(
           `SELECT COUNT(*) AS total FROM leads WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM purchases
+           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded`,
           [clientId, from, to]
         ),
         getSpendByCampaign(clientId, from, to),
@@ -400,8 +405,12 @@ export async function reportRoutes(app: FastifyInstance) {
       ])
 
       const totalLeads = parseInt(totalRow.rows[0].total, 10)
+      // Ecommerce/info-product clients don't think in "leads" — TOF's entry-funnel
+      // outcome for them is purchases, not opt-ins. Same totalCost either way.
+      const totalPurchases = parseInt(purchasesRow.rows[0].total, 10)
       const totalCost = spendRows.rows.reduce((sum, r) => sum + parseFloat(r.cost), 0)
       const cpl = totalLeads > 0 ? totalCost / totalLeads : null
+      const costPerPurchase = totalPurchases > 0 ? totalCost / totalPurchases : null
 
       interface Row {
         campaign_name: string
@@ -445,7 +454,7 @@ export async function reportRoutes(app: FastifyInstance) {
         .map((r) => ({ ...r, cpl: r.leads > 0 ? r.cost / r.leads : null }))
         .sort((a, b) => b.leads - a.leads)
 
-      return reply.send({ from, to, totalLeads, cpl, campaigns })
+      return reply.send({ from, to, totalLeads, cpl, totalPurchases, costPerPurchase, campaigns })
     }
   )
 

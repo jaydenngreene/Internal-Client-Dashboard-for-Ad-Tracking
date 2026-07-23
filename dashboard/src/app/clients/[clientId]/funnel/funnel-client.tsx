@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTof, getMof, getBof, getCalls, getClients } from "@/lib/api";
+import { getTof, getMof, getBof, getCalls, getClients, campaignGoalForNiche } from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatDuration } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
+import { FunnelBars } from "@/components/funnel-bars";
+import { DonutChart } from "@/components/donut-chart";
 import {
   Table,
   TableBody,
@@ -60,6 +62,10 @@ export function FunnelClient({ clientId }: { clientId: string }) {
   const niche = clients?.find((c) => c.id === clientId)?.niche;
   const isEcommerce = niche === "ecommerce";
   const isCallBased = niche === "call";
+  // Same leads-vs-sales split campaignGoalForNiche already drives for the
+  // breakdown tables' column choice — single source of truth for "does this
+  // niche think in leads or in purchases," reused here for TOF.
+  const isEcomLike = campaignGoalForNiche(niche ?? "other") === "sales";
 
   const calls = useQuery({
     queryKey: ["calls", clientId, range.from, range.to],
@@ -95,6 +101,27 @@ export function FunnelClient({ clientId }: { clientId: string }) {
 
       {stage === "tof" && tof.data && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {isEcomLike ? (
+            <>
+              <Card className="px-4">
+                <CardContent className="px-0">
+                  <p className="text-xs font-medium text-muted-foreground">Total Purchases</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">
+                    {formatNumber(tof.data.totalPurchases)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="px-4">
+                <CardContent className="px-0">
+                  <p className="text-xs font-medium text-muted-foreground">Cost Per Purchase</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">
+                    {tof.data.costPerPurchase === null ? "-" : formatCurrency(tof.data.costPerPurchase)}
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
           <Card className="px-4">
             <CardContent className="px-0">
               <p className="text-xs font-medium text-muted-foreground">Total Leads</p>
@@ -109,6 +136,8 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               </p>
             </CardContent>
           </Card>
+            </>
+          )}
         </div>
       )}
 
@@ -147,6 +176,29 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               </CardContent>
             </Card>
           </div>
+
+          <Card className="px-4">
+            <CardHeader className="px-0">
+              <CardTitle className="text-sm">Funnel</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              <FunnelBars
+                stages={
+                  isEcommerce
+                    ? [
+                        { label: "Sessions", value: mof.data.totalSessions },
+                        { label: "Product Views", value: mof.data.viewContentCount },
+                        { label: "Add to Cart", value: mof.data.addToCartCount },
+                        { label: "Checkout Initiated", value: mof.data.initiateCheckoutCount },
+                      ]
+                    : [
+                        { label: "Sessions", value: mof.data.totalSessions },
+                        { label: "Engaged Sessions", value: mof.data.engagedSessions },
+                      ]
+                }
+              />
+            </CardContent>
+          </Card>
 
           {isEcommerce && (
             <div>
@@ -235,6 +287,31 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               </CardContent>
             </Card>
           </div>
+
+          <Card className="px-4">
+            <CardHeader className="px-0">
+              <CardTitle className="text-sm">Lead → Buyer Conversion</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              {bof.data.totalLeads > 0 ? (
+                <DonutChart
+                  centerValue={formatPercent(bof.data.leadToBuyerRate)}
+                  centerLabel={`${formatNumber(bof.data.convertedLeads)} of ${formatNumber(bof.data.totalLeads)}`}
+                  segments={[
+                    { key: "converted", label: "Converted", value: bof.data.convertedLeads, color: "var(--color-chart-1)" },
+                    {
+                      key: "remaining",
+                      label: "Not yet",
+                      value: Math.max(bof.data.totalLeads - bof.data.convertedLeads, 0),
+                      color: "var(--color-chart-2)",
+                    },
+                  ]}
+                />
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">No leads in this range yet.</p>
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="px-0">
             <CardHeader className="px-4">
@@ -327,6 +404,35 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   </CardContent>
                 </Card>
               </div>
+              <Card className="mt-3 px-4">
+                <CardHeader className="px-0">
+                  <CardTitle className="text-sm">Calls → Qualified</CardTitle>
+                </CardHeader>
+                <CardContent className="px-0">
+                  {calls.data.totalCalls > 0 ? (
+                    <DonutChart
+                      centerValue={formatPercent(calls.data.qualifiedRate)}
+                      centerLabel={`${formatNumber(calls.data.qualifiedCalls)} of ${formatNumber(calls.data.totalCalls)}`}
+                      segments={[
+                        {
+                          key: "qualified",
+                          label: "Qualified",
+                          value: calls.data.qualifiedCalls,
+                          color: "var(--color-chart-1)",
+                        },
+                        {
+                          key: "unqualified",
+                          label: "Not qualified",
+                          value: Math.max(calls.data.totalCalls - calls.data.qualifiedCalls, 0),
+                          color: "var(--color-chart-2)",
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No calls in this range yet.</p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
         </>

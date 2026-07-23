@@ -43,6 +43,25 @@ const BREAKDOWN_COLUMN_LABEL: Record<FunnelBreakdown, string> = {
   creative: "Creative",
 };
 
+// Each tab groups the exact same underlying spend/leads/revenue data by a
+// different dimension — worth spelling out per tab, since "what is
+// source/keyword even for" isn't obvious from the tab label alone.
+function viewSubtitle(view: ViewMode, goal: "leads" | "sales"): string {
+  const perOutcome = goal === "leads" ? "cost per lead" : "cost per purchase";
+  switch (view) {
+    case "campaign":
+      return `Performance for each individual ad campaign — cost, ${perOutcome}, revenue, and ROAS.`;
+    case "source":
+      return "The same numbers rolled up by platform only (all of Facebook combined, all of Google combined, etc.) — a quick where's-my-budget-going read across many campaigns, rather than one campaign at a time.";
+    case "keyword":
+      return "Only populated for Search campaigns with keyword-level UTM tagging (utm_term). If you're not running Search ads with keyword tracking, this will show mostly untagged rows.";
+    case "creative":
+      return "Individual ad-level performance — click a row to open that specific ad's own detail page.";
+    case "ltv":
+      return "Average customer value at 30/60/90/180 days and lifetime, by acquisition campaign. Trailing-window snapshots as of now, refreshed nightly.";
+  }
+}
+
 const VIEW_VALUES = VIEW_OPTIONS.map((o) => o.value);
 
 export function CampaignsClient({ clientId }: { clientId: string }) {
@@ -83,13 +102,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
         <div>
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Campaigns</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {isLtv
-              ? "Average customer value at 30/60/90/180 days and lifetime, by acquisition campaign. Trailing-window snapshots as of now, refreshed nightly."
-              : goal === "leads"
-                ? "Cost, cost per lead, revenue, and ROAS, broken down by campaign, source, keyword, or individual creative"
-                : "Cost, cost per purchase, revenue, and ROAS, broken down by campaign, source, keyword, or individual creative"}
-          </p>
+          <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">{viewSubtitle(view, goal)}</p>
         </div>
         <div className="flex items-center gap-3">
           <SegmentedToggle value={view} onChange={setView} options={VIEW_OPTIONS} />

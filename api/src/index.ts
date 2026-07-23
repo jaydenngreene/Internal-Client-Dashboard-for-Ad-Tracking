@@ -7,6 +7,7 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 
 import { pageviewRoutes } from './routes/pageview'
+import { pixelAssetRoutes } from './routes/pixelAsset'
 import { identifyRoutes } from './routes/identify'
 import { conversionRoutes } from './routes/conversion'
 import { eventRoutes } from './routes/event'
@@ -103,6 +104,7 @@ app.get('/health', async () => ({ status: 'ok' }))
 // (pixel_key, a webhook signature, or a per-client shared secret), never a
 // logged-in dashboard user, so none of these sit behind the auth block below.
 app.register(pageviewRoutes)
+app.register(pixelAssetRoutes)
 app.register(identifyRoutes)
 app.register(conversionRoutes)
 app.register(eventRoutes)

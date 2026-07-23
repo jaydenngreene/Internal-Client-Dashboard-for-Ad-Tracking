@@ -85,6 +85,160 @@ function CodeBlock({ children }: { children: string }) {
   );
 }
 
+// A CodeBlock plus a Copy button, tracking its own "Copied!" flash — three
+// separate install snippets on this page each need this (generic website tag,
+// Shopify theme snippet, Shopify checkout script), same pattern
+// UtmToolsSection's single copy button already uses.
+function CopyBlock({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex flex-wrap items-start gap-2">
+      <CodeBlock>{code}</CodeBlock>
+      <Button
+        size="xs"
+        variant="outline"
+        onClick={() => {
+          navigator.clipboard.writeText(code);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? "Copied!" : "Copy"}
+      </Button>
+    </div>
+  );
+}
+
+// The two Shopify liquid snippets (theme + checkout) mirror
+// pixel/src/shopify/theme-snippet.liquid and checkout-tracking.liquid verbatim,
+// with YOUR_API_URL/YOUR_PIXEL_KEY substituted for this client's real values —
+// the same substitution scripts/setup-shopify-client.ts performs from the CLI,
+// done here instead so it doesn't require someone running that script by hand.
+function shopifyThemeSnippet(apiUrl: string, pixelKey: string): string {
+  return `{% comment %}
+  Ad Tracking Pixel — add to theme.liquid just before </body>
+{% endcomment %}
+
+<script>
+  window.ADT_CONFIG = {
+    apiUrl: '${apiUrl}',
+    pixelKey: '${pixelKey}'
+  };
+</script>
+<script src="${apiUrl}/pixel.js" async></script>
+
+{% comment %} Identify logged-in customers automatically {% endcomment %}
+{% if customer %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.ADT) {
+      ADT.identify('{{ customer.email | escape }}', { lead_type: 'logged_in' });
+    }
+  });
+</script>
+{% endif %}
+
+{% comment %} Product page view {% endcomment %}
+{% if template contains 'product' %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (window.ADT) {
+      ADT.trackViewContent(
+        { id: '{{ product.id }}', name: '{{ product.title | escape }}' },
+        {{ product.price | money_without_currency | remove: ',' | default: 0 }}
+      );
+    }
+  });
+</script>
+{% endif %}
+
+{% comment %} Add to cart — listens for Shopify's standard cart form submit {% endcomment %}
+<script>
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (form && form.action && form.action.indexOf('/cart/add') !== -1 && window.ADT) {
+      ADT.trackAddToCart(
+        { id: form.querySelector('[name="id"]') ? form.querySelector('[name="id"]').value : null },
+        null
+      );
+    }
+  });
+</script>
+
+{% comment %} Checkout initiation — fired from the cart page's checkout click {% endcomment %}
+<script>
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('a[href*="/checkout"], [name="checkout"], [href="/checkout"]');
+    if (el && window.ADT) {
+      ADT.trackInitiateCheckout(null);
+    }
+  });
+</script>`;
+}
+
+function shopifyCheckoutSnippet(apiUrl: string, pixelKey: string): string {
+  return `{% comment %}
+  Add in: Settings → Checkout → Order status page → Additional scripts
+{% endcomment %}
+
+<script>
+  (function() {
+    var API_URL = '${apiUrl}';
+    var PIXEL_KEY = '${pixelKey}';
+
+    function getCookie(name) {
+      return document.cookie.split('; ').reduce(function(acc, pair) {
+        var parts = pair.split('=');
+        return parts[0] === name ? parts[1] : acc;
+      }, null);
+    }
+
+    function send(endpoint, data) {
+      var payload = JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY }, data));
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(API_URL + endpoint, new Blob([payload], { type: 'application/json' }));
+      } else {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', API_URL + endpoint, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(payload);
+      }
+    }
+
+    var visitorId = getCookie('_adt_vid');
+
+    {% if checkout %}
+      var email = '{{ checkout.email | escape }}';
+      var orderId = '{{ checkout.order_id }}';
+      var revenue = {{ checkout.total_price | money_without_currency | remove: ',' }};
+      var productName = '{{ checkout.line_items.first.title | escape }}';
+
+      if (email) {
+        send('/track/identify', {
+          anonymous_id: visitorId,
+          email: email,
+          lead_type: 'checkout',
+          page: window.location.href
+        });
+      }
+
+      {% if first_time_accessed %}
+        if (email && revenue > 0) {
+          send('/track/conversion', {
+            anonymous_id: visitorId,
+            email: email,
+            revenue: revenue,
+            product: productName,
+            order_id: String(orderId),
+            processor: 'shopify'
+          });
+        }
+      {% endif %}
+    {% endif %}
+  })();
+</script>`;
+}
+
 function GeneralSection({ clientId, client }: { clientId: string; client: Client }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(client.name);
@@ -243,9 +397,52 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
           </div>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <FieldLabel>Pixel install</FieldLabel>
-          <CodeBlock>{`Pixel key: ${client.pixel_key}\nAPI URL:   ${apiUrl}`}</CodeBlock>
+        <div className="flex flex-col gap-3 border-t border-border pt-4">
+          <div className="flex flex-col gap-1">
+            <FieldLabel>Website install</FieldLabel>
+            <p className="text-xs text-muted-foreground">
+              Paste on every page (shared header/footer template, or a Google Tag Manager custom HTML tag),
+              ideally right before <code>&lt;/body&gt;</code>. Then call{" "}
+              <code>ADT.identify(email)</code> right before checkout completes so purchases attribute back
+              to the right session. This runs independently of any native Meta/Facebook pixel already on
+              the site — different cookies, different endpoints, safe to run both at once.
+            </p>
+            <CopyBlock
+              code={`<script>\n  window.ADT_CONFIG = { apiUrl: '${apiUrl}', pixelKey: '${client.pixel_key}' };\n</script>\n<script src="${apiUrl}/pixel.js" async></script>`}
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-border pt-3">
+            <p className="text-sm font-medium">Shopify</p>
+            <p className="text-xs text-muted-foreground">
+              Shopify&apos;s checkout is a separate, script-restricted flow from the rest of the theme, so it
+              needs its own snippet plus a webhook, in this order:
+            </p>
+            <ol className="flex list-decimal flex-col gap-3 pl-4 text-xs text-muted-foreground">
+              <li>
+                Register a webhook — Shopify Admin → Settings → Notifications → Webhooks. Create two: event{" "}
+                <code>Order creation</code> → URL <code>{`${apiUrl}/webhooks/shopify/${clientId}/orders`}</code>,
+                and event <code>Order refund</code> → URL{" "}
+                <code>{`${apiUrl}/webhooks/shopify/${clientId}/refunds`}</code>, both format JSON. Paste
+                the signing secret Shopify shows you into the Shopify row under Integrations below.
+              </li>
+              <li>
+                <p>
+                  Theme snippet — Online Store → Themes → Edit code → <code>layout/theme.liquid</code>,
+                  paste just before <code>&lt;/body&gt;</code>:
+                </p>
+                <div className="mt-1">
+                  <CopyBlock code={shopifyThemeSnippet(apiUrl, client.pixel_key)} />
+                </div>
+              </li>
+              <li>
+                <p>Checkout script — Settings → Checkout → Order status page → Additional scripts:</p>
+                <div className="mt-1">
+                  <CopyBlock code={shopifyCheckoutSnippet(apiUrl, client.pixel_key)} />
+                </div>
+              </li>
+            </ol>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 border-t border-border pt-4">
@@ -342,6 +539,7 @@ interface IntegrationDef {
   label: string;
   category: string;
   fields: IntegrationFieldDef[];
+  helpText?: string;
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
@@ -369,10 +567,17 @@ const INTEGRATIONS: IntegrationDef[] = [
     { key: "ad_account_id", label: "Ad account ID" },
     { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
   ] },
-  { platform: "facebook-capi", label: "Facebook Conversions API", category: "Ad Platforms", fields: [
-    { key: "pixel_id", label: "Pixel ID" },
-    { key: "access_token", label: "Access token", type: "password" },
-  ] },
+  {
+    platform: "facebook-capi",
+    label: "Facebook Conversions API",
+    category: "Ad Platforms",
+    fields: [
+      { key: "pixel_id", label: "Pixel ID" },
+      { key: "access_token", label: "Access token", type: "password" },
+    ],
+    helpText:
+      "Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID. On that same screen, under Conversions API, click \"Generate access token\" for the token. This sends server-side conversion signals to Meta for ad optimization — separate from (and doesn't require) the website pixel above.",
+  },
   { platform: "google-ads", label: "Google Ads", category: "Ad Platforms", fields: [
     { key: "customer_id", label: "Customer ID" },
     { key: "login_customer_id", label: "Login customer ID (MCC)", optional: true },
@@ -479,6 +684,7 @@ function IntegrationRow({
       </button>
       {open && (
         <div className="flex flex-col gap-3 border-t border-border p-3">
+          {def.helpText && <p className="text-xs text-muted-foreground">{def.helpText}</p>}
           <div className="flex flex-wrap gap-2">
             {def.fields.map((f) => (
               <div key={f.key} className="flex flex-col gap-1">

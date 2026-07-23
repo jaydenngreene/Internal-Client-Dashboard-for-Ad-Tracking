@@ -7,37 +7,11 @@ import { Radar, X, Settings, Users } from "lucide-react";
 import { getClients, getMe } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CommandPalette } from "@/components/command-palette";
+import { NAV_SECTIONS } from "@/lib/nav-items";
 
 const navLinkBase =
   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar";
-
-// `niches` restricts a nav item to clients of that niche (e.g. Subscriptions only
-// makes sense for niche='saas'); omitted entirely means it shows for every client —
-// this is the sidebar's first niche-aware nav item (existing niche filtering only
-// happened *within* a page, e.g. funnel-client.tsx's cart cards).
-const NAV_ITEMS: { slug: string; label: string; enabled: boolean; niches?: string[] }[] = [
-  { slug: "overview", label: "Overview", enabled: true },
-  { slug: "insights", label: "Insights", enabled: true },
-  { slug: "chat", label: "Ask Your Data", enabled: true },
-  { slug: "campaigns", label: "Campaigns", enabled: true },
-  { slug: "funnel", label: "Funnel", enabled: true },
-  { slug: "mmm", label: "Media Mix Model", enabled: true },
-  { slug: "data-driven-attribution", label: "Data-Driven Attribution", enabled: true },
-  { slug: "leads", label: "Leads", enabled: true },
-  { slug: "subscriptions", label: "Subscriptions", enabled: true, niches: ["saas"] },
-  { slug: "email-sms", label: "Email & SMS", enabled: true },
-  { slug: "remarketing", label: "Remarketing", enabled: true },
-  { slug: "pause-candidates", label: "Pause Candidates", enabled: true },
-  { slug: "budget-reallocation", label: "Budget Reallocation", enabled: true },
-  { slug: "creative-fatigue", label: "Creative Fatigue", enabled: true },
-  { slug: "invalid-traffic", label: "Invalid Traffic", enabled: true },
-  { slug: "incrementality", label: "Incrementality Testing", enabled: true },
-  { slug: "geo-lift", label: "Geo-Lift Testing", enabled: true },
-  { slug: "tags", label: "Tags & Stages", enabled: true },
-  { slug: "audiences", label: "Audiences", enabled: true },
-  { slug: "cohorts", label: "Cohorts", enabled: true },
-  { slug: "settings", label: "Settings", enabled: true },
-];
 
 // Always in the DOM; a fixed off-canvas drawer below the md breakpoint (slides
 // in via `open`), a normal in-flow sidebar at md+ regardless of `open` — the
@@ -57,10 +31,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
   const activeClient = clients?.find((c) => c.id === activeClientId);
   const activeNiche = activeClient?.niche;
-  const visibleNavItems = NAV_ITEMS.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche)));
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.niches || (activeNiche && item.niches.includes(activeNiche))),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <>
+      <CommandPalette clients={clients ?? []} activeClientId={activeClientId} />
       {open && (
         <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onClose} aria-hidden="true" />
       )}
@@ -88,6 +66,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4" onClick={onClose}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent("adt:open-command-palette"));
+          }}
+          className="mb-4 flex w-full items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+        >
+          <span className="flex-1">Jump to…</span>
+          <kbd className="rounded border border-sidebar-border bg-sidebar px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd>
+        </button>
+
         <div className="mb-6">
           <Link
             href="/agency"
@@ -166,39 +156,50 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
 
         {activeClientId && (
-          <div>
-            <p className="mb-2 truncate px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              {activeClient ? `${activeClient.name} Reports` : "Reports"}
-            </p>
-            <ul className="space-y-0.5">
-              {visibleNavItems.map((item) => {
-                const href = `/clients/${activeClientId}/${item.slug}`;
-                const isActive = pathname === href;
-                return (
-                  <li key={item.slug}>
-                    {item.enabled ? (
-                      <Link
-                        href={href}
-                        className={cn(
-                          navLinkBase,
-                          "justify-between",
-                          isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+          <div className="flex flex-col gap-5">
+            {activeClient && (
+              <p className="truncate px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {activeClient.name}
+              </p>
+            )}
+            {visibleSections.map((section) => (
+              <div key={section.label}>
+                <p className="mb-1.5 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {section.label}
+                </p>
+                <ul className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const href = `/clients/${activeClientId}/${item.slug}`;
+                    const isActive = pathname === href;
+                    const Icon = item.icon;
+                    return (
+                      <li key={item.slug}>
+                        {item.enabled ? (
+                          <Link
+                            href={href}
+                            className={cn(
+                              navLinkBase,
+                              isActive
+                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                            )}
+                          >
+                            <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
+                            <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+                            <span className="truncate">{item.label}</span>
+                            <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
+                          </div>
                         )}
-                      >
-                        {item.label}
-                      </Link>
-                    ) : (
-                      <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
-                        {item.label}
-                        <span className="text-[10px] uppercase tracking-wide">Soon</span>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </div>

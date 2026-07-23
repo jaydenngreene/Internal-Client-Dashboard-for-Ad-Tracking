@@ -133,7 +133,7 @@ export async function trackTagRoutes(app: FastifyInstance) {
       visitorId,
     ])
     if (identityRows.length === 0) {
-      return reply.code(404).send({ error: 'This visitor has not been identified yet — call ADT.identify() first' })
+      return reply.code(404).send({ error: 'This visitor has not been identified yet, call ADT.identify() first' })
     }
 
     const { rows: tagRows } = await db.query('SELECT id FROM tags WHERE client_id = $1 AND name = $2', [

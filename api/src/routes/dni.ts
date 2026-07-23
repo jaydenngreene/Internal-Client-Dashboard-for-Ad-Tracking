@@ -29,7 +29,7 @@ export async function dniRoutes(app: FastifyInstance) {
     // cleared-cookie visitor doesn't 404 here.
     const visitorId = await lookupVisitorId(clientId, anonymous_id)
     if (!visitorId) {
-      return reply.code(404).send({ error: 'Visitor not found — call after the pixel has tracked a pageview' })
+      return reply.code(404).send({ error: 'Visitor not found, call after the pixel has tracked a pageview' })
     }
 
     // Already has a live assignment — keep it sticky rather than swapping numbers

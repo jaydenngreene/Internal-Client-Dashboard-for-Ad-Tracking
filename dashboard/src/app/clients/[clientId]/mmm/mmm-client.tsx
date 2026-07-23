@@ -15,8 +15,10 @@ import { cn } from "@/lib/utils";
 
 // Step 52 — Media Mix Modeling via a straightforward multiple linear regression,
 // deliberately NOT Northbeam-style Bayesian MMM+ with adstock/saturation curves.
-// rSquared and sampleSizeDays are always shown front and center, not buried, so a
-// low-confidence fit is visible rather than hidden behind a confident-looking number.
+// Every user-facing label on this page is written for a marketing agency owner,
+// not a statistician — rSquared/sampleSizeDays are shown as a plain-English
+// "confidence score" (front and center, not buried) instead of the term R²,
+// which testing this page live confirmed means nothing to that audience.
 function BudgetScenarioSimulator({ clientId, platforms }: { clientId: string; platforms: string[] }) {
   const [deltas, setDeltas] = useState<Record<string, string>>({});
   const [result, setResult] = useState<MmmScenarioResult | null>(null);
@@ -39,9 +41,9 @@ function BudgetScenarioSimulator({ clientId, platforms }: { clientId: string; pl
       </CardHeader>
       <CardContent className="flex flex-col gap-4 px-0">
         <p className="text-xs text-muted-foreground">
-          Propose moving daily spend between platforms and see a projected revenue delta — fit against a
-          diminishing-returns curve (not a straight line), so shifting budget into an already-saturated channel shows
-          a realistically smaller gain than shifting it into one with more room to grow.
+          See what might happen if you moved daily budget between platforms. This accounts for diminishing returns:
+          putting more money into a platform that's already getting a lot of spend usually pays off less than putting
+          that same money into one with more room to grow.
         </p>
         <div className="flex flex-wrap gap-3">
           {platforms.map((platform) => (
@@ -72,19 +74,19 @@ function BudgetScenarioSimulator({ clientId, platforms }: { clientId: string; pl
           <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
             <div className="flex flex-wrap gap-6">
               <div>
-                <p className="text-xs text-muted-foreground">Current projected daily revenue</p>
+                <p className="text-xs text-muted-foreground">Your current daily revenue (estimated)</p>
                 <p className="text-lg font-semibold tabular-nums">
                   {formatCurrency(result.currentProjectedDailyRevenue ?? 0)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Scenario projected daily revenue</p>
+                <p className="text-xs text-muted-foreground">Daily revenue after this change (estimated)</p>
                 <p className="text-lg font-semibold tabular-nums">
                   {formatCurrency(result.scenarioProjectedDailyRevenue ?? 0)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Projected delta</p>
+                <p className="text-xs text-muted-foreground">Estimated difference</p>
                 <p
                   className={cn(
                     "text-lg font-semibold tabular-nums",
@@ -109,7 +111,8 @@ export function MmmClient({ clientId }: { clientId: string }) {
     queryFn: () => getMmm(clientId),
   });
 
-  const fitQuality = data?.rSquared !== undefined ? (data.rSquared > 0.7 ? "good" : data.rSquared > 0.4 ? "moderate" : "weak") : null;
+  const confidenceLevel = data?.rSquared !== undefined ? (data.rSquared > 0.7 ? "high" : data.rSquared > 0.4 ? "some" : "low") : null;
+  const confidenceLabel = confidenceLevel === "high" ? "High confidence" : confidenceLevel === "some" ? "Some confidence" : "Low confidence";
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -117,10 +120,11 @@ export function MmmClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Media Mix Model</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          A multiple linear regression estimating each ad platform's marginal contribution to revenue, holding the
-          others constant — a real, recognized starting point for MMM, but not the sophisticated Bayesian model
-          with adstock/saturation curves that Northbeam's MMM+ uses. Trust the fit quality (R²) before the numbers:
-          too little history or too little spend variance will produce an unreliable coefficient.
+          Estimates how much revenue each ad platform is actually responsible for, based on your real spend and
+          revenue history, separate from whichever attribution model drives the rest of this dashboard. This is a
+          straightforward statistical estimate, not the more advanced modeling the biggest agency tools use, so
+          check the confidence score below before acting on these numbers: with too little history, or too little
+          change in your day-to-day spend, the estimate for a platform can be unreliable.
         </p>
       </div>
 
@@ -137,19 +141,19 @@ export function MmmClient({ clientId }: { clientId: string }) {
           <Card className="px-4">
             <CardHeader className="px-0">
               <CardTitle className="flex items-center gap-2 text-sm">
-                Fit Quality
-                <Badge variant={fitQuality === "good" ? "secondary" : "outline"} className="text-[10px]">
-                  {fitQuality} fit
+                How Much To Trust These Numbers
+                <Badge variant={confidenceLevel === "high" ? "secondary" : "outline"} className="text-[10px]">
+                  {confidenceLabel}
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex gap-6 px-0">
               <div>
-                <p className="text-xs text-muted-foreground">R² (variance explained)</p>
+                <p className="text-xs text-muted-foreground">Confidence score</p>
                 <p className="text-lg font-semibold tabular-nums">{formatPercent((data.rSquared ?? 0) * 100)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Days of history used</p>
+                <p className="text-xs text-muted-foreground">Based on this many days of data</p>
                 <p className="text-lg font-semibold tabular-nums">{data.sampleSizeDays}</p>
               </div>
             </CardContent>

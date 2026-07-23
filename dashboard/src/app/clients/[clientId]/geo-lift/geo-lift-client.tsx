@@ -49,24 +49,24 @@ function TestCard({ item, clientId }: { item: GeoLiftTestWithResult; clientId: s
 
         <div className="grid grid-cols-2 gap-3 border-t border-border pt-2 sm:grid-cols-4">
           <div>
-            <p className="text-xs text-muted-foreground">Pre-period rev/session (holdout)</p>
+            <p className="text-xs text-muted-foreground">Usual revenue/visit, no-ads regions</p>
             <p className="text-sm font-medium tabular-nums">{formatCurrency(result.preHoldoutRevenuePerSession)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Pre-period rev/session (treatment)</p>
+            <p className="text-xs text-muted-foreground">Usual revenue/visit, other regions</p>
             <p className="text-sm font-medium tabular-nums">{formatCurrency(result.preTreatmentRevenuePerSession)}</p>
           </div>
           {result.status !== "pending" ? (
             <>
               <div>
-                <p className="text-xs text-muted-foreground">During rev/session (holdout vs. treatment)</p>
+                <p className="text-xs text-muted-foreground">During the test, no-ads vs. other regions</p>
                 <p className="text-sm font-medium tabular-nums">
                   {formatCurrency(result.duringHoldoutRevenuePerSession ?? 0)} vs.{" "}
                   {formatCurrency(result.duringTreatmentRevenuePerSession ?? 0)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">DiD estimate (lift per session)</p>
+                <p className="text-xs text-muted-foreground">Estimated lift (extra revenue per visit)</p>
                 <p className="text-sm font-medium tabular-nums">
                   {result.didEstimate === null ? "-" : formatCurrency(result.didEstimate)}
                 </p>
@@ -121,8 +121,9 @@ function NewTestForm({ clientId }: { clientId: string }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
-          Exclude the holdout regions from this campaign's targeting in its ad platform for the window below (this
-          app doesn't change targeting for you), then come back to see the estimated lift.
+          Pick a few regions and pause this campaign's targeting there in its ad platform for the window below (this
+          app doesn't change targeting for you), then come back to see how much extra revenue the campaign was
+          actually driving.
         </p>
         <div className="flex flex-wrap gap-2">
           <div className="flex flex-col gap-1">
@@ -146,7 +147,7 @@ function NewTestForm({ clientId }: { clientId: string }) {
             <Input className="w-40" type="date" value={testEnd} onChange={(e) => setTestEnd(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1">
-            <FieldLabel>Pre-period (days)</FieldLabel>
+            <FieldLabel>Comparison window (days)</FieldLabel>
             <Input className="w-24" type="number" min={7} value={prePeriodDays} onChange={(e) => setPrePeriodDays(e.target.value)} />
           </div>
         </div>
@@ -173,10 +174,12 @@ export function GeoLiftClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Geo-Lift Testing</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          True geographic holdout testing via difference-in-differences — more rigorous than Incrementality
-          Testing's time-based pause test, because it controls for anything that changed for everyone at the same
-          time (seasonality, a site issue), not just for this campaign specifically. Needs enough session volume
-          with resolved regions in both the holdout and treatment groups to be meaningful.
+          Tests whether a campaign is really driving new sales, not just taking credit for sales that would have
+          happened anyway. You pause its ads in a few "holdout" regions while ads keep running everywhere else, then
+          compare how revenue per visitor changed in both groups. This is a more rigorous version of Incrementality
+          Testing (in the sidebar): it also accounts for anything that affects your whole business at once, like a
+          seasonal dip or a site issue, instead of just this one campaign. You'll need a fair amount of visitor
+          traffic with a known region on both sides for the result to mean anything.
         </p>
       </div>
 

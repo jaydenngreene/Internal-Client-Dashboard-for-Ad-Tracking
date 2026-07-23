@@ -54,7 +54,7 @@ export function ChatClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Ask Your Data</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Ask a question about this client's performance — it queries real data live, it doesn't guess.
+          Ask a question about this client's performance. It queries real data live, it doesn't guess.
         </p>
       </div>
 

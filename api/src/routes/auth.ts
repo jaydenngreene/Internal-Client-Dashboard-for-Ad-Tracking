@@ -88,7 +88,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (!mfaToken || !code) return reply.code(400).send({ error: 'mfaToken and code required' })
 
       const decoded = verifyMfaPendingToken(mfaToken)
-      if (!decoded) return reply.code(401).send({ error: 'This login attempt has expired — log in again' })
+      if (!decoded) return reply.code(401).send({ error: 'This login attempt has expired, log in again' })
 
       const { rows } = await db.query<{
         id: string

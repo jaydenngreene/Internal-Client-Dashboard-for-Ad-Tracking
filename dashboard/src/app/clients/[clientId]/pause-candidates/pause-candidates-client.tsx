@@ -101,7 +101,7 @@ export function PauseCandidatesClient({ clientId }: { clientId: string }) {
           <h1 className="text-lg font-semibold">Pause Candidates</h1>
           <p className="text-sm text-muted-foreground">
             Ads flagged by daily anomaly detection for a ROAS drop vs. their 7-day average. Nothing is
-            paused automatically — confirm here to actually pause it, or dismiss to leave it running.
+            paused automatically. Confirm here to actually pause it, or dismiss to leave it running.
           </p>
         </div>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as PauseCandidateStatus)} options={STATUS_OPTIONS} />

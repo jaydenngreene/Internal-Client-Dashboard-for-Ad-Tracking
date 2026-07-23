@@ -58,9 +58,9 @@ export function CreativePatternsClient({ clientId }: { clientId: string }) {
           <Sparkles className="size-4 text-primary" /> Creative Patterns
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Real spend/revenue for every AI-tagged creative, grouped by hook type, angle, and tone — answers "what kind
-          of creative wins," not just which specific ad does. Generate tags from any creative's detail page first;
-          this page only aggregates what's already been tagged.
+          Real spend and revenue for every AI-tagged creative, grouped by hook type, angle, and tone. Answers "what
+          kind of creative wins," not just which specific ad does. Generate tags from any creative's detail page
+          first; this page only aggregates what's already been tagged.
         </p>
       </div>
 
@@ -69,7 +69,7 @@ export function CreativePatternsClient({ clientId }: { clientId: string }) {
       {data && data.length === 0 && (
         <Card className="px-4 py-8">
           <CardContent className="px-0 text-center text-sm text-muted-foreground">
-            No tagged creatives yet — open a creative's detail page under Campaigns and click "Generate tags."
+            No tagged creatives yet. Open a creative's detail page under Campaigns and click "Generate tags."
           </CardContent>
         </Card>
       )}

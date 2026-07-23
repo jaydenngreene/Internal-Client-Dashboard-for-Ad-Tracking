@@ -54,7 +54,7 @@ function TestCard({ item, clientId }: { item: IncrementalityTestWithResult; clie
 
         <div className="grid grid-cols-2 gap-3 border-t border-border pt-2 sm:grid-cols-4">
           <div>
-            <p className="text-xs text-muted-foreground">Pre-period daily total revenue</p>
+            <p className="text-xs text-muted-foreground">Your usual total daily revenue</p>
             <p className="text-sm font-medium tabular-nums">{formatCurrency(result.preperiodDailyTotalRevenue)}</p>
           </div>
           <div>
@@ -66,24 +66,24 @@ function TestCard({ item, clientId }: { item: IncrementalityTestWithResult; clie
           {result.status === "completed" ? (
             <>
               <div>
-                <p className="text-xs text-muted-foreground">Projected vs. actual total revenue</p>
+                <p className="text-xs text-muted-foreground">Expected vs. actual revenue while paused</p>
                 <p className="text-sm font-medium tabular-nums">
                   {formatCurrency(result.projectedBaselineTotalRevenue ?? 0)} vs.{" "}
                   {formatCurrency(result.actualTotalRevenueDuringPause ?? 0)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Estimated true incrementality</p>
+                <p className="text-xs text-muted-foreground">Estimated real impact</p>
                 <p className="text-sm font-medium tabular-nums">
                   {formatCurrency(result.incrementalRevenueEstimate ?? 0)}
-                  {result.incrementalityRatio !== null && ` (${formatPercent(result.incrementalityRatio * 100)} of attributed)`}
+                  {result.incrementalityRatio !== null && ` (${formatPercent(result.incrementalityRatio * 100)} of what was credited to it)`}
                 </p>
               </div>
             </>
           ) : (
             <div className="col-span-2">
               <p className="text-xs text-muted-foreground">
-                {result.status === "pending" ? "Results appear once the pause window ends." : "Pause window in progress — results appear once it ends."}
+                {result.status === "pending" ? "Results appear once the pause window ends." : "Campaign is paused, results appear once the window ends."}
               </p>
             </div>
           )}
@@ -149,7 +149,7 @@ function NewTestForm({ clientId }: { clientId: string }) {
             <Input className="w-40" type="date" value={pauseEnd} onChange={(e) => setPauseEnd(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1">
-            <FieldLabel>Pre-period (days)</FieldLabel>
+            <FieldLabel>Comparison window (days)</FieldLabel>
             <Input className="w-24" type="number" min={7} value={prePeriodDays} onChange={(e) => setPrePeriodDays(e.target.value)} />
           </div>
         </div>
@@ -176,11 +176,13 @@ export function IncrementalityClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Incrementality Testing</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          A time-based pause test, not a geo-holdout (this account tracks no geographic data). Pausing a campaign's
-          OWN attributed revenue trivially goes to zero and tells you nothing — what matters is whether TOTAL
-          account revenue drops while it's paused. If it does, that drop is the campaign's real incremental
-          contribution. If total revenue barely moves, this campaign's attributed revenue was likely converting
-          demand that would have happened through another channel anyway.
+          Tests whether a campaign is really driving new sales, not just taking credit for sales that would have
+          happened anyway. Pause the campaign completely, then watch what happens to your TOTAL revenue, not just
+          this campaign's own attributed revenue (that number trivially drops to zero the moment it's paused, so it
+          can't tell you anything on its own). If total revenue drops too, that drop is roughly what the campaign
+          was really worth. If total revenue barely moves, this campaign was likely just taking credit for sales
+          that would have come through another channel anyway. See Geo-Lift Testing (in the sidebar) for a more
+          rigorous version of this same idea, once you have visitor location data to use.
         </p>
       </div>
 

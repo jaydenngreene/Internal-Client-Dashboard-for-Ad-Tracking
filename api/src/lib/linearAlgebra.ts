@@ -45,7 +45,7 @@ export function solveLinearSystem(matrix: number[][], vector: number[]): number[
       if (Math.abs(A[row][col]) > Math.abs(A[pivotRow][col])) pivotRow = row
     }
     if (Math.abs(A[pivotRow][col]) < 1e-10) {
-      throw new Error('Matrix is singular or near-singular — likely two inputs are too collinear to separate')
+      throw new Error('Matrix is singular or near-singular, likely two inputs are too similar to tell apart')
     }
     if (pivotRow !== col) {
       ;[A[col], A[pivotRow]] = [A[pivotRow], A[col]]

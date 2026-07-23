@@ -30,7 +30,7 @@ export async function tagWebhookRoutes(app: FastifyInstance) {
 
     const config = await getIntegration(client_id)
     if (!config?.webhook_secret) {
-      return reply.code(400).send({ error: 'No tag webhook secret configured for this client yet — set one up in Settings first' })
+      return reply.code(400).send({ error: 'No tag webhook secret configured for this client yet, set one up in Settings first' })
     }
     if (secret !== config.webhook_secret) {
       return reply.code(401).send({ error: 'Invalid or missing secret' })

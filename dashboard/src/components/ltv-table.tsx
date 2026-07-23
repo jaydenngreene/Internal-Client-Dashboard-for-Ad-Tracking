@@ -74,7 +74,7 @@ export function LtvTable({ campaigns, predictiveLtvAvailable }: { campaigns: Ltv
     <>
       {!predictiveLtvAvailable && (
         <p className="px-4 pb-2 text-xs text-muted-foreground">
-          Predicted LTV needs more purchase history to build a reliable projection curve — it'll fill in once enough
+          Predicted LTV needs more purchase history to build a reliable projection. It'll fill in once enough
           customers have aged past 180 days.
         </p>
       )}

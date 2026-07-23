@@ -62,7 +62,7 @@ async function checkPixelSilence(client: ActiveClient): Promise<number> {
   const row = rows[0]
   if (!row?.ever_had_sessions || parseInt(row.recent_sessions, 10) > 0) return 0
 
-  const message = `No pageviews/sessions recorded in the last ${SILENT_DAYS} days, despite earlier activity — the pixel may have been removed or broken (e.g. during a theme change).`
+  const message = `No pageviews/sessions recorded in the last ${SILENT_DAYS} days, despite earlier activity. The pixel may have been removed or broken (e.g. during a theme change).`
   const created = await upsertSignal(client.id, 'pixel_silent', message, null, 'critical')
   if (created) await sendAlert(client.id, 'Tracking may be broken', `${client.name}: ${message}`)
   return created ? 1 : 0
@@ -97,7 +97,7 @@ async function checkTrafficDrop(client: ActiveClient): Promise<number> {
   const drop = (baselineDailyAvg - yesterdayCount) / baselineDailyAvg
   if (drop < TRAFFIC_DROP_THRESHOLD) return 0
 
-  const message = `Sessions dropped to ${yesterdayCount} yesterday vs. a 7-day average of ${baselineDailyAvg.toFixed(0)}/day (${(drop * 100).toFixed(0)}% down) — worth checking whether tracking is still firing correctly everywhere.`
+  const message = `Sessions dropped to ${yesterdayCount} yesterday vs. a 7-day average of ${baselineDailyAvg.toFixed(0)}/day (${(drop * 100).toFixed(0)}% down). Worth checking whether tracking is still firing correctly everywhere.`
   const created = await upsertSignal(client.id, 'traffic_drop', message, null, 'warning')
   if (created) await sendAlert(client.id, 'Traffic drop detected', `${client.name}: ${message}`)
   return created ? 1 : 0
@@ -140,7 +140,7 @@ async function checkOrphanedSpend(client: ActiveClient): Promise<number> {
     const matchedSessions = sessionsBySource.get(normalizedPlatform) ?? 0
     if (matchedSessions > 0) continue
 
-    const message = `$${parseFloat(spend.total_spend).toFixed(2)} spent on ${spend.platform} over the last ${ORPHANED_SPEND_WINDOW_DAYS} days, but zero matching sessions recorded — UTM tagging or the pixel may be broken for this platform specifically.`
+    const message = `$${parseFloat(spend.total_spend).toFixed(2)} spent on ${spend.platform} over the last ${ORPHANED_SPEND_WINDOW_DAYS} days, but zero matching sessions recorded. UTM tagging or the pixel may be broken for this platform specifically.`
     const created = await upsertSignal(client.id, 'platform_orphaned_spend', message, spend.platform, 'critical')
     if (created) {
       await sendAlert(client.id, 'Ad spend with no matching tracking', `${client.name}: ${message}`)

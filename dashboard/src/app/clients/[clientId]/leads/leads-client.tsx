@@ -70,7 +70,7 @@ function SessionRow({ session, index }: { session: JourneySession; index: number
         {(session.landing_page || session.referrer) && (
           <p className="truncate text-xs text-muted-foreground">
             {session.landing_page && <>Landed on {session.landing_page}</>}
-            {session.landing_page && session.referrer && " — "}
+            {session.landing_page && session.referrer && " · "}
             {session.referrer && <>from {session.referrer}</>}
           </p>
         )}
@@ -127,7 +127,7 @@ function CallRow({ call, clientId, email }: { call: JourneyCall; clientId: strin
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
           <p className="font-medium uppercase tracking-wider text-muted-foreground">
             AI assessment
-            {call.ai_disposition && ` — ${DISPOSITION_LABEL[call.ai_disposition as CallDisposition] ?? call.ai_disposition}`}
+            {call.ai_disposition && ` · ${DISPOSITION_LABEL[call.ai_disposition as CallDisposition] ?? call.ai_disposition}`}
             {call.ai_qualification_score !== null && ` (${(call.ai_qualification_score * 100).toFixed(0)}%)`}
           </p>
           <p className="mt-1 text-foreground/90">{call.ai_summary}</p>
@@ -147,7 +147,7 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
     <div className="flex flex-col gap-4">
       {!journey.identified && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">
-          This lead has never been tracked by the pixel — no ad session history exists for them. Any purchases below
+          This lead has never been tracked by the pixel. No ad session history exists for them. Any purchases below
           have no attribution, no LTV contribution, and never fired a conversion signal or outbound webhook.
         </div>
       )}
@@ -200,7 +200,7 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
                     return (
                       <p key={i}>
                         {formatCurrency(a.attributed_revenue)} ({(a.credit_fraction * 100).toFixed(0)}%, {a.model}) credited to
-                        touchpoint {session ? `#${session.index + 1} — ${sessionLabel(session)}` : "an untracked session"}
+                        touchpoint {session ? `#${session.index + 1} · ${sessionLabel(session)}` : "an untracked session"}
                       </p>
                     );
                   })}
@@ -271,7 +271,7 @@ export function LeadsClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Leads</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Look up one lead by email to see their full journey — every session that led here, which one got credit for
+          Look up one lead by email to see their full journey: every session that led here, which one got credit for
           which sale, every tag, every call.
         </p>
       </div>

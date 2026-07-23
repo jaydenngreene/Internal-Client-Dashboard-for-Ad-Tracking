@@ -40,7 +40,7 @@ export async function executeReallocation(
   shiftAmountBaseCurrency: number
 ): Promise<void> {
   if (platform !== 'facebook_ads') {
-    throw new Error(`Budget reallocation on ${platform} isn't supported yet — adjust budgets manually in that platform's ad manager.`)
+    throw new Error(`Budget reallocation on ${platform} isn't supported yet. Adjust budgets manually in that platform's ad manager.`)
   }
 
   const baseCurrency = await getClientCurrency(clientId)

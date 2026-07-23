@@ -87,7 +87,7 @@ export function TrackingHealthClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Tracking Health</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Watches whether tracking itself is intact, not performance — a silent pixel, a traffic collapse, or a
+            Watches whether tracking itself is intact, not performance: a silent pixel, a traffic collapse, or a
             platform with real ad spend but no matching sessions. Advisory only; nothing here changes automatically.
           </p>
         </div>

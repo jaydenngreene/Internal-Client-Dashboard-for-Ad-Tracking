@@ -66,7 +66,7 @@ export async function askQuestion(clientId: string, userMessage: string): Promis
     messages.push({ role: 'user', content: toolResults })
 
     if (round === MAX_TOOL_ROUNDS - 1) {
-      finalText = "I wasn't able to finish gathering the data needed to answer that within a reasonable number of steps — try a more specific question."
+      finalText = "I wasn't able to finish gathering the data needed to answer that within a reasonable number of steps. Try a more specific question."
     }
   }
 

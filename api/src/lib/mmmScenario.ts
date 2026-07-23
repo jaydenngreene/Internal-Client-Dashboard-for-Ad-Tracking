@@ -72,7 +72,7 @@ export async function computeMmmScenario(
 
   const platforms = Array.from(new Set(platformRows.rows.map((r) => r.platform))).sort()
   if (platforms.length < 2) {
-    return { available: false, reason: 'Needs at least 2 ad platforms with spend history to separate their individual contributions.' }
+    return { available: false, reason: 'Needs at least 2 ad platforms with spend history so we can tell their impact apart.' }
   }
 
   const spendByDay = new Map<string, Map<string, number>>()
@@ -87,7 +87,7 @@ export async function computeMmmScenario(
     dates.push(d.toISOString().slice(0, 10))
   }
   if (dates.length < MIN_DAYS) {
-    return { available: false, reason: `Needs at least ${MIN_DAYS} days of history — only ${dates.length} available.` }
+    return { available: false, reason: `Needs at least ${MIN_DAYS} days of history, only ${dates.length} available.` }
   }
 
   // ln(1+spend) rather than ln(spend) so a $0 day is defined (ln(1)=0) instead of
@@ -111,7 +111,7 @@ export async function computeMmmScenario(
     }
   }
   if (usablePlatforms.length < 2) {
-    return { available: false, reason: 'Not enough spend variance across platforms to separate their individual contributions.' }
+    return { available: false, reason: 'Your day-to-day spend on each platform has stayed too similar to tell their impact apart. Try again once spend has moved around more.' }
   }
 
   const Xlog = rawSpend.map((row) => [1, ...usableIdx.map((i) => Math.log(1 + row[i]))])

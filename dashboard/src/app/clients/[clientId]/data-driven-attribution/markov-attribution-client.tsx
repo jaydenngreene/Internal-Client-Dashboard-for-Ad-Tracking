@@ -16,7 +16,10 @@ import { ClientKicker } from "@/components/client-kicker";
 // every visitor (converting and not), not just the touches on one sale.
 // Deliberately a comparison view, not a switch — whichever rule-based model is
 // set in Settings (first/last/linear/time-decay/u-shaped) is still what drives
-// every other report's revenue numbers.
+// every other report's revenue numbers. All labels below are plain-English,
+// not the underlying stats terms (no "Markov chain," "removal effect," or
+// "conversion probability" shown to the user) — this is read by agency owners,
+// not data scientists.
 export function MarkovAttributionClient({ clientId }: { clientId: string }) {
   const [preset, setPreset] = useState<RangePreset>("30d");
   const range = resolveRange(preset);
@@ -33,10 +36,12 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Data-Driven Attribution</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            A Markov chain removal-effect model — how much overall conversion probability would drop if each channel
-            were removed entirely from every visitor&apos;s path in this window, converting and non-converting alike.
-            This is a comparison view alongside the rule-based model set in Settings, which still drives every other
-            report&apos;s revenue numbers.
+            A more advanced way to see which channels actually deserve credit, based on real patterns across every
+            visitor&apos;s path to purchase, not just the people who bought. For each channel, it estimates how much
+            your results would suffer if that channel disappeared entirely, a more accurate way to spot channels
+            that are quietly doing a lot of work. This is shown here for comparison only: the attribution model
+            you&apos;ve picked in Settings is still what drives the revenue numbers everywhere else in this
+            dashboard.
           </p>
         </div>
         <DateRangeSelect value={preset} onChange={setPreset} />
@@ -56,7 +61,7 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card className="px-4">
               <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Baseline Conversion Probability</p>
+                <p className="text-xs font-medium text-muted-foreground">Overall Conversion Rate</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums">
                   {formatPercent((data.totalConversionProbability ?? 0) * 100)}
                 </p>
@@ -70,7 +75,7 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
             </Card>
             <Card className="px-4">
               <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Revenue Distributed</p>
+                <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrency(data.totalRevenue ?? 0)}</p>
               </CardContent>
             </Card>
@@ -78,7 +83,7 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
 
           <Card className="px-4">
             <CardHeader className="px-0">
-              <CardTitle>Channel Removal Effects</CardTitle>
+              <CardTitle>Channel Impact</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 px-0">
               {data.channels?.map((c) => (
@@ -91,8 +96,8 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-chart-4" style={{ width: `${Math.round(c.creditShare * 100)}%` }} />
                     </div>
-                    <p className="w-32 shrink-0 text-right text-xs text-muted-foreground">
-                      {formatPercent(c.creditShare * 100)} credit · {formatNumber(c.touchpoints)} touches
+                    <p className="w-36 shrink-0 text-right text-xs text-muted-foreground">
+                      {formatPercent(c.creditShare * 100)} credit, {formatNumber(c.touchpoints)} touchpoints
                     </p>
                   </div>
                 </div>

@@ -79,7 +79,7 @@ export function InsightsClient({ clientId }: { clientId: string }) {
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">
-          Campaigns{platform !== ALL_PLATFORMS ? ` — ${formatPlatformLabel(platform) ?? platform}` : ""}
+          Campaigns{platform !== ALL_PLATFORMS ? ` · ${formatPlatformLabel(platform) ?? platform}` : ""}
         </h2>
         <p className="text-xs text-muted-foreground">
           Click a campaign to see its own KPIs, creatives, and campaign-level insight.

@@ -78,7 +78,7 @@ export function CommandPalette({ clients, activeClientId }: { clients: Client[];
           list.push({
             key: `nav-${item.slug}`,
             label: item.label,
-            group: activeClient ? `${activeClient.name} — ${section.label}` : section.label,
+            group: activeClient ? `${activeClient.name} · ${section.label}` : section.label,
             href: `/clients/${currentClientId}/${item.slug}`,
             icon: item.icon,
           });

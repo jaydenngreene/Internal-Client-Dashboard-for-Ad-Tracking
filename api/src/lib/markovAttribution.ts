@@ -147,7 +147,7 @@ export async function computeMarkovAttribution(clientId: string, from: string, t
     return { available: false, reason: `Needs at least ${MIN_VISITORS} visitors with tracked sessions in this window (found ${visitorsAnalyzed}).` }
   }
   if (uniqueChannels.length < MIN_CHANNELS) {
-    return { available: false, reason: `Needs at least ${MIN_CHANNELS} distinct traffic sources in this window (found ${uniqueChannels.length}) — with only one, every model already agrees.` }
+    return { available: false, reason: `Needs at least ${MIN_CHANNELS} different traffic sources in this window (found ${uniqueChannels.length}). With only one source, there's nothing to compare it against.` }
   }
   if (!paths.some((p) => p.converted)) {
     return { available: false, reason: 'No conversions in this window to attribute.' }

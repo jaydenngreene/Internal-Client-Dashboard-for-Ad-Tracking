@@ -117,7 +117,7 @@ export default function LoginPage() {
           {mode === "login" ? "Log in" : mode === "mfa" ? "Verify your identity" : "Reset your password"}
         </CardTitle>
         {mode === "login" && (
-          <p className="text-sm text-muted-foreground">Welcome back — enter your credentials to continue.</p>
+          <p className="text-sm text-muted-foreground">Welcome back, enter your credentials to continue.</p>
         )}
       </CardHeader>
       <CardContent className="px-0 pb-5">

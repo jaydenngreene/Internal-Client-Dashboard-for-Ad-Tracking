@@ -105,7 +105,7 @@ export function BudgetReallocationClient({ clientId }: { clientId: string }) {
           <h1 className="text-lg font-semibold">Budget Reallocation</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Campaign pairs with a real ROAS gap (winner at least 1.5x the loser's ROAS over the last 7 days).
-            Nothing shifts automatically — confirm to actually move budget, or dismiss to leave both unchanged.
+            Nothing shifts automatically. Confirm to actually move budget, or dismiss to leave both unchanged.
           </p>
         </div>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as BudgetReallocationStatus)} options={STATUS_OPTIONS} />

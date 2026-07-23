@@ -251,7 +251,7 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
         <div className="flex flex-col gap-2 border-t border-border pt-4">
           <p className="text-sm font-medium">True profit margin</p>
           <p className="text-xs text-muted-foreground">
-            Every report's "Profit" figure is revenue minus ad spend only unless these are set. Fill in what applies —
+            Every report's "Profit" figure is revenue minus ad spend only unless these are set. Fill in what applies,
             leave blank to skip.
           </p>
           <div className="flex flex-wrap items-end gap-4">
@@ -570,8 +570,8 @@ function TrackingNumbersSection({ clientId }: { clientId: string }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
-          Numbers purchased in the client&apos;s own Twilio account (this app never buys numbers or touches billing) —
-          register them here so dynamic number insertion can assign one per visitor.
+          Numbers purchased in the client&apos;s own Twilio account (this app never buys numbers or touches billing).
+          Register them here so dynamic number insertion can assign one per visitor.
         </p>
 
         {isLoading && <Skeleton className="h-16 w-full" />}
@@ -633,14 +633,14 @@ function TagWebhookSection({ clientId }: { clientId: string }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
-          Lets an external CRM or a Zapier &quot;Webhooks&quot; action apply a tag to a lead by email — used for
+          Lets an external CRM or a Zapier &quot;Webhooks&quot; action apply a tag to a lead by email, used for
           revenue that closes outside this software (see Tags & Stages). Requires a secret so only calls that know
           it can apply tags.
         </p>
         <CodeBlock>{`POST ${apiUrl}/webhooks/tags/${clientId}\n{ "secret": "...", "email": "...", "tag_name": "..." }`}</CodeBlock>
         {revealedSecret ? (
           <div className="flex flex-col gap-1">
-            <FieldLabel>Secret (copy it now — it won&apos;t be shown again)</FieldLabel>
+            <FieldLabel>Secret (copy it now, it won&apos;t be shown again)</FieldLabel>
             <CodeBlock>{revealedSecret}</CodeBlock>
           </div>
         ) : (
@@ -696,7 +696,7 @@ function OutboundWebhooksSection({ clientId }: { clientId: string }) {
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
           Push events (a sale, an opted-in lead, a qualified call) to your own endpoint as they happen, HMAC-signed.
-          Deliveries aren&apos;t retried — a failed delivery is logged and dropped.
+          Deliveries aren&apos;t retried. A failed delivery is logged and dropped.
         </p>
 
         {isLoading && <Skeleton className="h-16 w-full" />}
@@ -808,7 +808,7 @@ function IdentityLinksSection({ clientId }: { clientId: string }) {
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
           Cross-device matching links a returning visitor automatically when it can (same session, a matched phone
-          number or IP) — but an exact-match-only system will sometimes miss a real person across two devices. Use
+          number or IP), but an exact-match-only system will sometimes miss a real person across two devices. Use
           this to manually tell it two leads are the same person; their sessions and purchases stay separate rows,
           this just records that they belong together.
         </p>
@@ -974,7 +974,7 @@ function DangerZoneSection({ clientId, clientName }: { clientId: string; clientN
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
-          Permanently deletes this client and everything tied to it — sessions, leads, purchases, integrations,
+          Permanently deletes this client and everything tied to it: sessions, leads, purchases, integrations,
           reports. This cannot be undone. Type <span className="font-medium text-foreground">{clientName}</span> to
           confirm.
         </p>
@@ -1024,7 +1024,7 @@ function ShareLinkSection({ clientId, client }: { clientId: string; client: Clie
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-0">
         <p className="text-xs text-muted-foreground">
-          A clean, read-only overview report this client can view with no login — cost, revenue, profit, ROAS/ROI.
+          A clean, read-only overview report this client can view with no login: cost, revenue, profit, ROAS/ROI.
           No integration or credential details are ever exposed through it.
         </p>
         {shareUrl ? (
@@ -1219,8 +1219,8 @@ function UtmToolsSection({ clientId }: { clientId: string }) {
             <div className="flex flex-col gap-1.5">
               {mismatches.map((m, i) => (
                 <p key={i} className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
-                  Session tag "{m.sessionCampaign}" ({m.platform}) doesn't exactly match your ad platform's "{m.closestAdCostsCampaign}"
-                  — likely a typo (edit distance {m.editDistance}).
+                  Session tag "{m.sessionCampaign}" ({m.platform}) doesn't exactly match your ad platform's "{m.closestAdCostsCampaign}",
+                  likely just a typo ({m.editDistance} character{m.editDistance === 1 ? "" : "s"} different).
                 </p>
               ))}
             </div>

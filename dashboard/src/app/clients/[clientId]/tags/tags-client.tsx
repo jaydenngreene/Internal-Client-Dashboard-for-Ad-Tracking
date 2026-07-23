@@ -222,17 +222,17 @@ export function TagsClient({ clientId }: { clientId: string }) {
       <Card className="px-4">
         <CardContent className="flex flex-col gap-2 px-0 text-xs text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Freeform</span> — a plain label for filtering/segmenting (e.g.
+            <span className="font-medium text-foreground">Freeform</span>: a plain label for filtering/segmenting (e.g.
             &quot;vip&quot;, &quot;referral&quot;). No side effects.
           </p>
           <p>
-            <span className="font-medium text-foreground">Funnel Stage</span> — a label with a sequence number (Stage
+            <span className="font-medium text-foreground">Funnel Stage</span>: a label with a sequence number (Stage
             order), for tracking where a lead sits in your process (e.g. Booked Call → Showed Up → Closed).
           </p>
           <p>
-            <span className="font-medium text-foreground">Product</span> — has a dollar value. The first time it&apos;s
+            <span className="font-medium text-foreground">Product</span>: has a dollar value. The first time it&apos;s
             applied to a lead, it automatically records a Sale for that amount, attributed back to whichever ad brought
-            the lead in — for revenue that closes somewhere this software can&apos;t see (a phone call, a manual
+            the lead in. Used for revenue that closes somewhere this software can&apos;t see (a phone call, a manual
             invoice). Re-applying the same tag later doesn&apos;t create a second sale.
           </p>
           <p className="pt-1">

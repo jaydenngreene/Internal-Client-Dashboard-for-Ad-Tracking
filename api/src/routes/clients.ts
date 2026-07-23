@@ -862,7 +862,7 @@ export async function clientRoutes(app: FastifyInstance) {
     const { rows: userRows } = await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])
     if (userRows.length === 0) {
       return reply.code(404).send({
-        error: `No account exists for ${email} — create one first with npm run create:user, then share this client with it`,
+        error: `No account exists for ${email}. Create one first with npm run create:user, then share this client with it`,
       })
     }
     const collaboratorId = userRows[0].id

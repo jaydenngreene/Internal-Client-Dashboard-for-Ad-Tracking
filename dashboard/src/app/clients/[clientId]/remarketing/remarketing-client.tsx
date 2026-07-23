@@ -106,7 +106,7 @@ function CandidateCard({ candidate, clientId }: { candidate: RemarketingCandidat
             {dispatch.isError && (
               <p className="text-xs text-status-critical">{(dispatch.error as Error).message}</p>
             )}
-            <p className="text-xs text-muted-foreground">Adds this lead to your connected Klaviyo list — doesn't send a message by itself.</p>
+            <p className="text-xs text-muted-foreground">Adds this lead to your connected Klaviyo list. Doesn't send a message by itself.</p>
           </div>
         )}
       </CardContent>

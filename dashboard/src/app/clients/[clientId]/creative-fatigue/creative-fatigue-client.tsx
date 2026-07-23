@@ -39,7 +39,7 @@ function SignalCard({ signal, clientId }: { signal: CreativeFatigueSignal; clien
         </div>
 
         <p className="text-sm text-foreground/90">
-          CTR down {formatPercent(signal.decline_pct)} — {formatPercent(signal.recent_ctr)} over the last 3 days vs.{" "}
+          CTR down {formatPercent(signal.decline_pct)}: {formatPercent(signal.recent_ctr)} over the last 3 days vs.{" "}
           {formatPercent(signal.prior_ctr)} the 7 days before that. Consider refreshing this creative.
         </p>
 
@@ -70,7 +70,7 @@ export function CreativeFatigueClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Creative Fatigue</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Creatives whose CTR has declined 30%+ over the last 3 days vs. the 7 days before that — a trend signal,
+            Creatives whose CTR has declined 30%+ over the last 3 days vs. the 7 days before that. A trend signal,
             distinct from Pause Candidates' ROAS-threshold alerts. Advisory only, nothing is paused.
           </p>
         </div>

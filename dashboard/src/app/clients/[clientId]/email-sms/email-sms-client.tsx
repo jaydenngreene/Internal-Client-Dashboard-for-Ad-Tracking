@@ -42,7 +42,7 @@ export function EmailSmsClient({ clientId }: { clientId: string }) {
       {data && data.campaigns.length === 0 && (
         <Card className="px-4 py-8">
           <CardContent className="px-0 text-center text-sm text-muted-foreground">
-            No email/SMS campaign data yet — connect Klaviyo in Settings, or wait for the next sync.
+            No email/SMS campaign data yet. Connect Klaviyo in Settings, or wait for the next sync.
           </CardContent>
         </Card>
       )}

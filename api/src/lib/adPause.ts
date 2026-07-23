@@ -11,7 +11,7 @@ export async function pauseAd(
   adId: string
 ): Promise<void> {
   if (platform !== 'facebook_ads') {
-    throw new Error(`Pausing ads on ${platform} isn't supported yet — pause it manually in that platform's ad manager.`)
+    throw new Error(`Pausing ads on ${platform} isn't supported yet. Pause it manually in that platform's ad manager.`)
   }
 
   // Note for the go-live checklist: this needs a token with `ads_management`

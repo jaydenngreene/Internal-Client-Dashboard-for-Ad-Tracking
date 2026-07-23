@@ -42,7 +42,7 @@ function AssetPreview({ asset }: { asset: { thumbnailUrl: string | null; assetUr
       <ImageIcon className="size-8" />
       <p className="text-xs">
         No creative asset synced yet for this platform. Facebook creative sync populates this automatically once
-        connected — other platforms don&apos;t pull it in yet.
+        connected. Other platforms don&apos;t pull it in yet.
       </p>
     </div>
   );
@@ -117,7 +117,7 @@ function AiTagsPanel({ clientId, platform, creativeName }: { clientId: string; p
         {isLoading && <Skeleton className="h-6 w-full" />}
         {!isLoading && !tags && !generate.isError && (
           <p className="text-sm text-muted-foreground">
-            Not tagged yet — classifies this creative's hook, angle, and tone from its ad copy so patterns show up
+            Not tagged yet. Classifies this creative's hook, angle, and tone from its ad copy so patterns show up
             across your whole account in Creative Patterns.
           </p>
         )}

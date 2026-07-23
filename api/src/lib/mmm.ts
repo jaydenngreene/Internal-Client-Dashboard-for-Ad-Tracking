@@ -55,7 +55,7 @@ export async function computeMMM(clientId: string): Promise<MmmResult> {
 
   const platforms = Array.from(new Set(platformRows.rows.map((r) => r.platform))).sort()
   if (platforms.length < 2) {
-    return { available: false, reason: 'Needs at least 2 ad platforms with spend history to separate their individual contributions.' }
+    return { available: false, reason: 'Needs at least 2 ad platforms with spend history so we can tell their impact apart.' }
   }
 
   const spendByDay = new Map<string, Map<string, number>>()
@@ -71,7 +71,7 @@ export async function computeMMM(clientId: string): Promise<MmmResult> {
   }
 
   if (dates.length < MIN_DAYS) {
-    return { available: false, reason: `Needs at least ${MIN_DAYS} days of history — only ${dates.length} available.` }
+    return { available: false, reason: `Needs at least ${MIN_DAYS} days of history, only ${dates.length} available.` }
   }
 
   const X: number[][] = []
@@ -98,7 +98,7 @@ export async function computeMMM(clientId: string): Promise<MmmResult> {
     }
   }
   if (usablePlatforms.length < 2) {
-    return { available: false, reason: 'Not enough spend variance across platforms to separate their individual contributions.' }
+    return { available: false, reason: 'Your day-to-day spend on each platform has stayed too similar to tell their impact apart. Try again once spend has moved around more.' }
   }
   const Xfiltered = X.map((row) => usableColumns.map((c) => row[c]))
 

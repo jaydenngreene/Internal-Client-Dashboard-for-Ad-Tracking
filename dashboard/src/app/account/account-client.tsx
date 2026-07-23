@@ -80,7 +80,7 @@ function MfaSection({ enabled, onChanged }: { enabled: boolean; onChanged: () =>
       <CardContent className="flex flex-col gap-3 px-0">
         {backupCodes && (
           <div className="flex flex-col gap-2 rounded-md border border-status-warning/40 bg-status-warning/10 p-3">
-            <p className="text-sm font-medium">Save these backup codes now — they won&apos;t be shown again.</p>
+            <p className="text-sm font-medium">Save these backup codes now. They won&apos;t be shown again.</p>
             <p className="text-xs text-muted-foreground">Each one can be used once if you lose access to your authenticator app.</p>
             <div className="grid grid-cols-2 gap-1 font-mono text-sm">
               {backupCodes.map((c) => (
@@ -96,7 +96,7 @@ function MfaSection({ enabled, onChanged }: { enabled: boolean; onChanged: () =>
         {!enabled && !setupData && !backupCodes && (
           <div>
             <p className="mb-2 text-xs text-muted-foreground">
-              Adds a second step to logging in — a 6-digit code from an authenticator app (Google Authenticator, Authy, etc).
+              Adds a second step to logging in: a 6-digit code from an authenticator app (Google Authenticator, Authy, etc).
             </p>
             <Button size="sm" disabled={setup.isPending} onClick={() => setup.mutate()}>
               {setup.isPending ? "Generating…" : "Enable 2FA"}
@@ -150,7 +150,7 @@ function SystemStatusSection() {
       </CardHeader>
       <CardContent className="flex flex-col gap-2 px-0">
         <p className="text-xs text-muted-foreground">
-          Background jobs run automatically while the API server is up — this is when each last ran, across every
+          Background jobs run automatically while the API server is up. This is when each last ran, across every
           client, not just yours.
         </p>
         {isLoading && <Skeleton className="h-16 w-full" />}
@@ -375,7 +375,7 @@ export function AccountClient() {
       <div>
         <h1 className="text-lg font-semibold">Account Settings</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Your own login and agency profile — separate from any individual client&apos;s settings.
+          Your own login and agency profile, separate from any individual client&apos;s settings.
         </p>
       </div>
 

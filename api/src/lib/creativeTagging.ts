@@ -97,7 +97,7 @@ export async function generateCreativeTags(
     creativeType: row.creative_type,
   }
   if (!input.headline && !input.primaryText && !input.description) {
-    const error = 'No ad copy synced for this creative yet — nothing to classify.'
+    const error = 'No ad copy synced for this creative yet, nothing to classify.'
     await db.query(
       `INSERT INTO creative_tags (client_id, platform, ad_name, error)
        VALUES ($1, $2, $3, $4)

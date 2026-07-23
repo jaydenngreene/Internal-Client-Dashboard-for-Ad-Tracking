@@ -119,7 +119,7 @@ function ForecastSection({ clientId }: { clientId: string }) {
       <div>
         <p className="text-sm font-medium">Forecast</p>
         <p className="text-xs text-muted-foreground">
-          A simple linear trend from the last {data.lookbackDays} days, not a precise prediction — read it as
+          A simple straight-line trend from the last {data.lookbackDays} days, not a precise prediction. Read it as
           direction and rough scale, not an exact number.
         </p>
       </div>

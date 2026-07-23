@@ -31,6 +31,7 @@ import { publicShareRoutes } from './routes/publicShare'
 import { incrementalityRoutes } from './routes/incrementality'
 import { creativeFatigueRoutes } from './routes/creativeFatigue'
 import { trackingHealthRoutes } from './routes/trackingHealth'
+import { creativeTagRoutes } from './routes/creativeTags'
 import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { chatRoutes } from './routes/chat'
 import { geoLiftRoutes } from './routes/geoLift'
@@ -153,6 +154,7 @@ app.register(
     instance.register(incrementalityRoutes)
     instance.register(creativeFatigueRoutes)
     instance.register(trackingHealthRoutes)
+    instance.register(creativeTagRoutes)
     instance.register(budgetReallocationRoutes)
     instance.register(chatRoutes)
     instance.register(geoLiftRoutes)

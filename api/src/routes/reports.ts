@@ -4,6 +4,7 @@ import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv'
 import { projectSum } from '../lib/forecasting'
 import { computeMMM } from '../lib/mmm'
+import { computeMmmScenario, ScenarioAdjustment } from '../lib/mmmScenario'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 
@@ -786,6 +787,17 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/clients/:id/reports/mmm', async (req, reply) => {
     return reply.send(await computeMMM(req.params.id))
   })
+
+  // Saturation-curve budget scenario simulator — see lib/mmmScenario.ts for the
+  // full methodology. A POST (not GET) because the proposed reallocation is a
+  // real request body, not a cacheable report query.
+  app.post<{ Params: { id: string }; Body: { adjustments: ScenarioAdjustment[] } }>(
+    '/clients/:id/reports/mmm-scenario',
+    async (req, reply) => {
+      const adjustments = Array.isArray(req.body?.adjustments) ? req.body.adjustments : []
+      return reply.send(await computeMmmScenario(req.params.id, adjustments))
+    }
+  )
 
   // Step 59 — data-driven ("algorithmic") attribution via a Markov chain
   // removal-effect model. See lib/markovAttribution.ts for the full methodology

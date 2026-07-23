@@ -546,6 +546,56 @@ export function dismissTrackingHealthSignal(id: string): Promise<TrackingHealthS
   return mutateJson<TrackingHealthSignal>(`/tracking-health/${id}/dismiss`, "PATCH");
 }
 
+// AI creative tagging — classifies a creative's ad copy into hook type/angle/tone
+// (text-based, not computer-vision image analysis), plus the performance
+// correlation view answering "what KIND of creative wins." On-demand+cached, same
+// convention as AI Insights.
+export interface CreativeTags {
+  hook_type: string;
+  angle: string;
+  tone: string;
+  format: string;
+  error: string | null;
+  generated_at: string;
+}
+
+export function getCreativeTags(clientId: string, platform: string, adName: string): Promise<CreativeTags | null> {
+  return fetchJson<CreativeTags | null>(
+    `/clients/${clientId}/creative-tags${rangeQuery(undefined, { platform, adName })}`
+  );
+}
+
+export function generateCreativeTagsFor(
+  clientId: string,
+  platform: string,
+  adName: string
+): Promise<{ hookType: string; angle: string; tone: string; format: string }> {
+  return apiRequest(`${API_URL}/clients/${clientId}/creative-tags/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform, adName }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+export interface CreativeTagPerformanceRow {
+  dimension: "hook_type" | "angle" | "tone";
+  value: string;
+  creativeCount: number;
+  totalSpend: number;
+  totalRevenue: number;
+  avgRoas: number | null;
+}
+
+export function getCreativeTagPerformance(clientId: string): Promise<CreativeTagPerformanceRow[]> {
+  return fetchJson<CreativeTagPerformanceRow[]>(`/clients/${clientId}/creative-tags/performance`);
+}
+
 // Step 50 — confirm-first budget reallocation suggestions.
 export type BudgetReallocationStatus = "pending" | "confirmed" | "dismissed" | "failed";
 
@@ -636,6 +686,42 @@ export interface MmmResult {
 
 export function getMmm(clientId: string): Promise<MmmResult> {
   return fetchJson<MmmResult>(`/clients/${clientId}/reports/mmm`);
+}
+
+// Saturation-curve budget scenario simulator — a separate fit (ln(1+spend), not
+// raw spend) from the linear MMM above, so moving budget between platforms
+// reflects diminishing returns instead of a naive straight-line projection. See
+// api/src/lib/mmmScenario.ts for the full methodology.
+export interface MmmScenarioChannel {
+  platform: string;
+  currentDailySpend: number;
+  scenarioDailySpend: number;
+  saturationCoefficient: number;
+}
+
+export interface MmmScenarioResult {
+  available: boolean;
+  reason?: string;
+  rSquared?: number;
+  sampleSizeDays?: number;
+  currentProjectedDailyRevenue?: number;
+  scenarioProjectedDailyRevenue?: number;
+  projectedDailyRevenueDelta?: number;
+  channels?: MmmScenarioChannel[];
+}
+
+export function getMmmScenario(
+  clientId: string,
+  adjustments: { platform: string; spendDelta: number }[]
+): Promise<MmmScenarioResult> {
+  return apiRequest(`${API_URL}/clients/${clientId}/reports/mmm-scenario`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adjustments }),
+  }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  });
 }
 
 // Step 59 — data-driven ("algorithmic") attribution via a Markov chain removal-

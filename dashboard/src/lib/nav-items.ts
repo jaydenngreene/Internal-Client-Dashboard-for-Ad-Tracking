@@ -20,6 +20,7 @@ import {
   Tag,
   Users,
   Settings2,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true },
       { slug: "funnel", label: "Funnel", icon: Filter, enabled: true },
       { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true },
+      { slug: "creative-patterns", label: "Creative Patterns", icon: Sparkles, enabled: true },
       { slug: "data-driven-attribution", label: "Data-Driven Attribution", icon: Waypoints, enabled: true },
       { slug: "leads", label: "Leads", icon: UserSearch, enabled: true },
       { slug: "subscriptions", label: "Subscriptions", icon: RefreshCw, enabled: true, niches: ["saas"] },

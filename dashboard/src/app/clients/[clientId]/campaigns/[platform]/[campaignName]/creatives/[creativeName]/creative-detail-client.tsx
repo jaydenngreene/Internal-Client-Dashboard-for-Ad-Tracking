@@ -2,17 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ImageIcon } from "lucide-react";
-import { getCreativeDetail, getClients, campaignGoalForNiche, CreativeDetailCopy, CreativeVideoMetrics } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, ImageIcon, Sparkles } from "lucide-react";
+import {
+  getCreativeDetail,
+  getClients,
+  campaignGoalForNiche,
+  CreativeDetailCopy,
+  CreativeVideoMetrics,
+  getCreativeTags,
+  generateCreativeTagsFor,
+} from "@/lib/api";
 import { RangePreset, resolveRange } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatNumber, formatPercent, formatRoas, formatPlatformLabel } from "@/lib/format";
+import { TAG_LABEL } from "@/lib/creative-tag-labels";
 
 function AssetPreview({ asset }: { asset: { thumbnailUrl: string | null; assetUrl: string | null; assetType: "image" | "video" | null } }) {
   if (asset.assetType === "video" && asset.assetUrl) {
@@ -71,6 +81,56 @@ function AdCopy({ copy }: { copy: CreativeDetailCopy }) {
           >
             {copy.landingPageUrl}
           </a>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// AI creative tagging (text-based — ad copy + asset type, not computer-vision
+// image analysis) classifies hook type/angle/tone so "what KIND of creative wins"
+// is answerable across the account, not just "which specific ad wins." Same
+// on-demand+cached pattern as AI Insights: a cached tag renders immediately, a
+// missing one shows a Generate button rather than auto-firing on page load.
+function AiTagsPanel({ clientId, platform, creativeName }: { clientId: string; platform: string; creativeName: string }) {
+  const queryClient = useQueryClient();
+  const { data: tags, isLoading } = useQuery({
+    queryKey: ["creative-tags", clientId, platform, creativeName],
+    queryFn: () => getCreativeTags(clientId, platform, creativeName),
+  });
+  const generate = useMutation({
+    mutationFn: () => generateCreativeTagsFor(clientId, platform, creativeName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["creative-tags", clientId, platform, creativeName] }),
+  });
+
+  return (
+    <Card className="px-4 py-4">
+      <CardHeader className="flex-row items-center justify-between px-0">
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          <Sparkles className="size-3.5 text-primary" /> AI Creative Tags
+        </CardTitle>
+        <Button size="xs" variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
+          {generate.isPending ? "Tagging…" : tags ? "Regenerate" : "Generate tags"}
+        </Button>
+      </CardHeader>
+      <CardContent className="px-0">
+        {isLoading && <Skeleton className="h-6 w-full" />}
+        {!isLoading && !tags && !generate.isError && (
+          <p className="text-sm text-muted-foreground">
+            Not tagged yet — classifies this creative's hook, angle, and tone from its ad copy so patterns show up
+            across your whole account in Creative Patterns.
+          </p>
+        )}
+        {generate.isError && (
+          <p className="text-sm text-status-critical">{(generate.error as Error).message}</p>
+        )}
+        {tags?.error && <p className="text-sm text-status-critical">{tags.error}</p>}
+        {tags && !tags.error && (
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="secondary">{TAG_LABEL[tags.hook_type] ?? tags.hook_type}</Badge>
+            <Badge variant="secondary">{TAG_LABEL[tags.angle] ?? tags.angle}</Badge>
+            <Badge variant="secondary">{TAG_LABEL[tags.tone] ?? tags.tone}</Badge>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -168,6 +228,8 @@ export function CreativeDetailClient({
           <VideoMetricsPanel metrics={data.videoMetrics} />
 
           <AdCopy copy={data.copy} />
+
+          <AiTagsPanel clientId={clientId} platform={platform} creativeName={creativeName} />
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile label="Cost" value={formatCurrency(data.kpis.cost)} />

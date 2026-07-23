@@ -2,6 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  SlidersHorizontal,
+  Plug,
+  Users2,
+  Wrench,
+  AlertTriangle,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getClient,
@@ -1222,8 +1231,63 @@ function UtmToolsSection({ clientId }: { clientId: string }) {
   );
 }
 
+type TabKey = "general" | "integrations" | "sharing" | "advanced" | "danger";
+
+interface TabDef {
+  key: TabKey;
+  label: string;
+  icon: LucideIcon;
+  ownerOnly?: boolean;
+}
+
+// General/Integrations/Sharing/Danger used to be one continuous scroll — General
+// alone runs five sub-sections before Integrations (16 platform rows) even starts.
+// Splitting into tabs means "where do I turn off SMS alerts" is one click, not a
+// scroll past a dozen unrelated cards. "Advanced" holds the longer tail (call
+// tracking numbers, webhooks, identity links, UTM tools, the audit log) that
+// doesn't cleanly fit General/Integrations/Sharing but also isn't dangerous.
+const TABS: TabDef[] = [
+  { key: "general", label: "General", icon: SlidersHorizontal },
+  { key: "integrations", label: "Integrations", icon: Plug },
+  { key: "sharing", label: "Sharing", icon: Users2 },
+  { key: "advanced", label: "Advanced", icon: Wrench },
+  { key: "danger", label: "Danger Zone", icon: AlertTriangle, ownerOnly: true },
+];
+
+function SettingsTabs({ active, onChange, showDanger }: { active: TabKey; onChange: (t: TabKey) => void; showDanger: boolean }) {
+  return (
+    <div className="max-w-full overflow-x-auto border-b border-border">
+      <div className="flex shrink-0 gap-1">
+        {TABS.filter((t) => !t.ownerOnly || showDanger).map((tab) => {
+          const Icon = tab.icon;
+          const isActive = tab.key === active;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => onChange(tab.key)}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                isActive
+                  ? tab.key === "danger"
+                    ? "border-status-critical text-status-critical"
+                    : "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="size-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsClient({ clientId }: { clientId: string }) {
   const { data: client, isLoading } = useQuery({ queryKey: ["client", clientId], queryFn: () => getClient(clientId) });
+  const [tab, setTab] = useState<TabKey>("general");
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -1238,18 +1302,32 @@ export function SettingsClient({ clientId }: { clientId: string }) {
       {isLoading && <Skeleton className="h-64 w-full" />}
       {client && (
         <>
-          <GeneralSection clientId={clientId} client={client} />
-          <IntegrationsSection clientId={clientId} />
-          <TrackingNumbersSection clientId={clientId} />
-          <TagWebhookSection clientId={clientId} />
-          <OutboundWebhooksSection clientId={clientId} />
-          <IdentityLinksSection clientId={clientId} />
-          <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
-          <ShareLinkSection clientId={clientId} client={client} />
-          <BrandingSection clientId={clientId} client={client} />
-          <UtmToolsSection clientId={clientId} />
-          <AuditLogSection queryKey={["client-audit-log", clientId]} fetcher={() => getClientAuditLog(clientId)} />
-          {client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
+          <SettingsTabs active={tab} onChange={setTab} showDanger={client.is_owner} />
+
+          {tab === "general" && <GeneralSection clientId={clientId} client={client} />}
+
+          {tab === "integrations" && <IntegrationsSection clientId={clientId} />}
+
+          {tab === "sharing" && (
+            <div className="flex flex-col gap-6">
+              <CollaboratorsSection clientId={clientId} isOwner={client.is_owner} />
+              <ShareLinkSection clientId={clientId} client={client} />
+              <BrandingSection clientId={clientId} client={client} />
+            </div>
+          )}
+
+          {tab === "advanced" && (
+            <div className="flex flex-col gap-6">
+              <TrackingNumbersSection clientId={clientId} />
+              <TagWebhookSection clientId={clientId} />
+              <OutboundWebhooksSection clientId={clientId} />
+              <IdentityLinksSection clientId={clientId} />
+              <UtmToolsSection clientId={clientId} />
+              <AuditLogSection queryKey={["client-audit-log", clientId]} fetcher={() => getClientAuditLog(clientId)} />
+            </div>
+          )}
+
+          {tab === "danger" && client.is_owner && <DangerZoneSection clientId={clientId} clientName={client.name} />}
         </>
       )}
     </div>

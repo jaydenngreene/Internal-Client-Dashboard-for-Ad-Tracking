@@ -106,6 +106,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/budget-reallocations': 'client',
   '/clients/:id/chat': 'client',
   '/clients/:id/geo-lift-tests': 'client',
+  '/clients/:id/shopify-import': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
 

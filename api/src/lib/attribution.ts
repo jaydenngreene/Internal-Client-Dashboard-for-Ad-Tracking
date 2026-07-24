@@ -217,6 +217,10 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     gclid: lastSession.gclid,
     msclkid: lastSession.msclkid,
     eventTime: new Date(),
+    // Order id as the shared dedup key — a client's own native Meta pixel
+    // needs to pass the same value as its Purchase event's eventID for Meta to
+    // actually de-dupe against this CAPI call (see SignalPayload.eventId).
+    eventId: conv.order_id ?? undefined,
   })
 
   // Step 29 — notify any of the client's own systems subscribed to this event.

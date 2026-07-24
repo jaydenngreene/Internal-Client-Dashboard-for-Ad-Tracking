@@ -17,6 +17,13 @@ export interface SignalPayload {
   ip?: string | null
   userAgent?: string | null
   eventTime: Date
+  // Meta de-dupes a Purchase reported by both a client's own browser-side Meta
+  // pixel AND this app's server-side CAPI call by matching event_id between the
+  // two - without it, a client running their own native pixel alongside this
+  // app's CAPI integration gets every purchase double-counted in Meta's own
+  // Ads Manager reporting (not in this app's numbers, just Meta's). Falls back
+  // to a random id (no dedup, previous behavior) when omitted.
+  eventId?: string
 }
 
 interface FacebookCapiConfig {
@@ -83,7 +90,7 @@ async function sendFacebookCapi(config: FacebookCapiConfig, payload: SignalPaylo
       {
         event_name: payload.eventType,
         event_time: Math.floor(payload.eventTime.getTime() / 1000),
-        event_id: crypto.randomUUID(),
+        event_id: payload.eventId ?? crypto.randomUUID(),
         action_source: 'website',
         user_data: userData,
         custom_data: {

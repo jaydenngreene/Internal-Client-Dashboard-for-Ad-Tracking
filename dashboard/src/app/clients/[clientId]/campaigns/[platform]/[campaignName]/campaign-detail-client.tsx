@@ -53,7 +53,7 @@ function CreativeRowCard({
           )}
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>{formatCurrency(creative.cost)} spend</span>
+          <span>{creative.matched ? formatCurrency(creative.cost) : "-"} spend</span>
           {goal === "leads" ? (
             <span>{formatNumber(creative.leads)} leads</span>
           ) : (

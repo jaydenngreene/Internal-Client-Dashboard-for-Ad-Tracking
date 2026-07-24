@@ -181,7 +181,11 @@ export function CampaignBreakdownTable({
                   )}
                 </div>
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatCurrency(row.cost)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {/* An unmatched row's $0 cost means "couldn't join spend data," not
+                    "verified zero spend" - showing $0.00 reads as the latter. */}
+                {row.matched ? formatCurrency(row.cost) : "-"}
+              </TableCell>
               <TableCell className="text-right tabular-nums">{formatPercent(row.ctr)}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {row.cpc === null ? "-" : formatCurrency(row.cpc)}

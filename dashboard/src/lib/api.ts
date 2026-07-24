@@ -1230,6 +1230,13 @@ export interface AovBySourceRow {
   sales: number;
 }
 
+export interface BofSeriesPoint {
+  date: string;
+  totalOrders: number;
+  refundRate: number;
+  repeatPurchaseRate: number;
+}
+
 export interface BofReport {
   from: string;
   to: string;
@@ -1240,7 +1247,15 @@ export interface BofReport {
   totalOrders: number;
   refundedOrders: number;
   refundRate: number | null;
+  // Ecommerce BOF (2026-07-25) — "lead -> buyer" doesn't mean much for a store
+  // where the only "lead" is the checkout-identify call itself. New vs
+  // returning and time-to-first-purchase are the real ecommerce BOF questions.
+  newCustomerOrders: number;
+  returningCustomerOrders: number;
+  repeatPurchaseRate: number | null;
+  avgDaysFirstClickToPurchase: number | null;
   aovBySource: AovBySourceRow[];
+  series: BofSeriesPoint[];
 }
 
 export interface TofReport {
@@ -1253,6 +1268,16 @@ export interface TofReport {
   // pair the UI shows is a frontend decision.
   totalPurchases: number;
   costPerPurchase: number | null;
+}
+
+export interface MofSeriesPoint {
+  date: string;
+  sessions: number;
+  pageviews: number;
+  avgPageviewsPerSession: number;
+  viewContentCount: number;
+  addToCartCount: number;
+  initiateCheckoutCount: number;
 }
 
 export interface MofReport {
@@ -1269,6 +1294,7 @@ export interface MofReport {
   abandonedCartCount: number;
   abandonedCartValue: number;
   cartAbandonmentRate: number | null;
+  series: MofSeriesPoint[];
 }
 
 export interface CallsByCampaignRow {

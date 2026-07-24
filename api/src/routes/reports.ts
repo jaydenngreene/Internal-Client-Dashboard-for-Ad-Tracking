@@ -483,54 +483,114 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [conversionRow, orderRow, aovBySource] = await Promise.all([
-        // For each lead in range, find their first purchase at or after the lead —
-        // gives lead->buyer rate and avg time-to-convert regardless of when the
-        // purchase itself landed.
-        db.query<{ total_leads: string; converted_leads: string; avg_days: string | null }>(
-          `WITH lead_conversions AS (
-             SELECT l.id,
-                    l.created_at AS lead_at,
-                    (SELECT MIN(p.purchased_at) FROM purchases p
-                     WHERE p.client_id = l.client_id AND p.email = l.email AND p.purchased_at >= l.created_at
-                    ) AS first_purchase_at
-             FROM leads l
-             WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
-           )
-           SELECT
-             COUNT(*) AS total_leads,
-             COUNT(first_purchase_at) AS converted_leads,
-             AVG(EXTRACT(EPOCH FROM (first_purchase_at - lead_at)) / 86400)
-               FILTER (WHERE first_purchase_at IS NOT NULL) AS avg_days
-           FROM lead_conversions`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string; refunded: string }>(
-          `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE refunded) AS refunded
-           FROM purchases
-           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        // AOV by source uses each purchase's first-touch session (same acquisition
-        // convention as customer_ltv), not the attributions table — under the linear
-        // model a purchase can have several attribution rows, which would fragment
-        // and double-count order value here.
-        db.query<{ utm_source: string | null; aov: string; sales: string }>(
-          `SELECT src.utm_source, AVG(p.revenue) AS aov, COUNT(*) AS sales
-           FROM purchases p
-           JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
-           JOIN LATERAL (
-             SELECT utm_source FROM sessions
-             WHERE visitor_id = i.visitor_id AND started_at <= p.purchased_at
-             ORDER BY started_at ASC
-             LIMIT 1
-           ) src ON true
-           WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded
-           GROUP BY src.utm_source
-           ORDER BY COUNT(*) DESC`,
-          [clientId, from, to]
-        ),
-      ])
+      const [conversionRow, orderRow, aovBySource, newVsReturningRow, firstClickDaysRow, orderSeriesRow, newVsReturningSeriesRow] =
+        await Promise.all([
+          // For each lead in range, find their first purchase at or after the lead —
+          // gives lead->buyer rate and avg time-to-convert regardless of when the
+          // purchase itself landed.
+          db.query<{ total_leads: string; converted_leads: string; avg_days: string | null }>(
+            `WITH lead_conversions AS (
+               SELECT l.id,
+                      l.created_at AS lead_at,
+                      (SELECT MIN(p.purchased_at) FROM purchases p
+                       WHERE p.client_id = l.client_id AND p.email = l.email AND p.purchased_at >= l.created_at
+                      ) AS first_purchase_at
+               FROM leads l
+               WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
+             )
+             SELECT
+               COUNT(*) AS total_leads,
+               COUNT(first_purchase_at) AS converted_leads,
+               AVG(EXTRACT(EPOCH FROM (first_purchase_at - lead_at)) / 86400)
+                 FILTER (WHERE first_purchase_at IS NOT NULL) AS avg_days
+             FROM lead_conversions`,
+            [clientId, from, to]
+          ),
+          db.query<{ total: string; refunded: string }>(
+            `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE refunded) AS refunded
+             FROM purchases
+             WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3`,
+            [clientId, from, to]
+          ),
+          // AOV by source uses each purchase's first-touch session (same acquisition
+          // convention as customer_ltv), not the attributions table — under the linear
+          // model a purchase can have several attribution rows, which would fragment
+          // and double-count order value here.
+          db.query<{ utm_source: string | null; aov: string; sales: string }>(
+            `SELECT src.utm_source, AVG(p.revenue) AS aov, COUNT(*) AS sales
+             FROM purchases p
+             JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
+             JOIN LATERAL (
+               SELECT utm_source FROM sessions
+               WHERE visitor_id = i.visitor_id AND started_at <= p.purchased_at
+               ORDER BY started_at ASC
+               LIMIT 1
+             ) src ON true
+             WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded
+             GROUP BY src.utm_source
+             ORDER BY COUNT(*) DESC`,
+            [clientId, from, to]
+          ),
+          // Ecommerce BOF (2026-07-25): "lead -> buyer" doesn't mean anything for a
+          // store where the only "lead" is the checkout-identify call itself, near-
+          // simultaneous with the purchase it's supposedly predicting. New vs
+          // returning is the real bottom-of-funnel ecommerce question - computed
+          // live off `purchases` directly (not customer_ltv.purchase_count, which
+          // only refreshes on the nightly LTV job and would be stale intraday).
+          db.query<{ new_count: string; returning_count: string }>(
+            `SELECT
+               COUNT(*) FILTER (WHERE NOT EXISTS (
+                 SELECT 1 FROM purchases p2
+                 WHERE p2.client_id = p.client_id AND p2.email = p.email
+                   AND p2.purchased_at < p.purchased_at AND NOT p2.refunded
+               )) AS new_count,
+               COUNT(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM purchases p2
+                 WHERE p2.client_id = p.client_id AND p2.email = p.email
+                   AND p2.purchased_at < p.purchased_at AND NOT p2.refunded
+               )) AS returning_count
+             FROM purchases p
+             WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded`,
+            [clientId, from, to]
+          ),
+          // Ecommerce's equivalent of "avg days to convert" - time from the buyer's
+          // actual first tracked touch (not a leads-table row) to their purchase.
+          db.query<{ avg_days: string | null }>(
+            `SELECT AVG(EXTRACT(EPOCH FROM (p.purchased_at - first_sess.started_at)) / 86400) AS avg_days
+             FROM purchases p
+             JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
+             JOIN LATERAL (
+               SELECT started_at FROM sessions
+               WHERE visitor_id = i.visitor_id AND started_at <= p.purchased_at
+               ORDER BY started_at ASC LIMIT 1
+             ) first_sess ON true
+             WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded`,
+            [clientId, from, to]
+          ),
+          db.query<{ date: string; total: string; refunded: string }>(
+            `SELECT purchased_at::date::text AS date, COUNT(*) AS total, COUNT(*) FILTER (WHERE refunded) AS refunded
+             FROM purchases WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3
+             GROUP BY purchased_at::date`,
+            [clientId, from, to]
+          ),
+          db.query<{ date: string; new_count: string; returning_count: string }>(
+            `SELECT p.purchased_at::date::text AS date,
+               COUNT(*) FILTER (WHERE NOT EXISTS (
+                 SELECT 1 FROM purchases p2
+                 WHERE p2.client_id = p.client_id AND p2.email = p.email
+                   AND p2.purchased_at < p.purchased_at AND NOT p2.refunded
+               )) AS new_count,
+               COUNT(*) FILTER (WHERE EXISTS (
+                 SELECT 1 FROM purchases p2
+                 WHERE p2.client_id = p.client_id AND p2.email = p.email
+                   AND p2.purchased_at < p.purchased_at AND NOT p2.refunded
+               )) AS returning_count
+             FROM purchases p
+             WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded
+             GROUP BY p.purchased_at::date`,
+            [clientId, from, to]
+          ),
+        ])
 
       const totalLeads = parseInt(conversionRow.rows[0].total_leads, 10)
       const convertedLeads = parseInt(conversionRow.rows[0].converted_leads, 10)
@@ -540,6 +600,32 @@ export async function reportRoutes(app: FastifyInstance) {
       const totalOrders = parseInt(orderRow.rows[0].total, 10)
       const refundedOrders = parseInt(orderRow.rows[0].refunded, 10)
       const refundRate = totalOrders > 0 ? (refundedOrders / totalOrders) * 100 : null
+
+      const newCustomerOrders = parseInt(newVsReturningRow.rows[0].new_count, 10)
+      const returningCustomerOrders = parseInt(newVsReturningRow.rows[0].returning_count, 10)
+      const repeatPurchaseRate =
+        newCustomerOrders + returningCustomerOrders > 0
+          ? (returningCustomerOrders / (newCustomerOrders + returningCustomerOrders)) * 100
+          : null
+      const avgDaysFirstClickToPurchase =
+        firstClickDaysRow.rows[0].avg_days !== null ? parseFloat(firstClickDaysRow.rows[0].avg_days) : null
+
+      const orderByDate = new Map(orderSeriesRow.rows.map((r) => [r.date, r]))
+      const newVsReturningByDate = new Map(newVsReturningSeriesRow.rows.map((r) => [r.date, r]))
+      const series = dateList(from, to).map((date) => {
+        const orderDay = orderByDate.get(date)
+        const nvrDay = newVsReturningByDate.get(date)
+        const dayTotal = orderDay ? parseInt(orderDay.total, 10) : 0
+        const dayRefunded = orderDay ? parseInt(orderDay.refunded, 10) : 0
+        const dayNew = nvrDay ? parseInt(nvrDay.new_count, 10) : 0
+        const dayReturning = nvrDay ? parseInt(nvrDay.returning_count, 10) : 0
+        return {
+          date,
+          totalOrders: dayTotal,
+          refundRate: dayTotal > 0 ? (dayRefunded / dayTotal) * 100 : 0,
+          repeatPurchaseRate: dayNew + dayReturning > 0 ? (dayReturning / (dayNew + dayReturning)) * 100 : 0,
+        }
+      })
 
       return reply.send({
         from,
@@ -551,11 +637,16 @@ export async function reportRoutes(app: FastifyInstance) {
         totalOrders,
         refundedOrders,
         refundRate,
+        newCustomerOrders,
+        returningCustomerOrders,
+        repeatPurchaseRate,
+        avgDaysFirstClickToPurchase,
         aovBySource: aovBySource.rows.map((r) => ({
           source: r.utm_source ?? '(unknown)',
           aov: parseFloat(r.aov),
           sales: parseInt(r.sales, 10),
         })),
+        series,
       })
     }
   )
@@ -569,44 +660,62 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [sessionsRow, pageviewsRow, engagedRow, cartCountsRow, abandonedRow] = await Promise.all([
-        db.query<{ total: string }>(
-          `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string }>(
-          `SELECT COUNT(*) AS total FROM pageviews WHERE client_id = $1 AND timestamp::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        db.query<{ total: string }>(
-          `SELECT COUNT(DISTINCT pv.session_id) AS total
-           FROM pageviews pv JOIN sessions s ON s.id = pv.session_id
-           WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3`,
-          [clientId, from, to]
-        ),
-        db.query<{ event_type: string; total: string }>(
-          `SELECT event_type, COUNT(*) AS total FROM cart_events
-           WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3
-           GROUP BY event_type`,
-          [clientId, from, to]
-        ),
-        // A cart is "abandoned" if there's an add_to_cart with no purchase by that
-        // visitor's identified email afterward. No background job/state needed — this
-        // is computed live at report time, same style as the BOF lead-conversion query.
-        db.query<{ total: string; value: string }>(
-          `SELECT COUNT(*) AS total, COALESCE(SUM(ce.value), 0) AS value
-           FROM cart_events ce
-           JOIN sessions s ON s.id = ce.session_id
-           WHERE ce.client_id = $1 AND ce.event_type = 'add_to_cart' AND ce.created_at::date BETWEEN $2 AND $3
-             AND NOT EXISTS (
-               SELECT 1 FROM identities i
-               JOIN purchases p ON p.client_id = i.client_id AND p.email = i.email
-               WHERE i.client_id = ce.client_id AND i.visitor_id = s.visitor_id
-                 AND p.purchased_at >= ce.created_at
-             )`,
-          [clientId, from, to]
-        ),
-      ])
+      const [sessionsRow, pageviewsRow, engagedRow, cartCountsRow, abandonedRow, sessionsByDay, pageviewsByDay, cartEventsByDay] =
+        await Promise.all([
+          db.query<{ total: string }>(
+            `SELECT COUNT(*) AS total FROM sessions WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3`,
+            [clientId, from, to]
+          ),
+          db.query<{ total: string }>(
+            `SELECT COUNT(*) AS total FROM pageviews WHERE client_id = $1 AND timestamp::date BETWEEN $2 AND $3`,
+            [clientId, from, to]
+          ),
+          db.query<{ total: string }>(
+            `SELECT COUNT(DISTINCT pv.session_id) AS total
+             FROM pageviews pv JOIN sessions s ON s.id = pv.session_id
+             WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3`,
+            [clientId, from, to]
+          ),
+          db.query<{ event_type: string; total: string }>(
+            `SELECT event_type, COUNT(*) AS total FROM cart_events
+             WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3
+             GROUP BY event_type`,
+            [clientId, from, to]
+          ),
+          // A cart is "abandoned" if there's an add_to_cart with no purchase by that
+          // visitor's identified email afterward. No background job/state needed — this
+          // is computed live at report time, same style as the BOF lead-conversion query.
+          db.query<{ total: string; value: string }>(
+            `SELECT COUNT(*) AS total, COALESCE(SUM(ce.value), 0) AS value
+             FROM cart_events ce
+             JOIN sessions s ON s.id = ce.session_id
+             WHERE ce.client_id = $1 AND ce.event_type = 'add_to_cart' AND ce.created_at::date BETWEEN $2 AND $3
+               AND NOT EXISTS (
+                 SELECT 1 FROM identities i
+                 JOIN purchases p ON p.client_id = i.client_id AND p.email = i.email
+                 WHERE i.client_id = ce.client_id AND i.visitor_id = s.visitor_id
+                   AND p.purchased_at >= ce.created_at
+               )`,
+            [clientId, from, to]
+          ),
+          // Day-by-day series (2026-07-25) — powers the KPI tiles' trend sparklines,
+          // same visual treatment Overview's hero row already gets.
+          db.query<{ date: string; total: string }>(
+            `SELECT started_at::date::text AS date, COUNT(*) AS total FROM sessions
+             WHERE client_id = $1 AND started_at::date BETWEEN $2 AND $3 GROUP BY started_at::date`,
+            [clientId, from, to]
+          ),
+          db.query<{ date: string; total: string }>(
+            `SELECT timestamp::date::text AS date, COUNT(*) AS total FROM pageviews
+             WHERE client_id = $1 AND timestamp::date BETWEEN $2 AND $3 GROUP BY timestamp::date`,
+            [clientId, from, to]
+          ),
+          db.query<{ date: string; event_type: string; total: string }>(
+            `SELECT created_at::date::text AS date, event_type, COUNT(*) AS total FROM cart_events
+             WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3 GROUP BY created_at::date, event_type`,
+            [clientId, from, to]
+          ),
+        ])
 
       const totalSessions = parseInt(sessionsRow.rows[0].total, 10)
       const totalPageviews = parseInt(pageviewsRow.rows[0].total, 10)
@@ -617,6 +726,30 @@ export async function reportRoutes(app: FastifyInstance) {
       const addToCartCount = cartCounts.add_to_cart ?? 0
       const initiateCheckoutCount = cartCounts.begin_checkout ?? 0
       const abandonedCartCount = parseInt(abandonedRow.rows[0].total, 10)
+
+      const sessionsByDate = new Map(sessionsByDay.rows.map((r) => [r.date, parseInt(r.total, 10)]))
+      const pageviewsByDate = new Map(pageviewsByDay.rows.map((r) => [r.date, parseInt(r.total, 10)]))
+      const cartByDate = new Map<string, Record<string, number>>()
+      for (const r of cartEventsByDay.rows) {
+        const entry = cartByDate.get(r.date) ?? {}
+        entry[r.event_type] = parseInt(r.total, 10)
+        cartByDate.set(r.date, entry)
+      }
+
+      const series = dateList(from, to).map((date) => {
+        const daySessions = sessionsByDate.get(date) ?? 0
+        const dayPageviews = pageviewsByDate.get(date) ?? 0
+        const dayCart = cartByDate.get(date) ?? {}
+        return {
+          date,
+          sessions: daySessions,
+          pageviews: dayPageviews,
+          avgPageviewsPerSession: daySessions > 0 ? dayPageviews / daySessions : 0,
+          viewContentCount: dayCart.view_item ?? 0,
+          addToCartCount: dayCart.add_to_cart ?? 0,
+          initiateCheckoutCount: dayCart.begin_checkout ?? 0,
+        }
+      })
 
       return reply.send({
         from,
@@ -632,6 +765,7 @@ export async function reportRoutes(app: FastifyInstance) {
         abandonedCartCount,
         abandonedCartValue: parseFloat(abandonedRow.rows[0].value),
         cartAbandonmentRate: addToCartCount > 0 ? (abandonedCartCount / addToCartCount) * 100 : null,
+        series,
       })
     }
   )

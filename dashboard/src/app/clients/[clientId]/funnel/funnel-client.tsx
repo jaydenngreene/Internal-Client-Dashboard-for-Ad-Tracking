@@ -20,6 +20,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { KpiTile } from "@/components/kpi-tile";
 
 type Stage = "tof" | "mof" | "bof";
 
@@ -143,39 +144,46 @@ export function FunnelClient({ clientId }: { clientId: string }) {
 
       {stage === "mof" && mof.data && (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Sessions</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalSessions)}</p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Pageviews</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(mof.data.totalPageviews)}</p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Avg Pageviews / Session</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {mof.data.avgPageviewsPerSession === null ? "-" : mof.data.avgPageviewsPerSession.toFixed(1)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Engagement Rate</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-1">
-                  {formatPercent(mof.data.engagementRate)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {formatNumber(mof.data.engagedSessions)} sessions with a pageview
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          {(() => {
+            const dates = mof.data!.series.map((p) => p.date);
+            return (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiTile
+                  label="Sessions"
+                  value={formatNumber(mof.data!.totalSessions)}
+                  fromDate={mof.data!.from}
+                  color="var(--color-chart-4)"
+                  sparkline={mof.data!.series.map((p) => p.sessions)}
+                  dates={dates}
+                  formatValue={formatNumber}
+                />
+                <KpiTile
+                  label="Pageviews"
+                  value={formatNumber(mof.data!.totalPageviews)}
+                  fromDate={mof.data!.from}
+                  color="var(--color-chart-1)"
+                  sparkline={mof.data!.series.map((p) => p.pageviews)}
+                  dates={dates}
+                  formatValue={formatNumber}
+                />
+                <KpiTile
+                  label="Avg Pageviews / Session"
+                  value={mof.data!.avgPageviewsPerSession === null ? "-" : mof.data!.avgPageviewsPerSession.toFixed(1)}
+                  fromDate={mof.data!.from}
+                  color="var(--color-chart-3)"
+                  sparkline={mof.data!.series.map((p) => p.avgPageviewsPerSession)}
+                  dates={dates}
+                  formatValue={(v) => v.toFixed(1)}
+                />
+                <KpiTile
+                  label="Engagement Rate"
+                  value={formatPercent(mof.data!.engagementRate)}
+                  fromDate={mof.data!.from}
+                  sublabel={`${formatNumber(mof.data!.engagedSessions)} sessions with a pageview`}
+                />
+              </div>
+            );
+          })()}
 
           <Card className="px-4">
             <CardHeader className="px-0">
@@ -201,47 +209,50 @@ export function FunnelClient({ clientId }: { clientId: string }) {
           </Card>
 
           {isEcommerce && (
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="flex flex-col gap-3">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Ecommerce
               </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="px-4">
-                  <CardContent className="px-0">
-                    <p className="text-xs font-medium text-muted-foreground">Product Views</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {formatNumber(mof.data.viewContentCount)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className="px-4">
-                  <CardContent className="px-0">
-                    <p className="text-xs font-medium text-muted-foreground">Add to Cart</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {formatNumber(mof.data.addToCartCount)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className="px-4">
-                  <CardContent className="px-0">
-                    <p className="text-xs font-medium text-muted-foreground">Checkout Initiated</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                      {formatNumber(mof.data.initiateCheckoutCount)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card className="px-4">
-                  <CardContent className="px-0">
-                    <p className="text-xs font-medium text-muted-foreground">Cart Abandonment</p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-2">
-                      {formatPercent(mof.data.cartAbandonmentRate)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {formatNumber(mof.data.abandonedCartCount)} carts, {formatCurrency(mof.data.abandonedCartValue)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
+              {(() => {
+                const dates = mof.data!.series.map((p) => p.date);
+                return (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <KpiTile
+                      label="Product Views"
+                      value={formatNumber(mof.data!.viewContentCount)}
+                      fromDate={mof.data!.from}
+                      color="var(--color-chart-4)"
+                      sparkline={mof.data!.series.map((p) => p.viewContentCount)}
+                      dates={dates}
+                      formatValue={formatNumber}
+                    />
+                    <KpiTile
+                      label="Add to Cart"
+                      value={formatNumber(mof.data!.addToCartCount)}
+                      fromDate={mof.data!.from}
+                      color="var(--color-chart-1)"
+                      sparkline={mof.data!.series.map((p) => p.addToCartCount)}
+                      dates={dates}
+                      formatValue={formatNumber}
+                    />
+                    <KpiTile
+                      label="Checkout Initiated"
+                      value={formatNumber(mof.data!.initiateCheckoutCount)}
+                      fromDate={mof.data!.from}
+                      color="var(--color-chart-3)"
+                      sparkline={mof.data!.series.map((p) => p.initiateCheckoutCount)}
+                      dates={dates}
+                      formatValue={formatNumber}
+                    />
+                    <KpiTile
+                      label="Cart Abandonment"
+                      value={formatPercent(mof.data!.cartAbandonmentRate)}
+                      fromDate={mof.data!.from}
+                      sublabel={`${formatNumber(mof.data!.abandonedCartCount)} carts, ${formatCurrency(mof.data!.abandonedCartValue)}`}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           )}
         </>
@@ -249,69 +260,143 @@ export function FunnelClient({ clientId }: { clientId: string }) {
 
       {stage === "bof" && bof.data && (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Lead → Buyer Rate</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {formatPercent(bof.data.leadToBuyerRate)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {formatNumber(bof.data.convertedLeads)} of {formatNumber(bof.data.totalLeads)} leads
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Avg Days to Convert</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {bof.data.avgDaysToConvert === null ? "-" : bof.data.avgDaysToConvert.toFixed(1)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Refund Rate</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-2">
-                  {formatPercent(bof.data.refundRate)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {formatNumber(bof.data.refundedOrders)} of {formatNumber(bof.data.totalOrders)} orders
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="px-4">
-              <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(bof.data.totalOrders)}</p>
-              </CardContent>
-            </Card>
-          </div>
+          {isEcomLike ? (
+            <>
+              {(() => {
+                const dates = bof.data!.series.map((p) => p.date);
+                const totalOrdersForRate = bof.data!.newCustomerOrders + bof.data!.returningCustomerOrders;
+                return (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <KpiTile
+                      label="Repeat Purchase Rate"
+                      value={formatPercent(bof.data!.repeatPurchaseRate)}
+                      fromDate={bof.data!.from}
+                      color="var(--color-chart-1)"
+                      sparkline={bof.data!.series.map((p) => p.repeatPurchaseRate)}
+                      dates={dates}
+                      formatValue={(v) => formatPercent(v)}
+                      sublabel={`${formatNumber(bof.data!.returningCustomerOrders)} of ${formatNumber(totalOrdersForRate)} orders`}
+                    />
+                    <KpiTile
+                      label="Avg Days: First Click to Purchase"
+                      value={
+                        bof.data!.avgDaysFirstClickToPurchase === null
+                          ? "-"
+                          : bof.data!.avgDaysFirstClickToPurchase.toFixed(1)
+                      }
+                      fromDate={bof.data!.from}
+                      color="var(--color-chart-3)"
+                    />
+                    <KpiTile
+                      label="Refund Rate"
+                      value={formatPercent(bof.data!.refundRate)}
+                      fromDate={bof.data!.from}
+                      color="var(--color-chart-2)"
+                      sparkline={bof.data!.series.map((p) => p.refundRate)}
+                      dates={dates}
+                      formatValue={(v) => formatPercent(v)}
+                      sublabel={`${formatNumber(bof.data!.refundedOrders)} of ${formatNumber(bof.data!.totalOrders)} orders`}
+                    />
+                    <KpiTile
+                      label="Total Orders"
+                      value={formatNumber(bof.data!.totalOrders)}
+                      fromDate={bof.data!.from}
+                      color="var(--color-chart-4)"
+                      sparkline={bof.data!.series.map((p) => p.totalOrders)}
+                      dates={dates}
+                      formatValue={formatNumber}
+                    />
+                  </div>
+                );
+              })()}
 
-          <Card className="px-4">
-            <CardHeader className="px-0">
-              <CardTitle className="text-sm">Lead → Buyer Conversion</CardTitle>
-            </CardHeader>
-            <CardContent className="px-0">
-              {bof.data.totalLeads > 0 ? (
-                <DonutChart
-                  centerValue={formatPercent(bof.data.leadToBuyerRate)}
-                  centerLabel={`${formatNumber(bof.data.convertedLeads)} of ${formatNumber(bof.data.totalLeads)}`}
-                  segments={[
-                    { key: "converted", label: "Converted", value: bof.data.convertedLeads, color: "var(--color-chart-1)" },
-                    {
-                      key: "remaining",
-                      label: "Not yet",
-                      value: Math.max(bof.data.totalLeads - bof.data.convertedLeads, 0),
-                      color: "var(--color-chart-2)",
-                    },
-                  ]}
-                />
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">No leads in this range yet.</p>
-              )}
-            </CardContent>
-          </Card>
+              <Card className="px-4">
+                <CardHeader className="px-0">
+                  <CardTitle className="text-sm">New vs. Returning Customers</CardTitle>
+                </CardHeader>
+                <CardContent className="px-0">
+                  {bof.data.newCustomerOrders + bof.data.returningCustomerOrders > 0 ? (
+                    <DonutChart
+                      centerValue={formatPercent(bof.data.repeatPurchaseRate)}
+                      centerLabel={`${formatNumber(bof.data.returningCustomerOrders)} of ${formatNumber(bof.data.newCustomerOrders + bof.data.returningCustomerOrders)} repeat`}
+                      segments={[
+                        { key: "new", label: "New customers", value: bof.data.newCustomerOrders, color: "var(--color-chart-4)" },
+                        { key: "returning", label: "Returning customers", value: bof.data.returningCustomerOrders, color: "var(--color-chart-1)" },
+                      ]}
+                    />
+                  ) : (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No orders in this range yet.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Lead → Buyer Rate</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {formatPercent(bof.data.leadToBuyerRate)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatNumber(bof.data.convertedLeads)} of {formatNumber(bof.data.totalLeads)} leads
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Avg Days to Convert</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                      {bof.data.avgDaysToConvert === null ? "-" : bof.data.avgDaysToConvert.toFixed(1)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Refund Rate</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-2">
+                      {formatPercent(bof.data.refundRate)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatNumber(bof.data.refundedOrders)} of {formatNumber(bof.data.totalOrders)} orders
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="px-4">
+                  <CardContent className="px-0">
+                    <p className="text-xs font-medium text-muted-foreground">Total Orders</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(bof.data.totalOrders)}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="px-4">
+                <CardHeader className="px-0">
+                  <CardTitle className="text-sm">Lead → Buyer Conversion</CardTitle>
+                </CardHeader>
+                <CardContent className="px-0">
+                  {bof.data.totalLeads > 0 ? (
+                    <DonutChart
+                      centerValue={formatPercent(bof.data.leadToBuyerRate)}
+                      centerLabel={`${formatNumber(bof.data.convertedLeads)} of ${formatNumber(bof.data.totalLeads)}`}
+                      segments={[
+                        { key: "converted", label: "Converted", value: bof.data.convertedLeads, color: "var(--color-chart-1)" },
+                        {
+                          key: "remaining",
+                          label: "Not yet",
+                          value: Math.max(bof.data.totalLeads - bof.data.convertedLeads, 0),
+                          color: "var(--color-chart-2)",
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <p className="py-8 text-center text-sm text-muted-foreground">No leads in this range yet.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           <Card className="px-0">
             <CardHeader className="px-4">

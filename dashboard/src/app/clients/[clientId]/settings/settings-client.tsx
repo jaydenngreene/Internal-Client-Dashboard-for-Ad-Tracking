@@ -716,14 +716,33 @@ function IntegrationRow({
   clientId,
   def,
   connected,
+  savedConfig,
 }: {
   clientId: string;
   def: IntegrationDef;
   connected: boolean;
+  savedConfig: Record<string, unknown> | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  // Seeded once from whatever the API already returned for this integration — not
+  // secret fields (the API never sends those back, see clients.ts's redaction on
+  // GET /integrations), just everything else: shop domain, ad account id, currency,
+  // etc. Re-seeded whenever the row is opened, so it always reflects the latest
+  // save rather than whatever was open the very first time this component mounted.
   const [values, setValues] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
+
+  const openRow = () => {
+    if (!open) {
+      const seeded: Record<string, string> = {};
+      for (const f of def.fields) {
+        const saved = savedConfig?.[f.key];
+        if (f.type !== "password" && typeof saved === "string") seeded[f.key] = saved;
+      }
+      setValues(seeded);
+    }
+    setOpen((o) => !o);
+  };
 
   const mutation = useMutation({
     mutationFn: () => saveIntegration(clientId, def.platform, values),
@@ -734,13 +753,19 @@ function IntegrationRow({
     },
   });
 
-  const requiredFilled = def.fields.every((f) => f.optional || values[f.key]?.trim());
+  // A password field left blank is fine once already connected — the backend falls
+  // back to whatever secret is already stored (see resolveIntegrationFields in
+  // clients.ts) rather than requiring it to be re-pasted just to change some other
+  // field. Only a first-time connection actually needs it typed in.
+  const requiredFilled = def.fields.every(
+    (f) => f.optional || values[f.key]?.trim() || (f.type === "password" && connected)
+  );
 
   return (
     <div className="rounded-lg border border-border">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={openRow}
         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
       >
         <span className="font-medium">{def.label}</span>
@@ -753,20 +778,29 @@ function IntegrationRow({
         <div className="flex flex-col gap-3 border-t border-border p-3">
           {def.helpText && <p className="text-xs text-muted-foreground">{def.helpText}</p>}
           <div className="flex flex-wrap gap-2">
-            {def.fields.map((f) => (
-              <div key={f.key} className="flex flex-col gap-1">
-                <FieldLabel>
-                  {f.label}
-                  {f.optional && <span className="normal-case"> (optional)</span>}
-                </FieldLabel>
-                <Input
-                  className="w-56"
-                  type={f.type === "password" ? "password" : "text"}
-                  value={values[f.key] ?? ""}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                />
-              </div>
-            ))}
+            {def.fields.map((f) => {
+              // Password fields are always stripped from what the API sends back
+              // (see the GET /integrations redaction), so "connected" is the only
+              // signal available that one is already saved — the value itself
+              // never round-trips here, by design.
+              const isSavedSecret = f.type === "password" && connected;
+              return (
+                <div key={f.key} className="flex flex-col gap-1">
+                  <FieldLabel>
+                    {f.label}
+                    {f.optional && <span className="normal-case"> (optional)</span>}
+                  </FieldLabel>
+                  <Input
+                    className="w-56"
+                    type={f.type === "password" ? "password" : "text"}
+                    placeholder={f.type === "password" && connected ? "Saved — leave blank to keep" : undefined}
+                    value={values[f.key] ?? ""}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  />
+                  {isSavedSecret && <p className="text-[11px] text-muted-foreground">Currently saved</p>}
+                </div>
+              );
+            })}
           </div>
           {mutation.isError && <p className="text-xs text-status-critical">Failed to save. Check the values and try again.</p>}
           <div>
@@ -786,6 +820,7 @@ function IntegrationsSection({ clientId }: { clientId: string }) {
     queryFn: () => getIntegrations(clientId),
   });
   const connectedPlatforms = new Set((integrations ?? []).map((i) => i.platform.replace(/_/g, "-")));
+  const configByPlatform = new Map((integrations ?? []).map((i) => [i.platform.replace(/_/g, "-"), i.config]));
 
   const categories = Array.from(new Set(INTEGRATIONS.map((i) => i.category)));
 
@@ -807,6 +842,7 @@ function IntegrationsSection({ clientId }: { clientId: string }) {
                     clientId={clientId}
                     def={def}
                     connected={connectedPlatforms.has(def.platform)}
+                    savedConfig={configByPlatform.get(def.platform)}
                   />
                 ))}
               </div>

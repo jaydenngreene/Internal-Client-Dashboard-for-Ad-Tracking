@@ -22,6 +22,49 @@ async function upsertIntegration(clientId: string, platform: string, config: Rec
   return rows[0]
 }
 
+// Keys GET /clients/:id/integrations strips before ever sending config back to the
+// browser (see that route below) — the edit form can't pre-fill what it never
+// received, so it submits these blank on an edit that only touches an unrelated
+// field (e.g. changing an ad account's currency). Without this, that blank would
+// overwrite — and silently destroy — the real saved secret. Falls back to whatever
+// is already stored whenever the incoming value is blank; a real, non-blank value
+// always wins, so actually replacing a secret still works exactly as before.
+const SECRET_KEYS = new Set([
+  'webhook_secret',
+  'access_token',
+  'refresh_token',
+  'client_secret',
+  'signature_key',
+  'auth_token',
+  'api_key',
+  'service_account_key',
+])
+
+async function resolveIntegrationFields(
+  clientId: string,
+  platform: string,
+  incoming: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const hasBlankSecret = Object.entries(incoming).some(
+    ([key, value]) => SECRET_KEYS.has(key) && (value === undefined || value === '')
+  )
+  if (!hasBlankSecret) return incoming
+
+  const { rows } = await db.query(`SELECT config FROM client_integrations WHERE client_id = $1 AND platform = $2`, [
+    clientId,
+    platform,
+  ])
+  const existing: Record<string, unknown> = rows[0]?.config ?? {}
+
+  const resolved: Record<string, unknown> = { ...incoming }
+  for (const [key, value] of Object.entries(incoming)) {
+    if (SECRET_KEYS.has(key) && (value === undefined || value === '') && existing[key]) {
+      resolved[key] = existing[key]
+    }
+  }
+  return resolved
+}
+
 export async function clientRoutes(app: FastifyInstance) {
   // Create a new client
   app.post<{
@@ -286,21 +329,16 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   }>('/clients/:id/integrations/shopify', async (req, reply) => {
     const { id } = req.params
-    const { webhook_secret, shop_domain } = req.body
+    const fields = await resolveIntegrationFields(id, 'shopify', {
+      webhook_secret: req.body.webhook_secret,
+      shop_domain: req.body.shop_domain,
+    })
 
-    if (!webhook_secret || !shop_domain) {
+    if (!fields.webhook_secret || !fields.shop_domain) {
       return reply.code(400).send({ error: 'webhook_secret and shop_domain required' })
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO client_integrations (client_id, platform, config)
-       VALUES ($1, 'shopify', $2)
-       ON CONFLICT (client_id, platform)
-       DO UPDATE SET config = EXCLUDED.config
-       RETURNING *`,
-      [id, JSON.stringify({ webhook_secret, shop_domain })]
-    )
-    return reply.code(200).send(rows[0])
+    return reply.code(200).send(await upsertIntegration(id, 'shopify', fields))
   })
 
   // Save or update a Stripe integration for a client
@@ -311,21 +349,13 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   }>('/clients/:id/integrations/stripe', async (req, reply) => {
     const { id } = req.params
-    const { webhook_secret } = req.body
+    const fields = await resolveIntegrationFields(id, 'stripe', { webhook_secret: req.body.webhook_secret })
 
-    if (!webhook_secret) {
+    if (!fields.webhook_secret) {
       return reply.code(400).send({ error: 'webhook_secret required' })
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO client_integrations (client_id, platform, config)
-       VALUES ($1, 'stripe', $2)
-       ON CONFLICT (client_id, platform)
-       DO UPDATE SET config = EXCLUDED.config
-       RETURNING *`,
-      [id, JSON.stringify({ webhook_secret })]
-    )
-    return reply.code(200).send(rows[0])
+    return reply.code(200).send(await upsertIntegration(id, 'stripe', fields))
   })
 
   // Save or update a Facebook Ads integration for a client
@@ -339,21 +369,19 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/facebook-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, ad_account_id, currency } = req.body
+    const fields = await resolveIntegrationFields(id, 'facebook_ads', {
+      access_token,
+      ad_account_id,
+      currency: currency?.toUpperCase(),
+    })
 
-    if (!access_token || !ad_account_id) {
+    if (!fields.access_token || !fields.ad_account_id) {
       return reply.code(400).send({ error: 'access_token and ad_account_id required' })
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO client_integrations (client_id, platform, config)
-       VALUES ($1, 'facebook_ads', $2)
-       ON CONFLICT (client_id, platform)
-       DO UPDATE SET config = EXCLUDED.config
-       RETURNING *`,
-      [id, JSON.stringify({ access_token, ad_account_id, currency: currency?.toUpperCase() })]
-    )
-    backfillIntegration(id, 'facebook_ads', rows[0].config)
-    return reply.code(200).send(rows[0])
+    const saved = await upsertIntegration(id, 'facebook_ads', fields)
+    backfillIntegration(id, 'facebook_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Google Ads integration for a client.
@@ -375,31 +403,22 @@ export async function clientRoutes(app: FastifyInstance) {
     const { id } = req.params
     const { customer_id, login_customer_id, refresh_token, conversion_action_purchase, conversion_action_lead, currency } =
       req.body
+    const fields = await resolveIntegrationFields(id, 'google_ads', {
+      customer_id,
+      login_customer_id,
+      refresh_token,
+      conversion_action_purchase,
+      conversion_action_lead,
+      currency: currency?.toUpperCase(),
+    })
 
-    if (!customer_id) {
+    if (!fields.customer_id) {
       return reply.code(400).send({ error: 'customer_id required' })
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO client_integrations (client_id, platform, config)
-       VALUES ($1, 'google_ads', $2)
-       ON CONFLICT (client_id, platform)
-       DO UPDATE SET config = EXCLUDED.config
-       RETURNING *`,
-      [
-        id,
-        JSON.stringify({
-          customer_id,
-          login_customer_id,
-          refresh_token,
-          conversion_action_purchase,
-          conversion_action_lead,
-          currency: currency?.toUpperCase(),
-        }),
-      ]
-    )
-    backfillIntegration(id, 'google_ads', rows[0].config)
-    return reply.code(200).send(rows[0])
+    const saved = await upsertIntegration(id, 'google_ads', fields)
+    backfillIntegration(id, 'google_ads', saved.config)
+    return reply.code(200).send(saved)
   })
 
   // Save or update a Facebook Conversions API (CAPI) integration for a client — Step 8.
@@ -413,21 +432,16 @@ export async function clientRoutes(app: FastifyInstance) {
     }
   }>('/clients/:id/integrations/facebook-capi', async (req, reply) => {
     const { id } = req.params
-    const { pixel_id, access_token } = req.body
+    const fields = await resolveIntegrationFields(id, 'facebook_capi', {
+      pixel_id: req.body.pixel_id,
+      access_token: req.body.access_token,
+    })
 
-    if (!pixel_id || !access_token) {
+    if (!fields.pixel_id || !fields.access_token) {
       return reply.code(400).send({ error: 'pixel_id and access_token required' })
     }
 
-    const { rows } = await db.query(
-      `INSERT INTO client_integrations (client_id, platform, config)
-       VALUES ($1, 'facebook_capi', $2)
-       ON CONFLICT (client_id, platform)
-       DO UPDATE SET config = EXCLUDED.config
-       RETURNING *`,
-      [id, JSON.stringify({ pixel_id, access_token })]
-    )
-    return reply.code(200).send(rows[0])
+    return reply.code(200).send(await upsertIntegration(id, 'facebook_capi', fields))
   })
 
   // Save or update a Bing/Microsoft Advertising integration for a client — Step 11.
@@ -439,10 +453,16 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/bing-ads', async (req, reply) => {
     const { id } = req.params
     const { customer_id, account_id, refresh_token, currency } = req.body
-    if (!customer_id || !account_id || !refresh_token) {
+    const fields = await resolveIntegrationFields(id, 'bing_ads', {
+      customer_id,
+      account_id,
+      refresh_token,
+      currency: currency?.toUpperCase(),
+    })
+    if (!fields.customer_id || !fields.account_id || !fields.refresh_token) {
       return reply.code(400).send({ error: 'customer_id, account_id, and refresh_token required' })
     }
-    const saved = await upsertIntegration(id, 'bing_ads', { customer_id, account_id, refresh_token, currency: currency?.toUpperCase() })
+    const saved = await upsertIntegration(id, 'bing_ads', fields)
     backfillIntegration(id, 'bing_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -456,12 +476,11 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/twilio', async (req, reply) => {
     const { id } = req.params
     const { account_sid, auth_token, voice_intelligence_service_sid } = req.body
-    if (!account_sid || !auth_token) {
+    const fields = await resolveIntegrationFields(id, 'twilio', { account_sid, auth_token, voice_intelligence_service_sid })
+    if (!fields.account_sid || !fields.auth_token) {
       return reply.code(400).send({ error: 'account_sid and auth_token required' })
     }
-    return reply
-      .code(200)
-      .send(await upsertIntegration(id, 'twilio', { account_sid, auth_token, voice_intelligence_service_sid }))
+    return reply.code(200).send(await upsertIntegration(id, 'twilio', fields))
   })
 
   // Alert delivery config (Step 32) — any subset of Slack/email/SMS. SMS reuses
@@ -527,10 +546,11 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/paypal', async (req, reply) => {
     const { id } = req.params
     const { client_id, client_secret, webhook_id, sandbox } = req.body
-    if (!client_id || !client_secret || !webhook_id) {
+    const fields = await resolveIntegrationFields(id, 'paypal', { client_id, client_secret, webhook_id, sandbox })
+    if (!fields.client_id || !fields.client_secret || !fields.webhook_id) {
       return reply.code(400).send({ error: 'client_id, client_secret, and webhook_id required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'paypal', { client_id, client_secret, webhook_id, sandbox }))
+    return reply.code(200).send(await upsertIntegration(id, 'paypal', fields))
   })
 
   // Save or update a Square integration — Step 9.
@@ -540,13 +560,14 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/square', async (req, reply) => {
     const { id } = req.params
     const { signature_key, notification_url } = req.body
-    if (!signature_key || !notification_url) {
+    const fields = await resolveIntegrationFields(id, 'square', { signature_key, notification_url })
+    if (!fields.signature_key || !fields.notification_url) {
       return reply.code(400).send({ error: 'signature_key and notification_url required' })
     }
-    if (!isValidUrl(notification_url)) {
+    if (typeof fields.notification_url !== 'string' || !isValidUrl(fields.notification_url)) {
       return reply.code(400).send({ error: 'notification_url must be a valid http(s) URL' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'square', { signature_key, notification_url }))
+    return reply.code(200).send(await upsertIntegration(id, 'square', fields))
   })
 
   // Save or update a GoHighLevel integration — Step 9. See routes/webhooks/gohighlevel.ts
@@ -556,11 +577,11 @@ export async function clientRoutes(app: FastifyInstance) {
     Body: { webhook_secret: string }
   }>('/clients/:id/integrations/gohighlevel', async (req, reply) => {
     const { id } = req.params
-    const { webhook_secret } = req.body
-    if (!webhook_secret) {
+    const fields = await resolveIntegrationFields(id, 'gohighlevel', { webhook_secret: req.body.webhook_secret })
+    if (!fields.webhook_secret) {
       return reply.code(400).send({ error: 'webhook_secret required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', { webhook_secret }))
+    return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', fields))
   })
 
   // Save or update a TikTok Ads integration — Step 16 (signals) / Step 19 (cost sync)
@@ -572,10 +593,16 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/tiktok-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, advertiser_id, pixel_code, currency } = req.body
-    if (!access_token || !advertiser_id || !pixel_code) {
+    const fields = await resolveIntegrationFields(id, 'tiktok_ads', {
+      access_token,
+      advertiser_id,
+      pixel_code,
+      currency: currency?.toUpperCase(),
+    })
+    if (!fields.access_token || !fields.advertiser_id || !fields.pixel_code) {
       return reply.code(400).send({ error: 'access_token, advertiser_id, and pixel_code required' })
     }
-    const saved = await upsertIntegration(id, 'tiktok_ads', { access_token, advertiser_id, pixel_code, currency: currency?.toUpperCase() })
+    const saved = await upsertIntegration(id, 'tiktok_ads', fields)
     backfillIntegration(id, 'tiktok_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -587,10 +614,16 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/snapchat-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, pixel_id, ad_account_id, currency } = req.body
-    if (!access_token || !pixel_id || !ad_account_id) {
+    const fields = await resolveIntegrationFields(id, 'snapchat_ads', {
+      access_token,
+      pixel_id,
+      ad_account_id,
+      currency: currency?.toUpperCase(),
+    })
+    if (!fields.access_token || !fields.pixel_id || !fields.ad_account_id) {
       return reply.code(400).send({ error: 'access_token, pixel_id, and ad_account_id required' })
     }
-    const saved = await upsertIntegration(id, 'snapchat_ads', { access_token, pixel_id, ad_account_id, currency: currency?.toUpperCase() })
+    const saved = await upsertIntegration(id, 'snapchat_ads', fields)
     backfillIntegration(id, 'snapchat_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -602,10 +635,15 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/pinterest-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, ad_account_id, currency } = req.body
-    if (!access_token || !ad_account_id) {
+    const fields = await resolveIntegrationFields(id, 'pinterest_ads', {
+      access_token,
+      ad_account_id,
+      currency: currency?.toUpperCase(),
+    })
+    if (!fields.access_token || !fields.ad_account_id) {
       return reply.code(400).send({ error: 'access_token and ad_account_id required' })
     }
-    const saved = await upsertIntegration(id, 'pinterest_ads', { access_token, ad_account_id, currency: currency?.toUpperCase() })
+    const saved = await upsertIntegration(id, 'pinterest_ads', fields)
     backfillIntegration(id, 'pinterest_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -628,16 +666,17 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/linkedin-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, account_id, conversion_id_purchase, conversion_id_lead, currency } = req.body
-    if (!access_token) {
-      return reply.code(400).send({ error: 'access_token required' })
-    }
-    const saved = await upsertIntegration(id, 'linkedin_ads', {
+    const fields = await resolveIntegrationFields(id, 'linkedin_ads', {
       access_token,
       account_id,
       currency: currency?.toUpperCase(),
       conversion_id_purchase,
       conversion_id_lead,
     })
+    if (!fields.access_token) {
+      return reply.code(400).send({ error: 'access_token required' })
+    }
+    const saved = await upsertIntegration(id, 'linkedin_ads', fields)
     backfillIntegration(id, 'linkedin_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -649,10 +688,11 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/reddit-ads', async (req, reply) => {
     const { id } = req.params
     const { access_token, account_id, currency } = req.body
-    if (!access_token || !account_id) {
+    const fields = await resolveIntegrationFields(id, 'reddit_ads', { access_token, account_id, currency: currency?.toUpperCase() })
+    if (!fields.access_token || !fields.account_id) {
       return reply.code(400).send({ error: 'access_token and account_id required' })
     }
-    const saved = await upsertIntegration(id, 'reddit_ads', { access_token, account_id, currency: currency?.toUpperCase() })
+    const saved = await upsertIntegration(id, 'reddit_ads', fields)
     backfillIntegration(id, 'reddit_ads', saved.config)
     return reply.code(200).send(saved)
   })
@@ -664,11 +704,11 @@ export async function clientRoutes(app: FastifyInstance) {
     Body: { webhook_secret: string }
   }>('/clients/:id/integrations/customers-ai', async (req, reply) => {
     const { id } = req.params
-    const { webhook_secret } = req.body
-    if (!webhook_secret) {
+    const fields = await resolveIntegrationFields(id, 'customers_ai', { webhook_secret: req.body.webhook_secret })
+    if (!fields.webhook_secret) {
       return reply.code(400).send({ error: 'webhook_secret required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'customers_ai', { webhook_secret }))
+    return reply.code(200).send(await upsertIntegration(id, 'customers_ai', fields))
   })
 
   // Save or update a BigQuery warehouse-export integration — Step 44. The dataset
@@ -680,15 +720,16 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/bigquery', async (req, reply) => {
     const { id } = req.params
     const { project_id, dataset_id, service_account_key } = req.body
-    if (!project_id || !dataset_id || !service_account_key) {
+    const fields = await resolveIntegrationFields(id, 'bigquery', { project_id, dataset_id, service_account_key })
+    if (!fields.project_id || !fields.dataset_id || typeof fields.service_account_key !== 'string') {
       return reply.code(400).send({ error: 'project_id, dataset_id, and service_account_key required' })
     }
     try {
-      JSON.parse(service_account_key)
+      JSON.parse(fields.service_account_key)
     } catch {
       return reply.code(400).send({ error: 'service_account_key must be valid JSON (the full key file contents)' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'bigquery', { project_id, dataset_id, service_account_key }))
+    return reply.code(200).send(await upsertIntegration(id, 'bigquery', fields))
   })
 
   // Save or update the Klaviyo integration used by the Step 12 remarketing agent's
@@ -700,10 +741,11 @@ export async function clientRoutes(app: FastifyInstance) {
   }>('/clients/:id/integrations/klaviyo', async (req, reply) => {
     const { id } = req.params
     const { api_key, list_id } = req.body
-    if (!api_key || !list_id) {
+    const fields = await resolveIntegrationFields(id, 'klaviyo', { api_key, list_id })
+    if (!fields.api_key || !fields.list_id) {
       return reply.code(400).send({ error: 'api_key and list_id required' })
     }
-    return reply.code(200).send(await upsertIntegration(id, 'klaviyo', { api_key, list_id }))
+    return reply.code(200).send(await upsertIntegration(id, 'klaviyo', fields))
   })
 
   // Step 15 — manual identity-link override. Not upsertIntegration() — identity

@@ -56,6 +56,7 @@ export function SavedViews({
   const [views, setViews] = useState<SavedView[]>([]);
   const [nameDraft, setNameDraft] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setViews(readViews());
@@ -66,8 +67,18 @@ export function SavedViews({
     function onClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   function save() {
@@ -88,9 +99,12 @@ export function SavedViews({
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Saved views"
+        aria-haspopup="menu"
+        aria-expanded={open}
         title="Saved views"
         className={cn(
           "flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -100,7 +114,7 @@ export function SavedViews({
         <Bookmark className="size-4" />
       </button>
       {open && (
-        <div className="absolute right-0 top-10 z-40 w-64 rounded-md border border-border bg-popover p-2 shadow-lg">
+        <div role="menu" className="absolute right-0 top-10 z-40 w-64 rounded-md border border-border bg-popover p-2 shadow-lg">
           <p className="px-1 pb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Saved views
           </p>

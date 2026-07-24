@@ -27,6 +27,7 @@ export function NotificationsBell() {
   const clientId = params?.clientId;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const { data } = useQuery({
     queryKey: ["notifications-summary", clientId],
@@ -40,8 +41,18 @@ export function NotificationsBell() {
     function onClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   const total = data?.total ?? 0;
@@ -49,9 +60,12 @@ export function NotificationsBell() {
   return (
     <div className="relative" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={total > 0 ? `Notifications (${total})` : "Notifications"}
+        aria-haspopup="menu"
+        aria-expanded={open}
         title="Notifications"
         className={cn(
           "relative flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -66,7 +80,7 @@ export function NotificationsBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-10 z-40 w-72 rounded-md border border-border bg-popover p-2 shadow-lg">
+        <div role="menu" className="absolute right-0 top-10 z-40 w-72 rounded-md border border-border bg-popover p-2 shadow-lg">
           <p className="px-1 pb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Needs review
           </p>
@@ -79,6 +93,7 @@ export function NotificationsBell() {
                   key={c.key}
                   href={`/clients/${clientId}/${c.href}`}
                   onClick={() => setOpen(false)}
+                  role="menuitem"
                   className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                 >
                   {c.label}

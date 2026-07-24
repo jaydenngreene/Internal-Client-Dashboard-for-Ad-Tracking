@@ -670,10 +670,17 @@ export async function reportRoutes(app: FastifyInstance) {
             `SELECT COUNT(*) AS total FROM pageviews WHERE client_id = $1 AND timestamp::date BETWEEN $2 AND $3`,
             [clientId, from, to]
           ),
+          // "Engaged" means the visitor looked at more than just the landing page -
+          // requiring 2+ pageviews, not merely 1. A session can't exist without at
+          // least one pageview at all, so counting "any pageview" made this read
+          // ~100% for virtually any real traffic and never actually distinguished
+          // engagement level.
           db.query<{ total: string }>(
-            `SELECT COUNT(DISTINCT pv.session_id) AS total
-             FROM pageviews pv JOIN sessions s ON s.id = pv.session_id
-             WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3`,
+            `SELECT COUNT(*) AS total FROM (
+               SELECT pv.session_id FROM pageviews pv JOIN sessions s ON s.id = pv.session_id
+               WHERE pv.client_id = $1 AND s.started_at::date BETWEEN $2 AND $3
+               GROUP BY pv.session_id HAVING COUNT(*) > 1
+             ) engaged`,
             [clientId, from, to]
           ),
           db.query<{ event_type: string; total: string }>(

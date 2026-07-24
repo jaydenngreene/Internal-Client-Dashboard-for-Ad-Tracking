@@ -1,4 +1,4 @@
-import Fastify, { FastifyError } from 'fastify'
+import Fastify, { FastifyError, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
@@ -62,32 +62,27 @@ const app = Fastify({ logger: true, trustProxy: true })
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim())
 
-// Origin-restricted CORS — for routes only ever called from this app's own
-// dashboard frontend (the Vercel deploy in ALLOWED_ORIGINS). Kept as its own
-// object so it can be registered in more than one encapsulated scope below,
-// since a Fastify plugin registered on the root `app` applies to every route
-// including ones that need the opposite (unrestricted) policy — see
-// pixelCorsOptions just below for why that matters.
-const dashboardCorsOptions = {
-  origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-      cb(null, true)
-    } else {
-      cb(new Error('Not allowed by CORS'), false)
-    }
-  },
-  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-}
+// @fastify/cors is wrapped with fastify-plugin (breaks encapsulation on
+// purpose, so its hooks reach every route) — registering it more than once
+// across sibling scopes makes Fastify's plugin loader treat the second
+// registration as re-entering the same already-booting plugin, and it hangs
+// until FST_ERR_PLUGIN_TIMEOUT kills the whole server. So: exactly ONE
+// registration, permissive (reflects any origin) — this is what the pixel
+// needs, since it's authenticated by pixel_key and runs on client websites
+// that can never be enumerated in advance, not by origin trust. Restricting
+// specific routes to just this app's own dashboard frontend is instead a
+// plain onRequest hook below (requireDashboardOrigin) - a normal function,
+// not a plugin, so it can be attached to as many scopes as needed with none
+// of the above risk.
+app.register(cors, { origin: true, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] })
 
-// Unrestricted CORS — for the pixel's own tracking calls (pageview, identify,
-// conversion, cart events, tag, DNI). These are meant to run on ANY client's
-// website, which is never known in advance, so an origin allowlist can't work
-// here the way it does for the dashboard — that's the whole premise of an
-// embeddable pixel. Security for these routes comes from the per-client
-// pixel_key each call carries, not from origin trust.
-const pixelCorsOptions = {
-  origin: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
+function requireDashboardOrigin(req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void) {
+  const origin = req.headers.origin
+  if (origin && !allowedOrigins.includes(origin) && !allowedOrigins.includes('*')) {
+    reply.code(403).send({ error: 'Not allowed by CORS' })
+    return
+  }
+  done()
 }
 
 app.register(helmet)
@@ -125,23 +120,18 @@ process.on('uncaughtException', (err) => Sentry.captureException(err))
 app.get('/health', async () => ({ status: 'ok' }))
 
 // Pixel-facing routes — called via fetch/sendBeacon from arbitrary client
-// websites, authenticated by pixel_key rather than by origin. Needs the
-// unrestricted CORS policy (see pixelCorsOptions above) or every one of these
-// silently fails its preflight the moment it's called from a domain that was
-// never added to ALLOWED_ORIGINS — which is every new client's site by default.
-app.register(async (instance) => {
-  instance.register(cors, pixelCorsOptions)
-  instance.register(pageviewRoutes)
-  instance.register(identifyRoutes)
-  instance.register(conversionRoutes)
-  instance.register(eventRoutes)
-  instance.register(trackTagRoutes)
-  instance.register(dniRoutes)
-})
+// websites, authenticated by pixel_key rather than by origin. Covered by the
+// permissive global cors registration above; no per-scope hook needed.
+app.register(pageviewRoutes)
+app.register(identifyRoutes)
+app.register(conversionRoutes)
+app.register(eventRoutes)
+app.register(trackTagRoutes)
+app.register(dniRoutes)
 
 // Server-to-server (webhooks) or script-tag/redirect-loaded routes — neither
 // is subject to browser CORS enforcement in the first place (no fetch/XHR
-// preflight involved), so no cors plugin is needed here at all.
+// preflight involved).
 app.register(pixelAssetRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
@@ -157,7 +147,7 @@ app.register(shopifyAppRoutes)
 // Dashboard-called routes (login/register, the public share report) — kept on
 // the origin-restricted policy, unchanged from before this split.
 app.register(async (instance) => {
-  instance.register(cors, dashboardCorsOptions)
+  instance.addHook('onRequest', requireDashboardOrigin)
   instance.register(authRoutes)
   instance.register(publicShareRoutes)
 })
@@ -169,7 +159,7 @@ app.register(async (instance) => {
 // ever runs. See lib/ownership.ts for the full per-route resolver table.
 app.register(
   async (instance) => {
-    instance.register(cors, dashboardCorsOptions)
+    instance.addHook('onRequest', requireDashboardOrigin)
     instance.addHook('preHandler', authenticate)
     instance.addHook('preHandler', requireOwnership)
     // Step 54 — generic audit logging: every mutation (non-GET) that succeeded
@@ -216,7 +206,7 @@ app.register(
 // through the (unauthenticated, internal-only) dashboard surface above.
 app.register(
   async (instance) => {
-    instance.register(cors, dashboardCorsOptions)
+    instance.addHook('onRequest', requireDashboardOrigin)
     instance.addHook('onRequest', async (req, reply) => {
       const expected = process.env.API_SECRET
       const header = req.headers.authorization

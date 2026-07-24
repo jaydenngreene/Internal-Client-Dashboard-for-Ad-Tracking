@@ -2,6 +2,8 @@ import { db } from '../db'
 import { sendConversionSignals } from './conversionSignals'
 import { dispatchEvent } from './outboundWebhooks'
 import { convertToBaseCurrency, getClientCurrency } from './currency'
+import { parseAdParamsFromLandingSite } from './session'
+import { resolveVisitor } from './visitorResolution'
 
 export interface NormalizedConversion {
   email: string
@@ -19,6 +21,9 @@ export interface NormalizedConversion {
   // historical CSV importer sets this, so backfilled orders land on their real
   // date instead of the moment they were uploaded.
   purchased_at?: Date | string | null
+  // Shopify order's `landing_site` — attribution fallback when our own session
+  // tracking finds nothing for this email (see recordPurchase below).
+  landing_site?: string | null
 }
 
 type AttributionModel = 'first_click' | 'last_click' | 'linear' | 'time_decay' | 'u_shaped'
@@ -89,20 +94,66 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
     [clientId, email]
   )
-  if (identityRows.length === 0) return true // no ad history to attribute
 
-  const visitorId = identityRows[0].visitor_id
+  let sessionRows: TouchSession[] = []
+  if (identityRows.length > 0) {
+    const visitorId = identityRows[0].visitor_id
+    const { rows } = await db.query<TouchSession>(
+      `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid, started_at
+       FROM sessions
+       WHERE visitor_id = $1
+         AND started_at >= $2::timestamptz - INTERVAL '90 days'
+         AND started_at <= $2::timestamptz
+       ORDER BY started_at ASC`,
+      [visitorId, purchaseTime]
+    )
+    sessionRows = rows
+  }
 
-  const { rows: sessionRows } = await db.query<TouchSession>(
-    `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid, started_at
-     FROM sessions
-     WHERE visitor_id = $1
-       AND started_at >= $2::timestamptz - INTERVAL '90 days'
-       AND started_at <= $2::timestamptz
-     ORDER BY started_at ASC`,
-    [visitorId, purchaseTime]
-  )
-  if (sessionRows.length === 0) return true
+  // Fallback (2026-07-25): confirmed live that Shopify's checkout Web Pixel
+  // sandbox doesn't reliably return the same cookie the storefront pixel set
+  // (two separate test orders, different browsers/incognito state, identical
+  // stale visitor id both times) — so /track/identify from checkout often
+  // links the wrong visitor, leaving real ad-driven orders unattributed even
+  // with everything installed correctly. Shopify tracks the customer's actual
+  // first landing page itself, independent of any pixel — parsing UTM/click-ids
+  // out of that gives a real single-touch attribution when our own tracking
+  // came up empty, without depending on the broken cookie hop at all.
+  if (sessionRows.length === 0 && conv.landing_site) {
+    const adParams = parseAdParamsFromLandingSite(conv.landing_site)
+    if (adParams) {
+      const fallbackVisitorId = await resolveVisitor({
+        clientId,
+        anonymousId: `shopify-landing-site:${conv.order_id ?? purchaseId}`,
+        ip: null,
+        userAgent: null,
+      })
+      const { rows } = await db.query<TouchSession>(
+        `INSERT INTO sessions
+           (client_id, visitor_id, fbclid, gclid, ttclid, msclkid, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_page, started_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid, started_at`,
+        [
+          clientId,
+          fallbackVisitorId,
+          adParams.fbclid ?? null,
+          adParams.gclid ?? null,
+          adParams.ttclid ?? null,
+          adParams.msclkid ?? null,
+          adParams.utm_source ?? null,
+          adParams.utm_medium ?? null,
+          adParams.utm_campaign ?? null,
+          adParams.utm_content ?? null,
+          adParams.utm_term ?? null,
+          adParams.landing_page ?? null,
+          purchaseTime,
+        ]
+      )
+      sessionRows = rows
+    }
+  }
+
+  if (sessionRows.length === 0) return true // no ad history to attribute
 
   const { rows: clientRows } = await db.query<{ attribution_model: AttributionModel }>(
     'SELECT attribution_model FROM clients WHERE id = $1',

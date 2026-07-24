@@ -2,7 +2,7 @@ import { db } from '../db'
 import { lookupGeo } from './geo'
 import { detectInvalidTraffic } from './botDetection'
 
-interface AdParams {
+export interface AdParams {
   fbclid?: string
   gclid?: string
   ttclid?: string
@@ -14,6 +14,37 @@ interface AdParams {
   utm_term?: string
   landing_page?: string
   referrer?: string
+}
+
+// Shopify tracks each order's `landing_site` (the first page the customer ever
+// visited this store on, e.g. "/products/foo?fbclid=...&utm_source=facebook")
+// itself, via its own first-party cookie - independent of our pixel entirely.
+// Useful as an attribution fallback when our own session tracking comes up
+// empty (2026-07-25: found live that Shopify's checkout Web Pixel sandbox
+// doesn't reliably return the same visitor cookie the storefront pixel set,
+// so identity linking silently fails for real orders even with everything
+// installed correctly). `landing_site` is a relative path+query, not an
+// absolute URL - reject anything with no query string before it even gets here.
+export function parseAdParamsFromLandingSite(landingSite: string | null | undefined): AdParams | null {
+  if (!landingSite) return null
+  const queryIndex = landingSite.indexOf('?')
+  if (queryIndex === -1) return null
+
+  const params = new URLSearchParams(landingSite.slice(queryIndex + 1))
+  const adParams: AdParams = {
+    fbclid: params.get('fbclid') ?? undefined,
+    gclid: params.get('gclid') ?? undefined,
+    ttclid: params.get('ttclid') ?? undefined,
+    msclkid: params.get('msclkid') ?? undefined,
+    utm_source: params.get('utm_source') ?? undefined,
+    utm_medium: params.get('utm_medium') ?? undefined,
+    utm_campaign: params.get('utm_campaign') ?? undefined,
+    utm_content: params.get('utm_content') ?? undefined,
+    utm_term: params.get('utm_term') ?? undefined,
+    landing_page: landingSite,
+  }
+  const hasAdData = adParams.fbclid || adParams.gclid || adParams.ttclid || adParams.msclkid || adParams.utm_source
+  return hasAdData ? adParams : null
 }
 
 // Creates a new ad session when this hit carries ad click data, otherwise attaches to

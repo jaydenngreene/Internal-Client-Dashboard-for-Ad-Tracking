@@ -359,7 +359,7 @@ export async function reportRoutes(app: FastifyInstance) {
         ),
       ])
 
-      const { cost, revenue, attributedRevenue, profit, roas, roi, trueProfit, trueRoi, leads, sales } = summary
+      const { cost, revenue, attributedRevenue, profit, roas, blendedRoas, roi, trueProfit, trueRoi, leads, sales } = summary
       const margin = marginConfig.rows[0] ?? null
 
       const costByDate = new Map(costByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
@@ -391,6 +391,7 @@ export async function reportRoutes(app: FastifyInstance) {
         attributedRevenue,
         profit,
         roas,
+        blendedRoas,
         roi,
         trueProfit,
         trueRoi,

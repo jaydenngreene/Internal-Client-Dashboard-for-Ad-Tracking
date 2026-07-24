@@ -15,6 +15,13 @@ export interface OverviewSummary {
   profit: number
   roas: number | null
   roi: number | null
+  // Total revenue / total ad spend — "Blended ROAS" (2026-07-25). Deliberately
+  // separate from `roas`: this trusts the store's real revenue over Meta/Google's
+  // own attribution, but it's an account-wide-only number — mixes in every
+  // revenue source (organic, email, direct), so it can't be broken down per
+  // campaign/creative the way attributed ROAS can. Both are legitimate, they
+  // answer different questions.
+  blendedRoas: number | null
   trueProfit: number
   trueRoi: number | null
   leads: number
@@ -74,6 +81,7 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
   const sales = parseInt(salesTotal.rows[0].total, 10)
   const profit = revenue - cost
   const roas = cost > 0 ? attributedRevenue / cost : null
+  const blendedRoas = cost > 0 ? revenue / cost : null
   const roi = cost > 0 ? ((attributedRevenue - cost) / cost) * 100 : null
   const margin = marginConfig.rows[0] ?? null
   // Two separate COGS/fee/fulfillment adjustments, deliberately not one shared
@@ -90,6 +98,7 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
     attributedRevenue,
     profit,
     roas,
+    blendedRoas,
     roi,
     trueProfit,
     trueRoi,

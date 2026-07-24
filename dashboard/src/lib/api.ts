@@ -1197,6 +1197,10 @@ export interface OverviewReport {
   attributedRevenue: number;
   profit: number;
   roas: number | null;
+  // Total revenue / total ad spend ("Blended ROAS") — trusts the store's real
+  // revenue over Meta/Google's own attribution, but account-wide only (mixes in
+  // organic/email/direct revenue too, can't be broken down per campaign/creative).
+  blendedRoas: number | null;
   roi: number | null;
   // True profit (Step 31) — profit after cogs_percent/payment_fee_percent/
   // fulfillment_cost_flat, falls back to equaling `profit` when a client hasn't

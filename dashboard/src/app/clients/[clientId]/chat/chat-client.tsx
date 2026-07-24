@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Sparkles } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getChatHistory, sendChatMessage } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,10 +11,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
 import { cn } from "@/lib/utils";
 
-// Step 51 — conversational AI chat. Claude answers using real live-queried data
-// via tool-use (see api/src/lib/chatTools.ts), never guesses — this UI is
-// intentionally plain (a message list + one input), the substance is the backend
-// tool-use loop, not the chrome around it.
+// A handful of real questions Gojo can actually answer with the tools it has
+// (see api/src/lib/chatTools.ts) — clickable so a first-time user doesn't have
+// to guess what's fair game to ask, instead of static hint text nobody can act on.
+const EXAMPLE_PROMPTS = [
+  "What's my best campaign this month?",
+  "Why did ROAS drop last week?",
+  "How's my LTV trending?",
+  "What's my current budget pacing?",
+];
+
+function GojoAvatar() {
+  return (
+    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+      <Sparkles className="size-3.5" strokeWidth={2.25} />
+    </span>
+  );
+}
+
+// Step 51 — conversational AI chat, branded as "Gojo" (this app's named AI
+// persona, same convention as every serious competitor's own named assistant —
+// Moby, AIR — rather than a generic unbranded "Chat" button). Claude answers
+// using real live-queried data via tool-use, never guesses.
 export function ChatClient({ clientId }: { clientId: string }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
@@ -41,48 +60,71 @@ export function ChatClient({ clientId }: { clientId: string }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, send.isPending]);
 
-  function handleSend() {
-    const message = draft.trim();
-    if (!message || send.isPending) return;
+  function handleSend(message?: string) {
+    const text = (message ?? draft).trim();
+    if (!text || send.isPending) return;
     setDraft("");
-    send.mutate(message);
+    send.mutate(text);
   }
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div>
-        <ClientKicker clientId={clientId} />
-        <h1 className="text-lg font-semibold">Ask Your Data</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Ask a question about this client's performance. It queries real data live, it doesn't guess.
-        </p>
+      <div className="flex items-center gap-2.5">
+        <GojoAvatar />
+        <div>
+          <ClientKicker clientId={clientId} />
+          <h1 className="text-lg font-semibold">Gojo</h1>
+        </div>
       </div>
+      <p className="-mt-2 text-sm text-muted-foreground">
+        Ask a question about this client's performance. Gojo queries real data live, it doesn't guess.
+      </p>
 
       <Card className="flex flex-1 flex-col overflow-hidden px-0">
         <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
           {isLoading && <Skeleton className="h-24 w-full" />}
 
           {!isLoading && (!messages || messages.length === 0) && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Try: "What's my best campaign this month?" or "Why did ROAS drop last week?"
-            </p>
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 py-8">
+              <p className="text-sm text-muted-foreground">Try asking Gojo something like:</p>
+              <div className="flex flex-wrap justify-center gap-2 px-4">
+                {EXAMPLE_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleSend(prompt)}
+                    className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {messages?.map((m) => (
             <div
               key={m.id}
-              className={cn(
-                "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-                m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "mr-auto bg-muted"
-              )}
+              className={cn("flex items-end gap-2", m.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto")}
             >
-              {m.content}
+              {m.role === "assistant" && <GojoAvatar />}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                  m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                )}
+              >
+                {m.content}
+              </div>
             </div>
           ))}
 
           {send.isPending && (
-            <div className="mr-auto max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              Thinking…
+            <div className="mr-auto flex items-end gap-2">
+              <GojoAvatar />
+              <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                Thinking…
+              </div>
             </div>
           )}
           {send.isError && (
@@ -94,7 +136,7 @@ export function ChatClient({ clientId }: { clientId: string }) {
         <div className="flex items-center gap-2 border-t border-border p-3">
           <Input
             className="flex-1"
-            placeholder="Ask a question about this client's performance…"
+            placeholder="Ask Gojo about this client's performance…"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -102,7 +144,7 @@ export function ChatClient({ clientId }: { clientId: string }) {
             }}
             disabled={send.isPending}
           />
-          <Button size="sm" onClick={handleSend} disabled={!draft.trim() || send.isPending}>
+          <Button size="sm" onClick={() => handleSend()} disabled={!draft.trim() || send.isPending}>
             Send
           </Button>
         </div>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GojoBadge } from "@/components/gojo-badge";
 
 const PRIORITY_VARIANT: Record<Insight["priority"], "destructive" | "outline" | "secondary"> = {
   high: "destructive",
@@ -92,7 +93,10 @@ export function InsightsPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>{title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>{title}</h2>
+          <GojoBadge />
+        </div>
         <div className="flex items-center gap-3">
           {viewAllHref && (
             <Link

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { GojoBadge } from "@/components/gojo-badge";
 
 const STATUS_OPTIONS: { value: RemarketingStatus; label: string }[] = [
   { value: "pending", label: "Pending Review" },
@@ -127,9 +128,12 @@ export function RemarketingClient({ clientId }: { clientId: string }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <ClientKicker clientId={clientId} />
-          <h1 className="text-lg font-semibold">Remarketing Agent</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold">Remarketing Agent</h1>
+            <GojoBadge />
+          </div>
           <p className="text-sm text-muted-foreground">
-            Visitors identified by Customers.ai, with AI-drafted outreach copy awaiting review.
+            Visitors identified by Customers.ai, with outreach copy drafted by Gojo awaiting review.
             Approving here does not send anything: it only marks a candidate ready for a
             separate, deliberate dispatch step.
           </p>

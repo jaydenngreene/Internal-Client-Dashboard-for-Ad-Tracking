@@ -55,7 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { slug: "overview", label: "Overview", icon: LayoutDashboard, enabled: true },
       { slug: "insights", label: "Insights", icon: Lightbulb, enabled: true },
-      { slug: "chat", label: "Ask Your Data", icon: Bot, enabled: true },
+      { slug: "chat", label: "Gojo", icon: Bot, enabled: true },
       { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true, group: "Reporting" },
       { slug: "funnel", label: "Funnel", icon: Filter, enabled: true, group: "Reporting" },
       { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true, group: "Reporting" },

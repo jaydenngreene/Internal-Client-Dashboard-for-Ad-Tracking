@@ -126,7 +126,7 @@ function CallRow({ call, clientId, email }: { call: JourneyCall; clientId: strin
       {call.ai_summary && (
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
           <p className="font-medium uppercase tracking-wider text-muted-foreground">
-            AI assessment
+            Gojo assessment
             {call.ai_disposition && ` · ${DISPOSITION_LABEL[call.ai_disposition as CallDisposition] ?? call.ai_disposition}`}
             {call.ai_qualification_score !== null && ` (${(call.ai_qualification_score * 100).toFixed(0)}%)`}
           </p>

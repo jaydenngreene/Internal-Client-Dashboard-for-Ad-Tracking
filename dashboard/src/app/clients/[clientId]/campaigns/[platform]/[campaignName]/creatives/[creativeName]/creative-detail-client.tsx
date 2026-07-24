@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatNumber, formatPercent, formatRoas, formatPlatformLabel } from "@/lib/format";
 import { TAG_LABEL } from "@/lib/creative-tag-labels";
+import { GojoBadge } from "@/components/gojo-badge";
 
 function AssetPreview({ asset }: { asset: { thumbnailUrl: string | null; assetUrl: string | null; assetType: "image" | "video" | null } }) {
   // w-full previously forced every asset to fill the container's full width
@@ -136,6 +137,7 @@ function AiTagsPanel({ clientId, platform, creativeName }: { clientId: string; p
       <CardHeader className="flex-row items-center justify-between px-0">
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <Sparkles className="size-3.5 text-primary" /> AI Creative Tags
+          <GojoBadge />
         </CardTitle>
         <Button size="xs" variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
           {generate.isPending ? "Tagging…" : tags ? "Regenerate" : "Generate tags"}

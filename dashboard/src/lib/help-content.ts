@@ -92,8 +92,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         slug: "chat",
-        title: "Ask Your Data",
-        purpose: "A chat interface that queries this client's real data live to answer a plain-English question. It doesn't guess or hallucinate numbers, every answer is backed by an actual query.",
+        title: "Gojo",
+        purpose: "This app's AI assistant. Ask it a plain-English question about this client's performance and it queries real data live to answer, it doesn't guess or hallucinate numbers, every answer is backed by an actual query.",
       },
       {
         slug: "campaigns",

@@ -62,6 +62,11 @@ export function CampaignBreakdownTable({
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
+  // CTR/CPC default hidden - a table showing every column at once was flagged as
+  // a real "generic internal tool" tell (Linear/Asana's whitespace-heavy default
+  // is the model: ~6-8 visible columns, an explicit control to reveal more,
+  // rather than everything at once). Both stay one click away, not removed.
+  const [hiddenColumns, setHiddenColumns] = useState<Set<SortKey>>(new Set(["ctr", "cpc"]));
 
   const goalColumns: { key: SortKey; label: string; align?: "right" }[] =
     goal === "leads"
@@ -76,16 +81,30 @@ export function CampaignBreakdownTable({
           { key: "aov", label: "AOV", align: "right" },
         ];
 
-  const columns: { key: SortKey; label: string; align?: "right" }[] = [
-    { key: "name", label: nameColumnLabel },
-    { key: "cost", label: "Ad Spend", align: "right" },
+  const optionalColumns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "ctr", label: "CTR", align: "right" },
     { key: "cpc", label: "CPC", align: "right" },
+  ];
+
+  const allColumns: { key: SortKey; label: string; align?: "right" }[] = [
+    { key: "name", label: nameColumnLabel },
+    { key: "cost", label: "Ad Spend", align: "right" },
+    ...optionalColumns,
     ...goalColumns,
     { key: "revenue", label: "Revenue", align: "right" },
     { key: "profit", label: "Profit", align: "right" },
     { key: "roas", label: "ROAS", align: "right" },
   ];
+  const columns = allColumns.filter((c) => !hiddenColumns.has(c.key));
+
+  function toggleColumn(key: SortKey) {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const sorted = [...rows].sort((a, b) => {
     const av = a[sortKey];
@@ -121,13 +140,28 @@ export function CampaignBreakdownTable({
     downloadCsv(
       `${nameColumnLabel.toLowerCase()}-breakdown.csv`,
       sorted,
-      [...columns, { key: "platform", label: "Platform" }, { key: "matched", label: "Matched" }]
+      [...allColumns, { key: "platform", label: "Platform" }, { key: "matched", label: "Matched" }]
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex justify-end px-4">
+      <div className="flex items-center justify-end gap-2 px-4">
+        {optionalColumns.map((col) => (
+          <button
+            key={col.key}
+            type="button"
+            onClick={() => toggleColumn(col.key)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+              hiddenColumns.has(col.key)
+                ? "border-border text-muted-foreground hover:bg-muted"
+                : "border-primary/40 bg-primary/10 text-primary"
+            )}
+          >
+            {hiddenColumns.has(col.key) ? `+ ${col.label}` : `✓ ${col.label}`}
+          </button>
+        ))}
         <Button size="xs" variant="outline" onClick={exportCsv}>
           Export CSV
         </Button>
@@ -186,10 +220,14 @@ export function CampaignBreakdownTable({
                     "verified zero spend" - showing $0.00 reads as the latter. */}
                 {row.matched ? formatCurrency(row.cost) : "-"}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatPercent(row.ctr)}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {row.cpc === null ? "-" : formatCurrency(row.cpc)}
-              </TableCell>
+              {!hiddenColumns.has("ctr") && (
+                <TableCell className="text-right tabular-nums">{formatPercent(row.ctr)}</TableCell>
+              )}
+              {!hiddenColumns.has("cpc") && (
+                <TableCell className="text-right tabular-nums">
+                  {row.cpc === null ? "-" : formatCurrency(row.cpc)}
+                </TableCell>
+              )}
               {goal === "leads" ? (
                 <>
                   <TableCell className="text-right tabular-nums">{formatNumber(row.leads)}</TableCell>

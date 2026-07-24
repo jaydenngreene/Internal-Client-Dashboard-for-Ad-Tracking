@@ -28,6 +28,7 @@ import {
   getClientAuditLog,
   getIntegrations,
   saveIntegration,
+  importShopifyOrders,
   generateTagWebhookSecret,
   getWebhookSubscriptions,
   createWebhookSubscription,
@@ -291,6 +292,15 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
     onSuccess: invalidateClient,
   });
 
+  // One-time historical backfill — separate from the live webhook above, which
+  // only ever sees orders placed after it was registered. Reuses the exact same
+  // recordPurchase/recordRefund path as that webhook, so a CSV that overlaps with
+  // when the webhook went live just gets silently skipped as a duplicate rather
+  // than double-counted.
+  const shopifyImportMutation = useMutation({
+    mutationFn: (file: File) => importShopifyOrders(clientId, file),
+  });
+
   return (
     <Card className="px-4">
       <CardHeader className="px-0">
@@ -442,6 +452,63 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
                 </div>
               </li>
             </ol>
+
+            <div className="flex flex-col gap-2 border-t border-border pt-3">
+              <p className="text-sm font-medium">Import past orders</p>
+              <p className="text-xs text-muted-foreground">
+                The webhook above only ever sees orders placed after it&apos;s registered — it can&apos;t see
+                anything from before today. To backfill history, export orders from Shopify Admin →{" "}
+                <strong>Orders → Export</strong> (pick a date range, format &quot;CSV for Excel, Numbers, or other
+                spreadsheet programs&quot;) and upload the file here. Safe to run more than once — orders already
+                recorded are skipped, never duplicated.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept=".csv"
+                  id={`shopify-import-${clientId}`}
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) shopifyImportMutation.mutate(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={shopifyImportMutation.isPending}
+                  onClick={() => document.getElementById(`shopify-import-${clientId}`)?.click()}
+                >
+                  {shopifyImportMutation.isPending ? "Importing…" : "Upload order export CSV"}
+                </Button>
+              </div>
+              {shopifyImportMutation.isError && (
+                <p className="text-xs text-status-critical">{(shopifyImportMutation.error as Error).message}</p>
+              )}
+              {shopifyImportMutation.isSuccess && (
+                <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
+                  <p className="font-medium text-foreground">
+                    {shopifyImportMutation.data.imported} order{shopifyImportMutation.data.imported === 1 ? "" : "s"}{" "}
+                    imported, {shopifyImportMutation.data.skipped} skipped (already recorded, cancelled, or no
+                    email), out of {shopifyImportMutation.data.ordersInFile} in the file.
+                  </p>
+                  {shopifyImportMutation.data.refundsApplied > 0 && (
+                    <p className="mt-1 text-muted-foreground">
+                      {shopifyImportMutation.data.refundsApplied} partial refund
+                      {shopifyImportMutation.data.refundsApplied === 1 ? "" : "s"} applied.
+                    </p>
+                  )}
+                  {shopifyImportMutation.data.errors.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-0.5 text-status-critical">
+                      {shopifyImportMutation.data.errors.map((err, i) => (
+                        <p key={i}>{err}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

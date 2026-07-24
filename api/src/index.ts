@@ -2,6 +2,7 @@ import Fastify, { FastifyError } from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
+import multipart from '@fastify/multipart'
 import * as Sentry from '@sentry/node'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
@@ -38,6 +39,7 @@ import { chatRoutes } from './routes/chat'
 import { geoLiftRoutes } from './routes/geoLift'
 import { auditLogRoutes } from './routes/auditLogRoutes'
 import { customCostsRoutes } from './routes/customCosts'
+import { shopifyImportRoutes } from './routes/shopifyImport'
 import { tagRoutes, trackTagRoutes } from './routes/tags'
 import { audienceSyncRoutes } from './routes/audienceSync'
 import { insightsRoutes } from './routes/insights'
@@ -72,6 +74,11 @@ app.register(cors, {
 })
 
 app.register(helmet)
+
+// One historical-order CSV per upload is small (a single client's export), never a
+// bulk/repeated ingestion path — 25MB comfortably covers even a busy store's full
+// export while still bounding worst-case memory use for the in-memory CSV parse.
+app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } })
 
 // A generous global ceiling against basic abuse; /auth/login and /auth/register
 // carry their own much stricter per-route limit (see routes/auth.ts) since
@@ -161,6 +168,7 @@ app.register(
     instance.register(chatRoutes)
     instance.register(geoLiftRoutes)
     instance.register(customCostsRoutes)
+    instance.register(shopifyImportRoutes)
     instance.register(tagRoutes)
     instance.register(audienceSyncRoutes)
     instance.register(insightsRoutes)

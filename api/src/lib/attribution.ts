@@ -56,8 +56,12 @@ export function uShapedWeights(count: number): number[] {
 
 // Insert a purchase, walk back through the customer's ad sessions, split revenue
 // credit across them per the client's attribution model, and roll revenue into customer_ltv.
-export async function recordPurchase(clientId: string, conv: NormalizedConversion): Promise<void> {
-  if (!conv.email || !conv.revenue) return
+// Returns whether a purchase row was actually inserted (false for a missing
+// email/revenue or a duplicate order_id) — callers that only care about side
+// effects (the live webhook) can ignore it; the bulk CSV importer uses it to
+// report accurate imported/skipped counts instead of guessing.
+export async function recordPurchase(clientId: string, conv: NormalizedConversion): Promise<boolean> {
+  if (!conv.email || !conv.revenue) return false
 
   const email = conv.email.toLowerCase().trim()
 
@@ -71,7 +75,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
      RETURNING id`,
     [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor]
   )
-  if (purchaseRows.length === 0) return // duplicate (webhook retry)
+  if (purchaseRows.length === 0) return false // duplicate (webhook retry)
 
   const purchaseId = purchaseRows[0].id
 
@@ -79,7 +83,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
     [clientId, email]
   )
-  if (identityRows.length === 0) return // no ad history to attribute
+  if (identityRows.length === 0) return true // no ad history to attribute
 
   const visitorId = identityRows[0].visitor_id
 
@@ -91,7 +95,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
      ORDER BY started_at ASC`,
     [visitorId]
   )
-  if (sessionRows.length === 0) return
+  if (sessionRows.length === 0) return true
 
   const { rows: clientRows } = await db.query<{ attribution_model: AttributionModel }>(
     'SELECT attribution_model FROM clients WHERE id = $1',
@@ -170,6 +174,8 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     processor: conv.processor,
     attribution_model: model,
   })
+
+  return true
 }
 
 // Deduct a refund from the matching purchase, its attribution record(s), and customer_ltv.

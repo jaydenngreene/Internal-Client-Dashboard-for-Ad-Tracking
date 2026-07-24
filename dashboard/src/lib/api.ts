@@ -283,6 +283,30 @@ export function getIntegrations(clientId: string): Promise<IntegrationSummary[]>
   });
 }
 
+export interface ShopifyImportResult {
+  ordersInFile: number;
+  imported: number;
+  skipped: number;
+  refundsApplied: number;
+  errors: string[];
+}
+
+// No Content-Type header set deliberately — the browser fills in
+// "multipart/form-data; boundary=..." itself from the FormData body, and setting
+// it manually strips the boundary the server needs to actually parse the parts.
+export function importShopifyOrders(clientId: string, file: File): Promise<ShopifyImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest(`${API_URL}/clients/${clientId}/shopify-import`, {
+    method: "POST",
+    body: formData,
+  }).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+    return body;
+  });
+}
+
 export function updateClientName(clientId: string, name: string): Promise<Client> {
   return apiRequest(`${API_URL}/clients/${clientId}`, {
     method: "PATCH",

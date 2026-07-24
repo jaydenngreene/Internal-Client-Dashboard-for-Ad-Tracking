@@ -84,7 +84,7 @@ async function importOrder(clientId: string, order: ShopifyOrder): Promise<'impo
   const email = order.email ?? order.customer?.email
   if (!email) return 'skipped'
 
-  await recordPurchase(clientId, {
+  const wasNew = await recordPurchase(clientId, {
     email,
     revenue: parseFloat(order.total_price),
     product: order.line_items?.[0]?.title ?? null,
@@ -92,6 +92,7 @@ async function importOrder(clientId: string, order: ShopifyOrder): Promise<'impo
     processor: 'shopify',
     currency: order.currency,
   })
+  if (!wasNew) return 'skipped'
 
   for (const refund of order.refunds ?? []) {
     const refundTxns = refund.transactions.filter((t) => t.status === 'success' && t.kind === 'refund')

@@ -233,13 +233,24 @@ async function send(eventType, product, value) {
 }
 
 analytics.subscribe('product_added_to_cart', (event) => {
+  // Confirmed live: a bundle/upsell app's own separate /cart/add call fires this
+  // same event with a thinner cartLine shape than the main "Add to cart" button -
+  // product.title missing, merchandise.price missing - which read as bare nulls
+  // before. cost.totalAmount is the line's already-computed total (standard on
+  // every cartLine regardless of which UI triggered the add), so it's a more
+  // reliable value source than merchandise.price * quantity when that's absent.
   const line = event.data.cartLine;
-  if (!line) return;
-  send(
-    'add_to_cart',
-    { id: line.merchandise.product.id, name: line.merchandise.product.title },
-    line.merchandise.price.amount * line.quantity
-  );
+  if (!line || !line.merchandise) return;
+  const product = line.merchandise.product || {};
+  const productId = product.id || null;
+  if (!productId) return;
+  const productName = product.title || line.merchandise.title || null;
+  const value = line.cost && line.cost.totalAmount
+    ? line.cost.totalAmount.amount
+    : line.merchandise.price
+      ? line.merchandise.price.amount * (line.quantity || 1)
+      : null;
+  send('add_to_cart', { id: productId, name: productName }, value);
 });
 
 analytics.subscribe('checkout_started', (event) => {

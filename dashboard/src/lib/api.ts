@@ -1177,8 +1177,16 @@ export function getInsights(clientId: string, scope?: InsightScope): Promise<Cli
   return fetchJson<ClientInsights | null>(`/clients/${clientId}/insights${scopeQuery(scope)}`);
 }
 
+// Bespoke (not mutateJson) — a failed generation still returns a real, displayable
+// ClientInsights row (insights: [], error: "..."), same "the body is the real state
+// even on a non-2xx" pattern as confirmPauseCandidate/confirmBudgetReallocation.
+// Resolves instead of throwing so the caller's onSuccess can cache it directly and
+// the panel shows the real failure reason instead of silently keeping the stale
+// pre-attempt state.
 export function regenerateInsights(clientId: string, scope?: InsightScope): Promise<ClientInsights> {
-  return mutateJson<ClientInsights>(`/clients/${clientId}/insights/regenerate${scopeQuery(scope)}`, "POST");
+  return apiRequest(`${API_URL}/clients/${clientId}/insights/regenerate${scopeQuery(scope)}`, { method: "POST" }).then(
+    (res) => res.json()
+  );
 }
 
 export interface DateRange {

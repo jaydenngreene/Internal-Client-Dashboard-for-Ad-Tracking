@@ -24,17 +24,31 @@ import { formatCurrency, formatNumber, formatPercent, formatRoas, formatPlatform
 import { TAG_LABEL } from "@/lib/creative-tag-labels";
 
 function AssetPreview({ asset }: { asset: { thumbnailUrl: string | null; assetUrl: string | null; assetType: "image" | "video" | null } }) {
+  // w-full previously forced every asset to fill the container's full width
+  // regardless of its real proportions - fine for a landscape asset, but a
+  // vertical UGC video/image (9:16 or 4:5, the norm for these ads) got stretched
+  // to that width and then height-capped, leaving big empty pillarboxed bars on
+  // both sides that read as "wrong aspect ratio, cropped to 1:1." mx-auto +
+  // max-w-full instead lets the element size itself from its own intrinsic
+  // dimensions (capped by max-h-96), so a tall asset renders narrow and tall,
+  // matching what it actually looks like on Facebook.
   if (asset.assetType === "video" && asset.assetUrl) {
     return (
-      <video controls poster={asset.thumbnailUrl ?? undefined} className="max-h-96 w-full rounded-lg bg-black">
+      <video controls poster={asset.thumbnailUrl ?? undefined} className="mx-auto block max-h-96 max-w-full rounded-lg bg-black">
         <source src={asset.assetUrl} />
       </video>
     );
   }
   const imageUrl = asset.assetUrl ?? asset.thumbnailUrl;
   if (imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={imageUrl} alt="Ad creative" className="max-h-96 w-full rounded-lg object-contain bg-muted" />;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt="Ad creative"
+        className="mx-auto block max-h-96 max-w-full rounded-lg object-contain bg-muted"
+      />
+    );
   }
   return (
     <div className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted text-muted-foreground">

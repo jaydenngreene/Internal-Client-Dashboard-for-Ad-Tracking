@@ -242,7 +242,15 @@ function CartConversionCard({ clientId, range }: { clientId: string; range: { fr
   });
 
   if (!data) return null;
-  const completed = Math.max(data.initiateCheckoutCount - data.abandonedCartCount, 0);
+  // Both the center number and the two segments below now share one denominator
+  // (add-to-cart), matching cartAbandonmentRate's own definition exactly — this
+  // used to mix initiateCheckoutCount (a later, smaller funnel stage) into the
+  // segments while the center % stayed based on add-to-cart, so whenever abandoned
+  // add-to-carts outnumbered initiated checkouts (the common case, since plenty of
+  // add-to-carts never reach checkout at all), "completed" clamped to 0 while the
+  // center % still showed a stale nonzero figure - the two halves of the same
+  // widget visibly disagreed.
+  const completed = Math.max(data.addToCartCount - data.abandonedCartCount, 0);
   const completionRate = data.cartAbandonmentRate === null ? null : 100 - data.cartAbandonmentRate;
 
   return (
@@ -251,17 +259,17 @@ function CartConversionCard({ clientId, range }: { clientId: string; range: { fr
         <CardTitle className="text-sm">Cart → Purchase Conversion</CardTitle>
       </CardHeader>
       <CardContent className="px-0">
-        {data.initiateCheckoutCount > 0 ? (
+        {data.addToCartCount > 0 ? (
           <DonutChart
             centerValue={completionRate === null ? "-" : formatPercent(completionRate)}
-            centerLabel={`${formatNumber(completed)} of ${formatNumber(data.initiateCheckoutCount)} checkouts`}
+            centerLabel={`${formatNumber(completed)} of ${formatNumber(data.addToCartCount)} carts`}
             segments={[
-              { key: "completed", label: "Completed", value: completed, color: "var(--color-chart-1)" },
+              { key: "completed", label: "Purchased", value: completed, color: "var(--color-chart-1)" },
               { key: "abandoned", label: "Abandoned", value: data.abandonedCartCount, color: "var(--color-chart-2)" },
             ]}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">No checkouts started in this range yet.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No carts started in this range yet.</p>
         )}
       </CardContent>
     </Card>

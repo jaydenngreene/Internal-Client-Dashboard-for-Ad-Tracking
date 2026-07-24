@@ -518,7 +518,7 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
               ideally right before <code>&lt;/body&gt;</code>. Then call{" "}
               <code>ADT.identify(email)</code> right before checkout completes so purchases attribute back
               to the right session. This runs independently of any native Meta/Facebook pixel already on
-              the site — different cookies, different endpoints, safe to run both at once.
+              the site, different cookies, different endpoints, safe to run both at once.
             </p>
             <CopyBlock
               code={`<script>\n  window.ADT_CONFIG = { apiUrl: '${apiUrl}', pixelKey: '${client.pixel_key}' };\n</script>\n<script src="${apiUrl}/pixel.js" async></script>`}
@@ -533,7 +533,7 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
             </p>
             <ol className="flex list-decimal flex-col gap-3 pl-4 text-xs text-muted-foreground">
               <li>
-                Register a webhook — Shopify Admin → Settings → Notifications → Webhooks. Create two: event{" "}
+                Register a webhook: Shopify Admin → Settings → Notifications → Webhooks. Create two: event{" "}
                 <code>Order creation</code> → URL <code>{`${apiUrl}/webhooks/shopify/${clientId}/orders`}</code>,
                 and event <code>Order refund</code> → URL{" "}
                 <code>{`${apiUrl}/webhooks/shopify/${clientId}/refunds`}</code>, both format JSON. Paste
@@ -541,7 +541,7 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
               </li>
               <li>
                 <p>
-                  Theme snippet — Online Store → Themes → Edit code → <code>layout/theme.liquid</code>,
+                  Theme snippet: Online Store → Themes → Edit code → <code>layout/theme.liquid</code>,
                   paste just before <code>&lt;/body&gt;</code>:
                 </p>
                 <div className="mt-1">
@@ -549,19 +549,19 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
                 </div>
               </li>
               <li>
-                <p>Checkout script — Settings → Checkout → Order status page → Additional scripts:</p>
+                <p>Checkout script: Settings → Checkout → Order status page → Additional scripts:</p>
                 <div className="mt-1">
                   <CopyBlock code={shopifyCheckoutSnippet(apiUrl, client.pixel_key)} />
                 </div>
               </li>
               <li>
                 <p>
-                  Add to cart / checkout tracking — <strong>Settings → Customer events → Add custom pixel</strong>.
+                  Add to cart / checkout tracking: <strong>Settings → Customer events → Add custom pixel</strong>.
                   Themes vary in how &quot;Add to cart&quot; actually works under the hood (some submit a real
-                  form, many modern ones call Shopify&apos;s cart API directly via JavaScript instead) — this
+                  form, many modern ones call Shopify&apos;s cart API directly via JavaScript instead), so this
                   step catches it reliably either way, straight from Shopify&apos;s own event system rather
                   than guessing at the page&apos;s markup. Paste into the pixel&apos;s Code box, Save, then
-                  Connect. Runs independently in its own sandbox — doesn&apos;t conflict with Meta&apos;s pixel
+                  Connect. Runs independently in its own sandbox, doesn&apos;t conflict with Meta&apos;s pixel
                   or any other pixel already connected here.
                 </p>
                 <div className="mt-1">
@@ -573,10 +573,10 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
             <div className="flex flex-col gap-2 border-t border-border pt-3">
               <p className="text-sm font-medium">Import past orders</p>
               <p className="text-xs text-muted-foreground">
-                The webhook above only ever sees orders placed after it&apos;s registered — it can&apos;t see
+                The webhook above only ever sees orders placed after it&apos;s registered, it can&apos;t see
                 anything from before today. To backfill history, export orders from Shopify Admin →{" "}
                 <strong>Orders → Export</strong> (pick a date range, format &quot;CSV for Excel, Numbers, or other
-                spreadsheet programs&quot;) and upload the file here. Safe to run more than once — orders already
+                spreadsheet programs&quot;) and upload the file here. Safe to run more than once: orders already
                 recorded are skipped, never duplicated.
               </p>
               <div className="flex items-center gap-2">
@@ -760,7 +760,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "access_token", label: "Access token", type: "password" },
     ],
     helpText:
-      "Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID. On that same screen, under Conversions API, click \"Generate access token\" for the token. This sends server-side conversion signals to Meta for ad optimization — separate from (and doesn't require) the website pixel above.",
+      "Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID. On that same screen, under Conversions API, click \"Generate access token\" for the token. This sends server-side conversion signals to Meta for ad optimization, separate from (and doesn't require) the website pixel above.",
   },
   { platform: "google-ads", label: "Google Ads", category: "Ad Platforms", fields: [
     { key: "customer_id", label: "Customer ID" },
@@ -920,7 +920,7 @@ function IntegrationRow({
                   <Input
                     className="w-56"
                     type={f.type === "password" ? "password" : "text"}
-                    placeholder={f.type === "password" && connected ? "Saved — leave blank to keep" : undefined}
+                    placeholder={f.type === "password" && connected ? "Saved, leave blank to keep" : undefined}
                     value={values[f.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
                   />

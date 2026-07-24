@@ -30,7 +30,7 @@ function HelpCard({ entry, forceOpen }: { entry: HelpEntry; forceOpen: boolean }
               {entry.metrics.map((m) => (
                 <div key={m.term} className="text-sm">
                   <dt className="inline font-medium text-foreground">{m.term}</dt>
-                  <dd className="inline text-muted-foreground"> — {m.definition}</dd>
+                  <dd className="inline text-muted-foreground">: {m.definition}</dd>
                 </div>
               ))}
             </dl>
@@ -65,7 +65,7 @@ export function HelpClient({ clientId }: { clientId: string }) {
         <ClientKicker clientId={clientId} />
         <h1 className="text-lg font-semibold">Help & Info</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          What every tab does and what its numbers mean — for anyone new to this dashboard.
+          What every tab does and what its numbers mean, for anyone new to this dashboard.
         </p>
       </div>
 

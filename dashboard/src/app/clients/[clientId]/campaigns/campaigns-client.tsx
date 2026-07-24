@@ -50,13 +50,13 @@ function viewSubtitle(view: ViewMode, goal: "leads" | "sales"): string {
   const perOutcome = goal === "leads" ? "cost per lead" : "cost per purchase";
   switch (view) {
     case "campaign":
-      return `Performance for each individual ad campaign — cost, ${perOutcome}, revenue, and ROAS.`;
+      return `Performance for each individual ad campaign: cost, ${perOutcome}, revenue, and ROAS.`;
     case "source":
-      return "The same numbers rolled up by platform only (all of Facebook combined, all of Google combined, etc.) — a quick where's-my-budget-going read across many campaigns, rather than one campaign at a time.";
+      return "The same numbers rolled up by platform only (all of Facebook combined, all of Google combined, etc.), a quick where's-my-budget-going read across many campaigns, rather than one campaign at a time.";
     case "keyword":
       return "Only populated for Search campaigns with keyword-level UTM tagging (utm_term). If you're not running Search ads with keyword tracking, this will show mostly untagged rows.";
     case "creative":
-      return "Individual ad-level performance — click a row to open that specific ad's own detail page.";
+      return "Individual ad-level performance. Click a row to open that specific ad's own detail page.";
     case "ltv":
       return "Average customer value at 30/60/90/180 days and lifetime, by acquisition campaign. Trailing-window snapshots as of now, refreshed nightly.";
   }

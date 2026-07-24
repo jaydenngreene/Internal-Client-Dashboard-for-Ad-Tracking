@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { getFunnel, getLtv, getClients, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
+import { getFunnel, getLtv, getClients, getIntegrations, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
@@ -64,6 +64,22 @@ function viewSubtitle(view: ViewMode, goal: "leads" | "sales"): string {
 
 const VIEW_VALUES = VIEW_OPTIONS.map((o) => o.value);
 
+// Matches the "Ad Platforms" category in settings-client.tsx's INTEGRATIONS list —
+// the Source tab rolls performance up "all of Facebook combined, all of Google
+// combined," which is meaningless noise (one row, repeating what Campaign view
+// already shows) until there's a second platform actually running to roll up
+// against. Reappears automatically the moment a client connects one.
+const AD_PLATFORM_KEYS = new Set([
+  'facebook_ads',
+  'google_ads',
+  'bing_ads',
+  'tiktok_ads',
+  'snapchat_ads',
+  'pinterest_ads',
+  'linkedin_ads',
+  'reddit_ads',
+]);
+
 export function CampaignsClient({ clientId }: { clientId: string }) {
   // Lets a link from elsewhere (e.g. Overview's Best Performing Ads "View all")
   // land directly on a specific breakdown, e.g. /campaigns?view=creative, instead
@@ -78,11 +94,22 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
   const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
   const [view, setView] = useState<ViewMode>(initialView);
 
-  const isLtv = view === "ltv";
+  const { data: integrations } = useQuery({
+    queryKey: ["integrations", clientId],
+    queryFn: () => getIntegrations(clientId),
+  });
+  const connectedAdPlatforms = (integrations ?? []).filter((i) => AD_PLATFORM_KEYS.has(i.platform)).length;
+  const viewOptions = connectedAdPlatforms >= 2 ? VIEW_OPTIONS : VIEW_OPTIONS.filter((o) => o.value !== "source");
+  // Falls back off Source if it was requested (via ?view=source, or a toggle click
+  // from before a platform got disconnected) but isn't available anymore, rather
+  // than rendering a toggle selection that no longer has a matching option.
+  const effectiveView = viewOptions.some((o) => o.value === view) ? view : "campaign";
+
+  const isLtv = effectiveView === "ltv";
 
   const funnelQuery = useQuery({
-    queryKey: ["campaigns", clientId, range.from, range.to, view],
-    queryFn: () => getFunnel(clientId, range, view as FunnelBreakdown),
+    queryKey: ["campaigns", clientId, range.from, range.to, effectiveView],
+    queryFn: () => getFunnel(clientId, range, effectiveView as FunnelBreakdown),
     enabled: !isLtv,
   });
   const ltvQuery = useQuery({
@@ -102,10 +129,10 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
         <div>
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Campaigns</h1>
-          <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">{viewSubtitle(view, goal)}</p>
+          <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">{viewSubtitle(effectiveView, goal)}</p>
         </div>
         <div className="flex items-center gap-3">
-          <SegmentedToggle value={view} onChange={setView} options={VIEW_OPTIONS} />
+          <SegmentedToggle value={effectiveView} onChange={setView} options={viewOptions} />
           <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
@@ -121,7 +148,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       {isLtv && ltvQuery.data && (
         <Card className="px-0">
           <CardHeader className="px-4">
-            <CardTitle>{VIEW_TITLE[view]}</CardTitle>
+            <CardTitle>{VIEW_TITLE[effectiveView]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0 overflow-x-auto">
             <LtvTable campaigns={ltvQuery.data.campaigns} predictiveLtvAvailable={ltvQuery.data.predictiveLtvAvailable} />
@@ -132,21 +159,21 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       {!isLtv && funnelQuery.data && (
         <Card className="px-0">
           <CardHeader className="px-4">
-            <CardTitle>{VIEW_TITLE[view]}</CardTitle>
+            <CardTitle>{VIEW_TITLE[effectiveView]}</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
             <CampaignBreakdownTable
               rows={funnelQuery.data.campaigns}
-              nameColumnLabel={BREAKDOWN_COLUMN_LABEL[view as FunnelBreakdown]}
+              nameColumnLabel={BREAKDOWN_COLUMN_LABEL[effectiveView as FunnelBreakdown]}
               goal={goal}
-              showPlatformBadge={view !== "source"}
+              showPlatformBadge={effectiveView !== "source"}
               getHref={
-                view === "campaign"
+                effectiveView === "campaign"
                   ? (row) =>
                       row.platform
                         ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`
                         : null
-                  : view === "creative"
+                  : effectiveView === "creative"
                     ? (row) =>
                         row.platform && row.campaignName
                           ? `/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.campaignName)}/creatives/${encodeURIComponent(row.name)}`

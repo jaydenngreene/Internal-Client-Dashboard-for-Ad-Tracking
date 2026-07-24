@@ -145,7 +145,12 @@ export function FunnelClient({ clientId }: { clientId: string }) {
       {stage === "mof" && mof.data && (
         <>
           {(() => {
-            const dates = mof.data!.series.map((p) => p.date);
+            // Defensive fallback (2026-07-25): if the dashboard (Vercel) and API
+            // (Railway) redeploy at slightly different times, an older API build
+            // won't have `series` yet - fall back to an empty array instead of
+            // crashing the whole page on `.map` of undefined during that window.
+            const series = mof.data!.series ?? [];
+            const dates = series.map((p) => p.date);
             return (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiTile
@@ -153,7 +158,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   value={formatNumber(mof.data!.totalSessions)}
                   fromDate={mof.data!.from}
                   color="var(--color-chart-4)"
-                  sparkline={mof.data!.series.map((p) => p.sessions)}
+                  sparkline={series.map((p) => p.sessions)}
                   dates={dates}
                   formatValue={formatNumber}
                 />
@@ -162,7 +167,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   value={formatNumber(mof.data!.totalPageviews)}
                   fromDate={mof.data!.from}
                   color="var(--color-chart-1)"
-                  sparkline={mof.data!.series.map((p) => p.pageviews)}
+                  sparkline={series.map((p) => p.pageviews)}
                   dates={dates}
                   formatValue={formatNumber}
                 />
@@ -171,7 +176,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   value={mof.data!.avgPageviewsPerSession === null ? "-" : mof.data!.avgPageviewsPerSession.toFixed(1)}
                   fromDate={mof.data!.from}
                   color="var(--color-chart-3)"
-                  sparkline={mof.data!.series.map((p) => p.avgPageviewsPerSession)}
+                  sparkline={series.map((p) => p.avgPageviewsPerSession)}
                   dates={dates}
                   formatValue={(v) => v.toFixed(1)}
                 />
@@ -214,7 +219,8 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                 Ecommerce
               </p>
               {(() => {
-                const dates = mof.data!.series.map((p) => p.date);
+                const series = mof.data!.series ?? [];
+                const dates = series.map((p) => p.date);
                 return (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <KpiTile
@@ -222,7 +228,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                       value={formatNumber(mof.data!.viewContentCount)}
                       fromDate={mof.data!.from}
                       color="var(--color-chart-4)"
-                      sparkline={mof.data!.series.map((p) => p.viewContentCount)}
+                      sparkline={series.map((p) => p.viewContentCount)}
                       dates={dates}
                       formatValue={formatNumber}
                     />
@@ -231,7 +237,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                       value={formatNumber(mof.data!.addToCartCount)}
                       fromDate={mof.data!.from}
                       color="var(--color-chart-1)"
-                      sparkline={mof.data!.series.map((p) => p.addToCartCount)}
+                      sparkline={series.map((p) => p.addToCartCount)}
                       dates={dates}
                       formatValue={formatNumber}
                     />
@@ -240,7 +246,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                       value={formatNumber(mof.data!.initiateCheckoutCount)}
                       fromDate={mof.data!.from}
                       color="var(--color-chart-3)"
-                      sparkline={mof.data!.series.map((p) => p.initiateCheckoutCount)}
+                      sparkline={series.map((p) => p.initiateCheckoutCount)}
                       dates={dates}
                       formatValue={formatNumber}
                     />
@@ -263,24 +269,27 @@ export function FunnelClient({ clientId }: { clientId: string }) {
           {isEcomLike ? (
             <>
               {(() => {
-                const dates = bof.data!.series.map((p) => p.date);
-                const totalOrdersForRate = bof.data!.newCustomerOrders + bof.data!.returningCustomerOrders;
+                const series = bof.data!.series ?? [];
+                const dates = series.map((p) => p.date);
+                const newCustomerOrders = bof.data!.newCustomerOrders ?? 0;
+                const returningCustomerOrders = bof.data!.returningCustomerOrders ?? 0;
+                const totalOrdersForRate = newCustomerOrders + returningCustomerOrders;
                 return (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <KpiTile
                       label="Repeat Purchase Rate"
-                      value={formatPercent(bof.data!.repeatPurchaseRate)}
+                      value={formatPercent(bof.data!.repeatPurchaseRate ?? null)}
                       fromDate={bof.data!.from}
                       color="var(--color-chart-1)"
-                      sparkline={bof.data!.series.map((p) => p.repeatPurchaseRate)}
+                      sparkline={series.map((p) => p.repeatPurchaseRate)}
                       dates={dates}
                       formatValue={(v) => formatPercent(v)}
-                      sublabel={`${formatNumber(bof.data!.returningCustomerOrders)} of ${formatNumber(totalOrdersForRate)} orders`}
+                      sublabel={`${formatNumber(returningCustomerOrders)} of ${formatNumber(totalOrdersForRate)} orders`}
                     />
                     <KpiTile
                       label="Avg Days: First Click to Purchase"
                       value={
-                        bof.data!.avgDaysFirstClickToPurchase === null
+                        bof.data!.avgDaysFirstClickToPurchase == null
                           ? "-"
                           : bof.data!.avgDaysFirstClickToPurchase.toFixed(1)
                       }
@@ -292,7 +301,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                       value={formatPercent(bof.data!.refundRate)}
                       fromDate={bof.data!.from}
                       color="var(--color-chart-2)"
-                      sparkline={bof.data!.series.map((p) => p.refundRate)}
+                      sparkline={series.map((p) => p.refundRate)}
                       dates={dates}
                       formatValue={(v) => formatPercent(v)}
                       sublabel={`${formatNumber(bof.data!.refundedOrders)} of ${formatNumber(bof.data!.totalOrders)} orders`}
@@ -302,7 +311,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                       value={formatNumber(bof.data!.totalOrders)}
                       fromDate={bof.data!.from}
                       color="var(--color-chart-4)"
-                      sparkline={bof.data!.series.map((p) => p.totalOrders)}
+                      sparkline={series.map((p) => p.totalOrders)}
                       dates={dates}
                       formatValue={formatNumber}
                     />
@@ -315,18 +324,23 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   <CardTitle className="text-sm">New vs. Returning Customers</CardTitle>
                 </CardHeader>
                 <CardContent className="px-0">
-                  {bof.data.newCustomerOrders + bof.data.returningCustomerOrders > 0 ? (
-                    <DonutChart
-                      centerValue={formatPercent(bof.data.repeatPurchaseRate)}
-                      centerLabel={`${formatNumber(bof.data.returningCustomerOrders)} of ${formatNumber(bof.data.newCustomerOrders + bof.data.returningCustomerOrders)} repeat`}
-                      segments={[
-                        { key: "new", label: "New customers", value: bof.data.newCustomerOrders, color: "var(--color-chart-4)" },
-                        { key: "returning", label: "Returning customers", value: bof.data.returningCustomerOrders, color: "var(--color-chart-1)" },
-                      ]}
-                    />
-                  ) : (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No orders in this range yet.</p>
-                  )}
+                  {(() => {
+                    const newCustomerOrders = bof.data!.newCustomerOrders ?? 0;
+                    const returningCustomerOrders = bof.data!.returningCustomerOrders ?? 0;
+                    const total = newCustomerOrders + returningCustomerOrders;
+                    return total > 0 ? (
+                      <DonutChart
+                        centerValue={formatPercent(bof.data!.repeatPurchaseRate ?? null)}
+                        centerLabel={`${formatNumber(returningCustomerOrders)} of ${formatNumber(total)} repeat`}
+                        segments={[
+                          { key: "new", label: "New customers", value: newCustomerOrders, color: "var(--color-chart-4)" },
+                          { key: "returning", label: "Returning customers", value: returningCustomerOrders, color: "var(--color-chart-1)" },
+                        ]}
+                      />
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No orders in this range yet.</p>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </>

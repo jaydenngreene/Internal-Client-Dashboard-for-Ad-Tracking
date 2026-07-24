@@ -3,6 +3,7 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card } from "@/components/ui/card";
 import { formatDateShort } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface KpiTileProps {
   label: string;
@@ -20,6 +21,12 @@ interface KpiTileProps {
   // formatRoas) — without it the tooltip falls back to a plain localized number.
   formatValue?: (v: number) => string;
   sublabel?: string;
+  // "hero" = the one north-star number a page leads with (Overview's Profit tile),
+  // rendered noticeably larger instead of at equal weight with every other KPI -
+  // a flat grid of same-size tiles was the single biggest "generic internal tool"
+  // tell found researching Hyros/Northbeam/Triple Whale's own Overview-equivalent
+  // screens, all of which lead with one dominant figure.
+  size?: "default" | "hero";
 }
 
 interface SparkPoint {
@@ -53,23 +60,46 @@ function SparkTooltip({
 // card's left/right/bottom edges), not layered behind the text — running it
 // full-bleed behind the number the way an earlier pass did let tall peaks
 // overlap and clip against the text above it.
-export function KpiTile({ label, value, fromDate, color, sparkline, dates, formatValue, sublabel }: KpiTileProps) {
+export function KpiTile({
+  label,
+  value,
+  fromDate,
+  color,
+  sparkline,
+  dates,
+  formatValue,
+  sublabel,
+  size = "default",
+}: KpiTileProps) {
   const hasChart = !!color && !!sparkline && sparkline.length > 0;
   const data: SparkPoint[] = hasChart ? sparkline.map((v, i) => ({ i, v, date: dates?.[i] })) : [];
   const gradientId = `spark-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const isHero = size === "hero";
 
   return (
-    <Card className={hasChart ? "overflow-hidden px-4 pb-0" : "px-4"}>
+    <Card
+      className={cn(
+        hasChart ? "overflow-hidden pb-0" : "",
+        isHero ? "px-5 py-1 ring-1 ring-primary/15" : "px-4"
+      )}
+    >
       <div className="min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className={cn("font-medium text-muted-foreground", isHero ? "text-sm" : "text-xs")}>{label}</p>
+        <p
+          className={cn(
+            "font-semibold tabular-nums text-foreground",
+            isHero ? "mt-1.5 text-5xl" : "mt-1 text-2xl"
+          )}
+        >
+          {value}
+        </p>
+        <p className={cn("text-muted-foreground", isHero ? "mt-1.5 text-sm" : "mt-0.5 text-xs")}>
           from {formatDateShort(fromDate)}
           {sublabel ? ` · ${sublabel}` : ""}
         </p>
       </div>
       {hasChart && (
-        <div className="-mx-4 h-16">
+        <div className={cn("-mx-4", isHero ? "-mx-5 h-28" : "h-16")}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
               <defs>

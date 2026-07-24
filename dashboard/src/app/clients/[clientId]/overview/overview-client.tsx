@@ -36,70 +36,79 @@ import type { OverviewReport } from "@/lib/api";
 const BEST_PERFORMING_LIMIT = 10;
 type OverviewView = "basic" | "pro";
 
-// Cost/Revenue/Profit/ROAS/ROI — shared by both Basic and Pro view, since it's
-// the one row Hyros keeps on screen no matter which tab you're on.
+// Profit leads as the one north-star number (a real hero, not just first-in-a-row) -
+// every other figure here answers a supporting question about it. This replaced a
+// flat 6-tile grid where Ad Spend/Revenue/Profit/ROAS/Blended ROAS/ROI all read at
+// equal visual weight, which research on Northbeam/Triple Whale/Stripe/Vercel's own
+// "one dominant number" convention flagged as the single biggest generic-internal-
+// tool tell on this exact page.
 function HeroKpiRow({ data }: { data: OverviewReport }) {
   const dates = data.series.map((p) => p.date);
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      <KpiTile
-        label="Ad Spend"
-        value={formatCurrency(data.cost)}
-        fromDate={data.from}
-        color="var(--color-chart-2)"
-        sparkline={data.series.map((p) => p.cost)}
-        dates={dates}
-        formatValue={formatCurrency}
-      />
-      <KpiTile
-        label="Total Revenue"
-        value={formatCurrency(data.revenue)}
-        fromDate={data.from}
-        color="var(--color-chart-1)"
-        sparkline={data.series.map((p) => p.revenue)}
-        dates={dates}
-        formatValue={formatCurrency}
-      />
-      <KpiTile
-        label="Profit"
-        value={formatCurrency(data.trueProfit)}
-        fromDate={data.from}
-        color="var(--color-chart-3)"
-        sparkline={data.series.map((p) => p.trueProfit)}
-        dates={dates}
-        formatValue={formatCurrency}
-        sublabel={data.hasMarginConfig ? "COGS-adjusted" : "ad cost only, no margin set"}
-      />
-      <KpiTile
-        label="ROAS"
-        value={formatRoas(data.roas)}
-        fromDate={data.from}
-        color="var(--color-chart-4)"
-        sparkline={data.series.map((p) => (p.cost > 0 ? p.attributedRevenue / p.cost : 0))}
-        dates={dates}
-        formatValue={(v) => formatRoas(v)}
-        sublabel={`of ${formatCurrency(data.attributedRevenue)} attributed`}
-      />
-      <KpiTile
-        label="Blended ROAS"
-        value={formatRoas(data.blendedRoas)}
-        fromDate={data.from}
-        color="var(--color-chart-1)"
-        sparkline={data.series.map((p) => (p.cost > 0 ? p.revenue / p.cost : 0))}
-        dates={dates}
-        formatValue={(v) => formatRoas(v)}
-        sublabel="total revenue ÷ ad spend, all sources"
-      />
-      <KpiTile
-        label="ROI"
-        value={formatPercent(data.hasMarginConfig ? data.trueRoi : data.roi)}
-        fromDate={data.from}
-        color="var(--color-chart-5)"
-        sparkline={data.series.map((p) => (p.cost > 0 ? (p.trueProfitAttributed / p.cost) * 100 : 0))}
-        dates={dates}
-        formatValue={(v) => formatPercent(v)}
-        sublabel={data.hasMarginConfig ? "COGS-adjusted, of attributed revenue" : "of attributed revenue"}
-      />
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="lg:col-span-1">
+        <KpiTile
+          label="Profit"
+          value={formatCurrency(data.trueProfit)}
+          fromDate={data.from}
+          color="var(--color-chart-3)"
+          sparkline={data.series.map((p) => p.trueProfit)}
+          dates={dates}
+          formatValue={formatCurrency}
+          sublabel={data.hasMarginConfig ? "COGS-adjusted" : "ad cost only, no margin set"}
+          size="hero"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-3">
+        <KpiTile
+          label="Ad Spend"
+          value={formatCurrency(data.cost)}
+          fromDate={data.from}
+          color="var(--color-chart-2)"
+          sparkline={data.series.map((p) => p.cost)}
+          dates={dates}
+          formatValue={formatCurrency}
+        />
+        <KpiTile
+          label="Total Revenue"
+          value={formatCurrency(data.revenue)}
+          fromDate={data.from}
+          color="var(--color-chart-1)"
+          sparkline={data.series.map((p) => p.revenue)}
+          dates={dates}
+          formatValue={formatCurrency}
+        />
+        <KpiTile
+          label="ROI"
+          value={formatPercent(data.hasMarginConfig ? data.trueRoi : data.roi)}
+          fromDate={data.from}
+          color="var(--color-chart-5)"
+          sparkline={data.series.map((p) => (p.cost > 0 ? (p.trueProfitAttributed / p.cost) * 100 : 0))}
+          dates={dates}
+          formatValue={(v) => formatPercent(v)}
+          sublabel={data.hasMarginConfig ? "COGS-adjusted, of attributed revenue" : "of attributed revenue"}
+        />
+        <KpiTile
+          label="ROAS"
+          value={formatRoas(data.roas)}
+          fromDate={data.from}
+          color="var(--color-chart-4)"
+          sparkline={data.series.map((p) => (p.cost > 0 ? p.attributedRevenue / p.cost : 0))}
+          dates={dates}
+          formatValue={(v) => formatRoas(v)}
+          sublabel={`of ${formatCurrency(data.attributedRevenue)} attributed`}
+        />
+        <KpiTile
+          label="Blended ROAS"
+          value={formatRoas(data.blendedRoas)}
+          fromDate={data.from}
+          color="var(--color-chart-1)"
+          sparkline={data.series.map((p) => (p.cost > 0 ? p.revenue / p.cost : 0))}
+          dates={dates}
+          formatValue={(v) => formatRoas(v)}
+          sublabel="total revenue ÷ ad spend, all sources"
+        />
+      </div>
     </div>
   );
 }

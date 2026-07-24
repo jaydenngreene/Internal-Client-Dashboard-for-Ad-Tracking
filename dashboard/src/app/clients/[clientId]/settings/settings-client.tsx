@@ -195,28 +195,41 @@ const PIXEL_KEY = '${pixelKey}';
 async function getVisitorId() {
   // Same cookie the main pixel (pixel.js) sets on the top-level page -
   // browser.cookie reads the real top-frame cookie jar, not a sandbox-local one.
-  const existing = await browser.cookie.get('_adt_vid');
-  if (existing) return existing;
+  try {
+    const existing = await browser.cookie.get('_adt_vid');
+    if (existing) return existing;
+  } catch (err) {
+    console.error('[Ad Dashboard pixel] cookie read failed', err);
+  }
   const id = crypto.randomUUID();
-  await browser.cookie.set('_adt_vid', id);
+  try {
+    await browser.cookie.set('_adt_vid', id);
+  } catch (err) {
+    console.error('[Ad Dashboard pixel] cookie write failed', err);
+  }
   return id;
 }
 
 async function send(eventType, product, value) {
-  const anonymous_id = await getVisitorId();
-  fetch(API_URL + '/track/event', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      pixel_key: PIXEL_KEY,
-      anonymous_id,
-      event_type: eventType,
-      url: window.location.href,
-      product_id: product ? String(product.id) : null,
-      product_name: product ? product.name : null,
-      value: value != null ? value : null,
-    }),
-  }).catch(() => {});
+  try {
+    const anonymous_id = await getVisitorId();
+    const res = await fetch(API_URL + '/track/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pixel_key: PIXEL_KEY,
+        anonymous_id,
+        event_type: eventType,
+        url: window.location.href,
+        product_id: product ? String(product.id) : null,
+        product_name: product ? product.name : null,
+        value: value != null ? value : null,
+      }),
+    });
+    console.log('[Ad Dashboard pixel]', eventType, 'sent, status', res.status);
+  } catch (err) {
+    console.error('[Ad Dashboard pixel]', eventType, 'failed', err);
+  }
 }
 
 analytics.subscribe('product_added_to_cart', (event) => {

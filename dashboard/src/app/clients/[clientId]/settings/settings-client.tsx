@@ -177,6 +177,64 @@ function shopifyThemeSnippet(apiUrl: string, pixelKey: string): string {
 </script>`;
 }
 
+// Settings → Customer events → Add custom pixel. This is the theme-independent
+// path for add-to-cart/checkout-start: Shopify dispatches product_added_to_cart
+// and checkout_started itself from its own cart/checkout logic, so it fires
+// reliably even on themes whose "Add to cart" button calls Shopify's AJAX cart
+// API directly (fetch/XHR to /cart/add) instead of a real <form> submission —
+// confirmed live on a real client site where the theme snippet's submit-event
+// listener above never fired at all, not even a capture-phase one, because no
+// native submit event was ever dispatched in the first place. Runs in Shopify's
+// sandboxed pixel context (no window.ADT_CONFIG, no document.cookie) - values
+// are inlined directly, matching the same per-client substitution the other
+// snippets already do.
+function shopifyCustomPixelSnippet(apiUrl: string, pixelKey: string): string {
+  return `const API_URL = '${apiUrl}';
+const PIXEL_KEY = '${pixelKey}';
+
+async function getVisitorId() {
+  // Same cookie the main pixel (pixel.js) sets on the top-level page -
+  // browser.cookie reads the real top-frame cookie jar, not a sandbox-local one.
+  const existing = await browser.cookie.get('_adt_vid');
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  await browser.cookie.set('_adt_vid', id);
+  return id;
+}
+
+async function send(eventType, product, value) {
+  const anonymous_id = await getVisitorId();
+  fetch(API_URL + '/track/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pixel_key: PIXEL_KEY,
+      anonymous_id,
+      event_type: eventType,
+      url: window.location.href,
+      product_id: product ? String(product.id) : null,
+      product_name: product ? product.name : null,
+      value: value != null ? value : null,
+    }),
+  }).catch(() => {});
+}
+
+analytics.subscribe('product_added_to_cart', (event) => {
+  const line = event.data.cartLine;
+  if (!line) return;
+  send(
+    'add_to_cart',
+    { id: line.merchandise.product.id, name: line.merchandise.product.title },
+    line.merchandise.price.amount * line.quantity
+  );
+});
+
+analytics.subscribe('checkout_started', (event) => {
+  const checkout = event.data.checkout;
+  send('begin_checkout', null, checkout ? checkout.totalPrice.amount : null);
+});`;
+}
+
 function shopifyCheckoutSnippet(apiUrl: string, pixelKey: string): string {
   return `{% comment %}
   Add in: Settings → Checkout → Order status page → Additional scripts
@@ -449,6 +507,20 @@ function GeneralSection({ clientId, client }: { clientId: string; client: Client
                 <p>Checkout script — Settings → Checkout → Order status page → Additional scripts:</p>
                 <div className="mt-1">
                   <CopyBlock code={shopifyCheckoutSnippet(apiUrl, client.pixel_key)} />
+                </div>
+              </li>
+              <li>
+                <p>
+                  Add to cart / checkout tracking — <strong>Settings → Customer events → Add custom pixel</strong>.
+                  Themes vary in how &quot;Add to cart&quot; actually works under the hood (some submit a real
+                  form, many modern ones call Shopify&apos;s cart API directly via JavaScript instead) — this
+                  step catches it reliably either way, straight from Shopify&apos;s own event system rather
+                  than guessing at the page&apos;s markup. Paste into the pixel&apos;s Code box, Save, then
+                  Connect. Runs independently in its own sandbox — doesn&apos;t conflict with Meta&apos;s pixel
+                  or any other pixel already connected here.
+                </p>
+                <div className="mt-1">
+                  <CopyBlock code={shopifyCustomPixelSnippet(apiUrl, client.pixel_key)} />
                 </div>
               </li>
             </ol>

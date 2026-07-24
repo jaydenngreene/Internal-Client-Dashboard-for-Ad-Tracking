@@ -2,9 +2,10 @@
 
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
-import { Bell, Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { DateRangeSelect } from "./date-range-select";
 import { SavedViews } from "./saved-views";
+import { NotificationsBell } from "./notifications-bell";
 import { useDateRangeState } from "@/lib/date-range";
 
 function ThemeToggle() {
@@ -55,28 +56,28 @@ export function HeaderBar({ onMenuClick }: { onMenuClick: () => void }) {
       >
         <Menu className="size-5" />
       </button>
-      <div className="flex-1" />
-      {showDateRange && (
-        <>
+      {/* The date-range control alone can grow past 450px in custom-range mode
+          (two date inputs plus the preset trigger) - on a narrow viewport that
+          would overflow the header with nowhere to go. Scrollable on its own,
+          same overflow-x-auto convention SegmentedToggle already uses for the
+          same reason, so the fixed-width icons after it always stay reachable
+          instead of getting pushed off-screen too. */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-x-auto">
+        {showDateRange && (
           <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
-          <SavedViews
-            preset={preset}
-            customRange={customRange}
-            onApply={(nextPreset, nextCustomRange) => {
-              setPreset(nextPreset);
-              if (nextCustomRange) setCustomRange(nextCustomRange);
-            }}
-          />
-        </>
+        )}
+      </div>
+      {showDateRange && (
+        <SavedViews
+          preset={preset}
+          customRange={customRange}
+          onApply={(nextPreset, nextCustomRange) => {
+            setPreset(nextPreset);
+            if (nextCustomRange) setCustomRange(nextCustomRange);
+          }}
+        />
       )}
-      <button
-        type="button"
-        aria-label="Notifications"
-        title="Notifications"
-        className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        <Bell className="size-4" />
-      </button>
+      <NotificationsBell />
       <ThemeToggle />
     </div>
   );

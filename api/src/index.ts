@@ -33,6 +33,7 @@ import { publicShareRoutes } from './routes/publicShare'
 import { incrementalityRoutes } from './routes/incrementality'
 import { creativeFatigueRoutes } from './routes/creativeFatigue'
 import { trackingHealthRoutes } from './routes/trackingHealth'
+import { notificationsRoutes } from './routes/notifications'
 import { creativeTagRoutes } from './routes/creativeTags'
 import { budgetReallocationRoutes } from './routes/budgetReallocation'
 import { chatRoutes } from './routes/chat'
@@ -206,6 +207,7 @@ app.register(
     instance.register(audienceSyncRoutes)
     instance.register(insightsRoutes)
     instance.register(journeyRoutes)
+    instance.register(notificationsRoutes)
     instance.register(jobRoutes)
     instance.register(auditLogRoutes)
   }

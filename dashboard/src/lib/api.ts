@@ -471,6 +471,22 @@ export function getForecast(clientId: string): Promise<ForecastReport> {
   return fetchJson<ForecastReport>(`/clients/${clientId}/reports/forecast`);
 }
 
+// Powers the header bar's notification bell - counts across the four advisory
+// signals this app already has (Pause Candidates, Creative Fatigue, Tracking
+// Health, Budget Reallocation) instead of a generic notifications inbox, since
+// each already has its own dedicated review page this just points at.
+export interface NotificationsSummary {
+  pauseCandidates: number;
+  creativeFatigue: number;
+  trackingHealth: number;
+  budgetReallocation: number;
+  total: number;
+}
+
+export function getNotificationsSummary(clientId: string): Promise<NotificationsSummary> {
+  return fetchJson<NotificationsSummary>(`/clients/${clientId}/notifications-summary`);
+}
+
 // Named, curated "best path" callouts (Rockerbox's Marketing Paths pattern) -
 // built from this client's own attribution history, see api/src/lib/bestPaths.ts
 // for the full methodology and why it's honest across every attribution model.

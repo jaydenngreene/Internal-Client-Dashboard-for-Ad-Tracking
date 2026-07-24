@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DateRange } from "./api";
 
 export type RangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "this_month" | "last_month" | "custom";
@@ -55,12 +55,65 @@ export function resolveRange(preset: RangePreset, customRange?: DateRange): Date
   return { from: isoDate(from), to: isoDate(today) };
 }
 
+// One shared key, not per-page — the ask was for the picked range to survive
+// switching between ANY tabs on the site, not just back/forward within one
+// report, so every page reads and writes the same slot rather than each
+// remembering its own.
+const STORAGE_KEY = "adt-date-range";
+
+interface StoredRange {
+  preset: RangePreset;
+  customRange?: DateRange;
+}
+
+function readStoredRange(): StoredRange | null {
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredRange(stored: StoredRange): void {
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // Storage can be unavailable (private browsing, quota) - the picker still
+    // works for the current page, it just won't carry over to the next one.
+  }
+}
+
 // One hook to replace every page's own useState<RangePreset> + resolveRange(preset)
 // pair — centralizing it here means the custom-range picker works everywhere at
-// once instead of needing the same three lines threaded through a dozen pages by hand.
+// once instead of needing the same three lines threaded through a dozen pages by
+// hand. First render always uses `initial` (server and client agree, no hydration
+// mismatch); a mount-time effect then applies whatever was last picked anywhere
+// else on the site, so navigating away and back (or into a different report
+// entirely) keeps the same range instead of resetting to that page's own default.
 export function useDateRangeState(initial: RangePreset = "30d") {
-  const [preset, setPreset] = useState<RangePreset>(initial);
-  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
+  const [preset, setPresetState] = useState<RangePreset>(initial);
+  const [customRange, setCustomRangeState] = useState<DateRange | undefined>(undefined);
+
+  useEffect(() => {
+    const stored = readStoredRange();
+    if (stored) {
+      setPresetState(stored.preset);
+      setCustomRangeState(stored.customRange);
+    }
+    // Only ever run once, right after mount - this is a one-time "restore",
+    // not a subscription to ongoing changes from elsewhere.
+  }, []);
+
+  const setPreset = (next: RangePreset) => {
+    setPresetState(next);
+    writeStoredRange({ preset: next, customRange });
+  };
+  const setCustomRange = (next: DateRange) => {
+    setCustomRangeState(next);
+    writeStoredRange({ preset, customRange: next });
+  };
+
   const range = resolveRange(preset, customRange);
   return { preset, setPreset, customRange, setCustomRange, range };
 }

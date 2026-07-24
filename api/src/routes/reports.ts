@@ -1372,6 +1372,19 @@ export async function reportRoutes(app: FastifyInstance) {
       }
 
       const rows = new Map<string, Row>()
+      // Lookup-only index from an ad platform's raw numeric campaign_id/ad_id to the
+      // same Row objects as `rows` above — never iterated directly (only `rows` is,
+      // at the end), just a second way to find a row. Exists because a client's ad
+      // URLs can carry Meta's dynamic {{campaign.id}}/{{ad.id}} token instead of
+      // {{campaign.name}}/{{ad.name}} in utm_campaign/utm_content - when that
+      // happens, matching by name alone always misses (a session's utm_campaign is
+      // a raw id like "120245194137140253", ad_costs.campaign_name is real text),
+      // and the purchase lands in its own unmatched row labeled with that raw id
+      // instead of merging into the real campaign/creative. ad_costs already has
+      // the id from the Marketing API sync either way, so this needs no change to
+      // how the client tags their ads.
+      const idIndex = new Map<string, Row>()
+      const findRow = (key: string): Row | undefined => rows.get(key) ?? idIndex.get(key)
 
       const getOrCreate = (key: string, fallbackName: string): Row => {
         let row = rows.get(key)
@@ -1399,6 +1412,12 @@ export async function reportRoutes(app: FastifyInstance) {
             : breakdown === 'creative'
               ? (r as unknown as { ad_name: string | null }).ad_name
               : (r as SpendRow).campaign_name
+        const idValue =
+          breakdown === 'campaign'
+            ? (r as SpendRow).campaign_id
+            : breakdown === 'creative'
+              ? (r as unknown as { ad_id: string | null }).ad_id
+              : null
         const platform = breakdown === 'source' ? (r as { platform: string }).platform : (r as SpendRow).platform
         const key = buildKey(name, platform)
         const row = getOrCreate(key, name ?? (breakdown === 'creative' ? '(unnamed creative)' : '(unnamed campaign)'))
@@ -1407,6 +1426,10 @@ export async function reportRoutes(app: FastifyInstance) {
         row.cost = parseFloat(r.cost)
         row.impressions = parseInt((r as { impressions: string }).impressions ?? '0', 10)
         row.clicks = parseInt((r as { clicks: string }).clicks ?? '0', 10)
+        if (idValue) {
+          const idKey = buildKey(idValue, platform)
+          if (idKey !== key) idIndex.set(idKey, row)
+        }
       }
 
       const fieldFor = (r: unknown): string | null =>
@@ -1437,7 +1460,7 @@ export async function reportRoutes(app: FastifyInstance) {
         const name = fieldFor(r)
         const source = sourceFieldFor(r)
         const key = buildKey(name, source)
-        const row = getOrCreate(key, name ?? fallbackFor())
+        const row = findRow(key) ?? getOrCreate(key, name ?? fallbackFor())
         // Rows with no matching ad_costs (never hit the spend loop above) would
         // otherwise show no platform badge at all, even though the raw utm_source
         // tells us what platform the lead actually came from.
@@ -1449,7 +1472,7 @@ export async function reportRoutes(app: FastifyInstance) {
         const name = fieldFor(r)
         const source = sourceFieldFor(r)
         const key = buildKey(name, source)
-        const row = getOrCreate(key, name ?? fallbackFor())
+        const row = findRow(key) ?? getOrCreate(key, name ?? fallbackFor())
         if (row.platform === null && source) row.platform = source
         row.revenue = parseFloat(r.revenue)
         row.sales = parseInt(r.sales, 10)

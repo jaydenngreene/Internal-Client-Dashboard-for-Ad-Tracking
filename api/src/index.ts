@@ -62,8 +62,14 @@ const app = Fastify({ logger: true, trustProxy: true })
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim())
 
-app.register(cors, {
-  origin: (origin, cb) => {
+// Origin-restricted CORS — for routes only ever called from this app's own
+// dashboard frontend (the Vercel deploy in ALLOWED_ORIGINS). Kept as its own
+// object so it can be registered in more than one encapsulated scope below,
+// since a Fastify plugin registered on the root `app` applies to every route
+// including ones that need the opposite (unrestricted) policy — see
+// pixelCorsOptions just below for why that matters.
+const dashboardCorsOptions = {
+  origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       cb(null, true)
     } else {
@@ -71,7 +77,18 @@ app.register(cors, {
     }
   },
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-})
+}
+
+// Unrestricted CORS — for the pixel's own tracking calls (pageview, identify,
+// conversion, cart events, tag, DNI). These are meant to run on ANY client's
+// website, which is never known in advance, so an origin allowlist can't work
+// here the way it does for the dashboard — that's the whole premise of an
+// embeddable pixel. Security for these routes comes from the per-client
+// pixel_key each call carries, not from origin trust.
+const pixelCorsOptions = {
+  origin: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+}
 
 app.register(helmet)
 
@@ -107,14 +124,25 @@ process.on('uncaughtException', (err) => Sentry.captureException(err))
 
 app.get('/health', async () => ({ status: 'ok' }))
 
-// Third-party/pixel-facing routes — authenticate themselves a different way
-// (pixel_key, a webhook signature, or a per-client shared secret), never a
-// logged-in dashboard user, so none of these sit behind the auth block below.
-app.register(pageviewRoutes)
+// Pixel-facing routes — called via fetch/sendBeacon from arbitrary client
+// websites, authenticated by pixel_key rather than by origin. Needs the
+// unrestricted CORS policy (see pixelCorsOptions above) or every one of these
+// silently fails its preflight the moment it's called from a domain that was
+// never added to ALLOWED_ORIGINS — which is every new client's site by default.
+app.register(async (instance) => {
+  instance.register(cors, pixelCorsOptions)
+  instance.register(pageviewRoutes)
+  instance.register(identifyRoutes)
+  instance.register(conversionRoutes)
+  instance.register(eventRoutes)
+  instance.register(trackTagRoutes)
+  instance.register(dniRoutes)
+})
+
+// Server-to-server (webhooks) or script-tag/redirect-loaded routes — neither
+// is subject to browser CORS enforcement in the first place (no fetch/XHR
+// preflight involved), so no cors plugin is needed here at all.
 app.register(pixelAssetRoutes)
-app.register(identifyRoutes)
-app.register(conversionRoutes)
-app.register(eventRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
 app.register(stripeWebhookRoutes)
@@ -124,11 +152,15 @@ app.register(goHighLevelWebhookRoutes)
 app.register(twilioWebhookRoutes)
 app.register(customersAiWebhookRoutes)
 app.register(tagWebhookRoutes)
-app.register(dniRoutes)
 app.register(shopifyAppRoutes)
-app.register(trackTagRoutes)
-app.register(authRoutes)
-app.register(publicShareRoutes)
+
+// Dashboard-called routes (login/register, the public share report) — kept on
+// the origin-restricted policy, unchanged from before this split.
+app.register(async (instance) => {
+  instance.register(cors, dashboardCorsOptions)
+  instance.register(authRoutes)
+  instance.register(publicShareRoutes)
+})
 
 // Dashboard-facing routes — every one of these requires a valid login (authenticate)
 // and, except for the two 'skip' cases handled in their own handlers (create/list
@@ -137,6 +169,7 @@ app.register(publicShareRoutes)
 // ever runs. See lib/ownership.ts for the full per-route resolver table.
 app.register(
   async (instance) => {
+    instance.register(cors, dashboardCorsOptions)
     instance.addHook('preHandler', authenticate)
     instance.addHook('preHandler', requireOwnership)
     // Step 54 — generic audit logging: every mutation (non-GET) that succeeded
@@ -183,6 +216,7 @@ app.register(
 // through the (unauthenticated, internal-only) dashboard surface above.
 app.register(
   async (instance) => {
+    instance.register(cors, dashboardCorsOptions)
     instance.addHook('onRequest', async (req, reply) => {
       const expected = process.env.API_SECRET
       const header = req.headers.authorization

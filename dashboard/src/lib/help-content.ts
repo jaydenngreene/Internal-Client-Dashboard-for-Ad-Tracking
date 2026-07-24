@@ -109,12 +109,12 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         slug: "funnel",
         title: "Funnel (TOF / MOF / BOF)",
-        purpose: "Three stages of the same funnel: TOF (leads coming in and what they cost), MOF (engagement between first click and conversion), BOF (who actually buys, how fast, and what sticks).",
+        purpose: "Three stages of the same funnel: TOF (leads or purchases coming in and what they cost), MOF (engagement between first click and conversion), BOF (who actually buys, how fast, and what sticks). TOF and BOF's exact metrics adapt to the client's niche: ecommerce/info-product clients see Total Purchases and Ad Spend per Purchase instead of Total Leads and CPL, and an ecommerce-native buyer-conversion view instead of the lead-to-buyer rate.",
         metrics: [
-          { term: "TOF: Total Leads / CPL", definition: "How many leads came in and what each one cost." },
-          { term: "MOF: Engagement Rate", definition: "Share of sessions with at least one further pageview after landing." },
-          { term: "MOF: Cart Abandonment (ecommerce)", definition: "Checkouts initiated that never converted to a sale." },
-          { term: "BOF: Lead to Buyer Rate", definition: "Share of leads that eventually purchased." },
+          { term: "TOF: Total Leads / CPL", definition: "How many leads came in and what each one cost. Shows Total Purchases / Ad Spend per Purchase instead for ecommerce and info-product clients." },
+          { term: "MOF: Engagement Rate", definition: "Share of sessions with more than one pageview (didn't bounce off the landing page)." },
+          { term: "MOF: Cart Abandonment (ecommerce)", definition: "Add-to-carts that never converted to a sale by that visitor." },
+          { term: "BOF: Lead to Buyer Rate", definition: "Share of leads that eventually purchased. Ecommerce/info-product clients see repeat-purchase rate and new-vs-returning customers instead." },
           { term: "BOF: Refund Rate", definition: "Share of orders refunded in the range." },
         ],
       },

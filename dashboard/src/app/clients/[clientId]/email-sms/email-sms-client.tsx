@@ -89,7 +89,7 @@ export function EmailSmsClient({ clientId }: { clientId: string }) {
                   <TableRow key={c.campaignId}>
                     <TableCell className="max-w-64 truncate font-medium">{c.campaignName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] capitalize">{c.channel}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{c.channel === "sms" ? "SMS" : "Email"}</Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatNumber(c.recipients)}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.openRate === null ? "-" : formatPercent(c.openRate)}</TableCell>

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { getAgencyOverview, AgencyClientRow } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatRoas, formatPercent } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { DeltaBadge } from "@/components/delta-badge";
 import { useRecentClientIds } from "@/lib/recent-clients";
 import {
@@ -24,11 +23,10 @@ import { cn } from "@/lib/utils";
 type SortKey = keyof Pick<AgencyClientRow, "name" | "cost" | "revenue" | "profit" | "roas" | "roi">;
 
 export default function AgencyOverviewPage() {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("7d");
+  const { range } = useDateRangeState("7d");
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [sortDesc, setSortDesc] = useState(true);
   const recentIds = useRecentClientIds();
-
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["agency-overview", range.from, range.to],
@@ -81,7 +79,6 @@ export default function AgencyOverviewPage() {
           <h1 className="text-lg font-semibold">Agency Overview</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">Every client&apos;s performance, side by side</p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && (

@@ -6,7 +6,6 @@ import { getFunnel, campaignGoalForNiche, getClients } from "@/lib/api";
 import { InsightsPanel } from "@/components/insights-panel";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
 import { useDateRangeState } from "@/lib/date-range";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
@@ -21,9 +20,8 @@ const ALL_PLATFORMS = "__all__";
 // (generated fresh on that campaign's detail page) rather than only ever seeing one
 // blended account-wide number.
 export function InsightsClient({ clientId }: { clientId: string }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
+  const { range } = useDateRangeState("30d");
   const [platform, setPlatform] = useState<string>(ALL_PLATFORMS);
-
 
   const funnelQuery = useQuery({
     queryKey: ["campaigns", clientId, range.from, range.to, "campaign"],
@@ -63,7 +61,6 @@ export function InsightsClient({ clientId }: { clientId: string }) {
             campaign below for its own campaign- and creative-level insights.
           </p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {platformOptions.length > 1 && (

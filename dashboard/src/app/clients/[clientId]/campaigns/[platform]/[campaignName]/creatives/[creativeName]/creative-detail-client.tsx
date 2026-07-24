@@ -13,7 +13,6 @@ import {
   generateCreativeTagsFor,
 } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
@@ -218,8 +217,7 @@ export function CreativeDetailClient({
   campaignName: string;
   creativeName: string;
 }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
-
+  const { range } = useDateRangeState("30d");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["creative-detail", clientId, platform, campaignName, creativeName, range.from, range.to],
@@ -244,7 +242,6 @@ export function CreativeDetailClient({
             {formatPlatformLabel(platform) && <Badge variant="secondary">{formatPlatformLabel(platform)}</Badge>}
           </div>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load creative. Is the API running?</p>}

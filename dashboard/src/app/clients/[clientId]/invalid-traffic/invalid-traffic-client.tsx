@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getInvalidTraffic } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatNumber, formatPercent } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
@@ -13,8 +12,7 @@ import { ClientKicker } from "@/components/client-kicker";
 // Candidates/Creative Fatigue. Nothing here excludes anything from other
 // reports automatically.
 export function InvalidTrafficClient({ clientId }: { clientId: string }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
-
+  const { range } = useDateRangeState("30d");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["invalid-traffic", clientId, range.from, range.to],
@@ -34,7 +32,6 @@ export function InvalidTrafficClient({ clientId }: { clientId: string }) {
             mainly protects funnel/engagement metrics from bot noise, not ad spend efficiency.
           </p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>}

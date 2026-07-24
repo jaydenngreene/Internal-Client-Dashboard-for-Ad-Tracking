@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getFunnel, getLtv, getClients, getIntegrations, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
 import { LtvTable } from "@/components/ltv-table";
@@ -91,7 +90,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
     ? (requestedView as ViewMode)
     : "campaign";
 
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
+  const { range } = useDateRangeState("30d");
   const [view, setView] = useState<ViewMode>(initialView);
 
   const { data: integrations } = useQuery({
@@ -133,7 +132,6 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
         </div>
         <div className="flex items-center gap-3">
           <SegmentedToggle value={effectiveView} onChange={setView} options={viewOptions} />
-          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
 

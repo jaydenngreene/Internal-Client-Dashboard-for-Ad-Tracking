@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getSubscriptions } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { KpiTile } from "@/components/kpi-tile";
 import { MrrTrendChart } from "@/components/mrr-trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
 
 export function SubscriptionsClient({ clientId }: { clientId: string }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
-
+  const { range } = useDateRangeState("30d");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["subscriptions", clientId, range.from, range.to],
@@ -30,7 +28,6 @@ export function SubscriptionsClient({ clientId }: { clientId: string }) {
             MRR, trial conversion, and churn. Current MRR is a live snapshot, the rest is scoped to the selected range
           </p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>}

@@ -19,7 +19,6 @@ import {
 } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { KpiTile } from "@/components/kpi-tile";
 import { StatChartCard } from "@/components/stat-chart-card";
 import { DonutChart } from "@/components/donut-chart";
@@ -540,7 +539,6 @@ export function OverviewClient({ clientId }: { clientId: string }) {
               { value: "pro", label: "Pro View" },
             ]}
           />
-          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
 

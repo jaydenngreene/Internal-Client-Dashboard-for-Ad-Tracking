@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getTof, getMof, getBof, getCalls, getClients, campaignGoalForNiche } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatDuration } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { FunnelBars } from "@/components/funnel-bars";
 import { DonutChart } from "@/components/donut-chart";
@@ -37,9 +36,8 @@ const STAGE_SUBTITLE: Record<Stage, string> = {
 };
 
 export function FunnelClient({ clientId }: { clientId: string }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
+  const { range } = useDateRangeState("30d");
   const [stage, setStage] = useState<Stage>("tof");
-
 
   const tof = useQuery({
     queryKey: ["tof", clientId, range.from, range.to],
@@ -84,7 +82,6 @@ export function FunnelClient({ clientId }: { clientId: string }) {
         </div>
         <div className="flex items-center gap-3">
           <SegmentedToggle value={stage} onChange={setStage} options={STAGE_OPTIONS} />
-          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
 

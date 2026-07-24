@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { HeaderBar } from "./header-bar";
 import { getToken } from "@/lib/auth";
+import { DateRangeProvider } from "@/lib/date-range";
 
 // These get no sidebar/chrome and no token requirement — they're reachable from
 // an email link (or, for /login, before any account exists at all) by someone
@@ -48,12 +49,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready) return null;
 
   return (
-    <>
+    <DateRangeProvider>
       <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <HeaderBar onMenuClick={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
-    </>
+    </DateRangeProvider>
   );
 }

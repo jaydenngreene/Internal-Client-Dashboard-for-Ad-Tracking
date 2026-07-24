@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ImageIcon, PlayIcon } from "lucide-react";
 import { getCampaignDetail, getClients, campaignGoalForNiche, CampaignCreativeRow } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
@@ -77,8 +76,7 @@ export function CampaignDetailClient({
   platform: string;
   campaignName: string;
 }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
-
+  const { range } = useDateRangeState("30d");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["campaign-detail", clientId, platform, campaignName, range.from, range.to],
@@ -103,7 +101,6 @@ export function CampaignDetailClient({
             {formatPlatformLabel(platform) && <Badge variant="secondary">{formatPlatformLabel(platform)}</Badge>}
           </div>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load campaign. Is the API running?</p>}

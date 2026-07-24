@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getMarkovAttribution } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
-import { DateRangeSelect } from "@/components/date-range-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
@@ -20,8 +19,7 @@ import { ClientKicker } from "@/components/client-kicker";
 // "conversion probability" shown to the user) — this is read by agency owners,
 // not data scientists.
 export function MarkovAttributionClient({ clientId }: { clientId: string }) {
-  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
-
+  const { range } = useDateRangeState("30d");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["markov-attribution", clientId, range.from, range.to],
@@ -43,7 +41,6 @@ export function MarkovAttributionClient({ clientId }: { clientId: string }) {
             dashboard.
           </p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>}

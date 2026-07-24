@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { DateRange } from "./api";
 
 export type RangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "this_month" | "last_month" | "custom";
@@ -84,14 +84,21 @@ function writeStoredRange(stored: StoredRange): void {
   }
 }
 
-// One hook to replace every page's own useState<RangePreset> + resolveRange(preset)
-// pair — centralizing it here means the custom-range picker works everywhere at
-// once instead of needing the same three lines threaded through a dozen pages by
-// hand. First render always uses `initial` (server and client agree, no hydration
-// mismatch); a mount-time effect then applies whatever was last picked anywhere
-// else on the site, so navigating away and back (or into a different report
-// entirely) keeps the same range instead of resetting to that page's own default.
-export function useDateRangeState(initial: RangePreset = "30d") {
+export interface DateRangeState {
+  preset: RangePreset;
+  setPreset: (next: RangePreset) => void;
+  customRange: DateRange | undefined;
+  setCustomRange: (next: DateRange) => void;
+  range: DateRange;
+}
+
+// The actual state logic, used both by DateRangeProvider (the shared, app-wide
+// instance every page now reads through the persistent header bar - see
+// components/header-bar.tsx) and as a standalone fallback for any page rendered
+// outside that provider. First render always uses `initial` (server and client
+// agree, no hydration mismatch); a mount-time effect then applies whatever was
+// last picked anywhere else on the site.
+function useDateRangeStateInternal(initial: RangePreset): DateRangeState {
   const [preset, setPresetState] = useState<RangePreset>(initial);
   const [customRange, setCustomRangeState] = useState<DateRange | undefined>(undefined);
 
@@ -116,4 +123,28 @@ export function useDateRangeState(initial: RangePreset = "30d") {
 
   const range = resolveRange(preset, customRange);
   return { preset, setPreset, customRange, setCustomRange, range };
+}
+
+const DateRangeContext = createContext<DateRangeState | null>(null);
+
+// One shared instance for the whole authenticated app (see AppShell), so the
+// date-range control can live once in the persistent header bar instead of
+// being duplicated on every report page - the single biggest concrete step
+// toward a real "global filter bar" (Northbeam/Datadog's own pattern: one
+// control governs every widget, instead of scattered per-page pickers that can
+// drift out of sync with each other).
+export function DateRangeProvider({ children }: { children: React.ReactNode }) {
+  const state = useDateRangeStateInternal("30d");
+  return <DateRangeContext.Provider value={state}>{children}</DateRangeContext.Provider>;
+}
+
+// Every report page still calls this exactly as before - if it's rendered
+// inside a DateRangeProvider (true for every authenticated page now), it reads
+// the one shared instance; the `initial` argument becomes a no-op in that case
+// since the shared state already has a real value. Falls back to a standalone
+// instance for anything ever rendered outside the provider.
+export function useDateRangeState(initial: RangePreset = "30d"): DateRangeState {
+  const shared = useContext(DateRangeContext);
+  const standalone = useDateRangeStateInternal(initial);
+  return shared ?? standalone;
 }

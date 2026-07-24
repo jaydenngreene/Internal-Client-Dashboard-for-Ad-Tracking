@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../../db'
 import { generateOutreachDraft } from '../../lib/remarketingAgent'
+import { friendlyAiErrorMessage } from '../../lib/aiErrors'
 
 interface CustomersAiConfig {
   webhook_secret: string
@@ -102,7 +103,7 @@ export async function customersAiWebhookRoutes(app: FastifyInstance) {
       } catch (err) {
         await db.query(
           `UPDATE remarketing_candidates SET draft_error = $1 WHERE id = $2`,
-          [err instanceof Error ? err.message : String(err), candidateId]
+          [friendlyAiErrorMessage(err), candidateId]
         )
       }
 

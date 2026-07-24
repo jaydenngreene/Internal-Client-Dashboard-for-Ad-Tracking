@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db'
+import { friendlyAiErrorMessage } from './aiErrors'
 
 const MODEL = 'claude-opus-4-8'
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -136,7 +137,7 @@ export async function generateCreativeTags(
     )
     return { tags: { hookType, angle, tone, format }, error: null }
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err)
+    const error = friendlyAiErrorMessage(err)
     await db.query(
       `INSERT INTO creative_tags (client_id, platform, ad_name, error)
        VALUES ($1, $2, $3, $4)

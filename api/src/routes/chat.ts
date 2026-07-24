@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { getConversationHistory, askQuestion } from '../lib/chatAgent'
+import { friendlyAiErrorMessage } from '../lib/aiErrors'
 
 // Conversational AI chat (Step 51) — one thread per client, Claude answers using
 // real live-queried data via tool-use (see lib/chatTools.ts), never guesses.
@@ -16,7 +17,7 @@ export async function chatRoutes(app: FastifyInstance) {
       const answer = await askQuestion(req.params.id, message.trim())
       return reply.send({ answer })
     } catch (err) {
-      return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) })
+      return reply.code(502).send({ error: friendlyAiErrorMessage(err) })
     }
   })
 }

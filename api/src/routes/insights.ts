@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { generateInsights, InsightScope } from '../lib/insightsAgent'
+import { friendlyAiErrorMessage } from '../lib/aiErrors'
 
 interface ScopeQuery {
   scope?: 'client' | 'platform' | 'campaign' | 'creative'
@@ -77,7 +78,7 @@ export async function insightsRoutes(app: FastifyInstance) {
       )
       return reply.send(rows[0])
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = friendlyAiErrorMessage(err)
       const { rows } = await db.query(
         `INSERT INTO client_insights (client_id, generated_at, insights, model, error, scope_type, scope_platform, scope_key)
          VALUES ($1, NOW(), '[]'::jsonb, 'claude-opus-4-8', $2, $3, $4, $5)

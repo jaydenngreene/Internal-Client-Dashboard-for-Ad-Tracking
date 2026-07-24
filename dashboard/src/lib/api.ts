@@ -676,10 +676,22 @@ export function confirmBudgetReallocation(id: string): Promise<BudgetReallocatio
 
 // Step 51 — conversational AI chat, one thread per client. Claude answers using
 // real live-queried data via tool-use, never guesses.
+// One entry per tool Gojo actually called while answering this turn - rendered as
+// a real inline stat tile or mini table next to the prose answer, the same
+// "answer with a rendered widget, not just text" pattern behind Triple Whale's
+// Moby (the actual differentiator researchers point to, not the chat surface
+// itself). Shapes match api/src/lib/chatTools.ts's five tools exactly.
+export interface ChatToolCall {
+  tool: "get_overview_metrics" | "get_campaign_breakdown" | "get_ltv_summary" | "get_budget_pacing" | "get_forecast";
+  input: Record<string, unknown>;
+  result: Record<string, unknown>;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  tool_calls: ChatToolCall[] | null;
   created_at: string;
 }
 

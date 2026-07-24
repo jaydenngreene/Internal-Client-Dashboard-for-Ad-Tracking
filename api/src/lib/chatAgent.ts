@@ -8,16 +8,28 @@ const MAX_TOOL_ROUNDS = 5
 
 const SYSTEM_PROMPT = `You are a marketing data analyst answering questions about ONE specific client's ad performance for the agency operator using this tool. Use the provided tools to fetch real data before answering - never guess or fabricate numbers. Cite the actual figures you retrieved. Keep answers concise and direct, a few sentences unless the question needs a breakdown. If a tool returns no data or an empty result, say so plainly rather than inventing an explanation.`
 
+// One entry per tool Claude actually called while answering this turn (not the
+// synthetic tool_result content blocks fed back to the model) — the dashboard
+// renders each of these as a real inline stat tile or mini table next to the
+// prose answer, same "answer with a rendered widget, not just text" pattern as
+// Triple Whale's Moby.
+export interface ChatToolCall {
+  tool: string
+  input: Record<string, unknown>
+  result: object
+}
+
 export interface ChatMessageRow {
   id: string
   role: 'user' | 'assistant'
   content: string
+  tool_calls: ChatToolCall[] | null
   created_at: string
 }
 
 export async function getConversationHistory(clientId: string): Promise<ChatMessageRow[]> {
   const { rows } = await db.query<ChatMessageRow>(
-    `SELECT id, role, content, created_at FROM chat_messages WHERE client_id = $1 ORDER BY created_at ASC`,
+    `SELECT id, role, content, tool_calls, created_at FROM chat_messages WHERE client_id = $1 ORDER BY created_at ASC`,
     [clientId]
   )
   return rows
@@ -28,13 +40,19 @@ export async function getConversationHistory(clientId: string): Promise<ChatMess
 // results back, and repeats until Claude answers with plain text (or the round
 // cap is hit, to bound cost/latency on a runaway loop). Both the user's message
 // and the final answer are persisted so the thread survives a page reload.
-export async function askQuestion(clientId: string, userMessage: string): Promise<string> {
+export interface AskQuestionResult {
+  text: string
+  toolCalls: ChatToolCall[]
+}
+
+export async function askQuestion(clientId: string, userMessage: string): Promise<AskQuestionResult> {
   await db.query(`INSERT INTO chat_messages (client_id, role, content) VALUES ($1, 'user', $2)`, [clientId, userMessage])
 
   const history = await getConversationHistory(clientId)
   const messages: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }))
 
   let finalText = ''
+  const toolCalls: ChatToolCall[] = []
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const response = await client.messages.create({
       model: MODEL,
@@ -55,7 +73,9 @@ export async function askQuestion(clientId: string, userMessage: string): Promis
     messages.push({ role: 'assistant', content: response.content })
     const toolResults = await Promise.all(
       toolUseBlocks.map(async (block) => {
-        const result = await executeTool(clientId, block.name, block.input as Record<string, unknown>)
+        const input = block.input as Record<string, unknown>
+        const result = await executeTool(clientId, block.name, input)
+        toolCalls.push({ tool: block.name, input, result })
         return {
           type: 'tool_result' as const,
           tool_use_id: block.id,
@@ -70,6 +90,10 @@ export async function askQuestion(clientId: string, userMessage: string): Promis
     }
   }
 
-  await db.query(`INSERT INTO chat_messages (client_id, role, content) VALUES ($1, 'assistant', $2)`, [clientId, finalText])
-  return finalText
+  await db.query(`INSERT INTO chat_messages (client_id, role, content, tool_calls) VALUES ($1, 'assistant', $2, $3)`, [
+    clientId,
+    finalText,
+    toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
+  ])
+  return { text: finalText, toolCalls }
 }

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { ChatToolResult } from "@/components/chat-tool-result";
 import { cn } from "@/lib/utils";
 
 // A handful of real questions Gojo can actually answer with the tools it has
@@ -108,13 +109,16 @@ export function ChatClient({ clientId }: { clientId: string }) {
               className={cn("flex items-end gap-2", m.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto")}
             >
               {m.role === "assistant" && <GojoAvatar />}
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-                  m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                )}
-              >
-                {m.content}
+              <div className={cn("flex max-w-[85%] flex-col gap-2", m.role === "user" && "items-end")}>
+                <div
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                  )}
+                >
+                  {m.content}
+                </div>
+                {m.tool_calls?.map((call, i) => <ChatToolResult key={i} call={call} />)}
               </div>
             </div>
           ))}

@@ -14,8 +14,8 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!message || !message.trim()) return reply.code(400).send({ error: 'message required' })
 
     try {
-      const answer = await askQuestion(req.params.id, message.trim())
-      return reply.send({ answer })
+      const result = await askQuestion(req.params.id, message.trim())
+      return reply.send({ answer: result.text })
     } catch (err) {
       return reply.code(502).send({ error: friendlyAiErrorMessage(err) })
     }

@@ -74,7 +74,17 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) =>
 // plain onRequest hook below (requireDashboardOrigin) - a normal function,
 // not a plugin, so it can be attached to as many scopes as needed with none
 // of the above risk.
-app.register(cors, { origin: true, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] })
+// credentials: true is required here — confirmed live: navigator.sendBeacon()
+// (what pixel.js uses for every track/* call) sends cross-origin requests with
+// credentials included by default in current Chrome, and per the CORS spec a
+// credentialed request's preflight fails unless the server explicitly answers
+// Access-Control-Allow-Credentials: true (Access-Control-Allow-Origin reflecting
+// the real origin, which origin: true already does, isn't sufficient on its
+// own). None of these routes actually read cookies for auth — pixel_key in the
+// body does that — so this doesn't grant anything new, it just stops the
+// browser from blocking the response on a technicality the request already
+// opted into.
+app.register(cors, { origin: true, credentials: true, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] })
 
 function requireDashboardOrigin(req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void) {
   const origin = req.headers.origin

@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getJourney,
   updateCallQualification,
+  getBestPaths,
   CALL_DISPOSITIONS,
   CallDisposition,
   Journey,
@@ -20,8 +21,51 @@ import { FieldLabel } from "@/components/ui/field-label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency, formatDuration } from "@/lib/format";
+import { useDateRangeState } from "@/lib/date-range";
+import { formatCurrency, formatNumber, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+// Rockerbox's Marketing Paths view names its top findings ("fastest path,"
+// "highest earning path") instead of leaving the reader to spot them in a raw
+// journey table - a cheap, honest upgrade since the underlying data already
+// exists (every purchase's attribution rows). See api/src/lib/bestPaths.ts.
+function BestPathsCallouts({ clientId }: { clientId: string }) {
+  const { range } = useDateRangeState("30d");
+  const { data } = useQuery({
+    queryKey: ["best-paths", clientId, range.from, range.to],
+    queryFn: () => getBestPaths(clientId, range),
+  });
+
+  if (!data) return null;
+  if (!data.bestRevenuePath && !data.fastestPath) {
+    return data.reason ? <p className="text-xs text-muted-foreground">{data.reason}</p> : null;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {data.bestRevenuePath && (
+        <Card className="border-status-good/30 bg-status-good/5 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-status-good">Best-earning path</p>
+          <p className="mt-1 text-sm font-medium">{data.bestRevenuePath.path}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {formatCurrency(data.bestRevenuePath.revenue)} from {formatNumber(data.bestRevenuePath.conversions)}{" "}
+            customers who converted along this exact path
+          </p>
+        </Card>
+      )}
+      {data.fastestPath && (
+        <Card className="border-primary/30 bg-primary/5 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Fastest-converting path</p>
+          <p className="mt-1 text-sm font-medium">{data.fastestPath.path}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Averages {data.fastestPath.avgDaysToConvert.toFixed(1)} days to convert across{" "}
+            {formatNumber(data.fastestPath.conversions)} customers
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 const DISPOSITION_LABEL: Record<CallDisposition, string> = {
   new_lead: "New lead",
@@ -275,6 +319,8 @@ export function LeadsClient({ clientId }: { clientId: string }) {
           which sale, every tag, every call.
         </p>
       </div>
+
+      <BestPathsCallouts clientId={clientId} />
 
       <Card className="px-4">
         <CardContent className="flex flex-wrap items-end gap-2 px-0">

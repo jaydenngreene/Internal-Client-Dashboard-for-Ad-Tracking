@@ -471,6 +471,19 @@ export function getForecast(clientId: string): Promise<ForecastReport> {
   return fetchJson<ForecastReport>(`/clients/${clientId}/reports/forecast`);
 }
 
+// Named, curated "best path" callouts (Rockerbox's Marketing Paths pattern) -
+// built from this client's own attribution history, see api/src/lib/bestPaths.ts
+// for the full methodology and why it's honest across every attribution model.
+export interface BestPaths {
+  bestRevenuePath: { path: string; revenue: number; conversions: number } | null;
+  fastestPath: { path: string; avgDaysToConvert: number; conversions: number } | null;
+  reason: string | null;
+}
+
+export function getBestPaths(clientId: string, range: DateRange): Promise<BestPaths> {
+  return fetchJson<BestPaths>(`/clients/${clientId}/reports/best-paths${rangeQuery(range)}`);
+}
+
 // Step 45 — time-based pause/holdout incrementality testing. The user manually
 // pauses the campaign in their ad platform for the test window; this app only
 // defines the test and computes the before/after analysis.

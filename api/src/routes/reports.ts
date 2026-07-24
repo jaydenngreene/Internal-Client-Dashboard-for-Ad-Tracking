@@ -5,6 +5,7 @@ import { computeMaturityCurve, predictLifetimeValue } from '../lib/predictiveLtv
 import { projectSum } from '../lib/forecasting'
 import { computeMMM } from '../lib/mmm'
 import { computeMmmScenario, ScenarioAdjustment } from '../lib/mmmScenario'
+import { computeBestPaths } from '../lib/bestPaths'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 
@@ -973,6 +974,16 @@ export async function reportRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const adjustments = Array.isArray(req.body?.adjustments) ? req.body.adjustments : []
       return reply.send(await computeMmmScenario(req.params.id, adjustments))
+    }
+  )
+
+  // Named, curated "best path" callouts (Rockerbox's Marketing Paths pattern) for
+  // the Leads page - see lib/bestPaths.ts for the full methodology.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/best-paths',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      return reply.send(await computeBestPaths(req.params.id, from, to))
     }
   )
 

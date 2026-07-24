@@ -245,11 +245,12 @@ analytics.subscribe('product_added_to_cart', (event) => {
   const productId = product.id || null;
   if (!productId) return;
   const productName = product.title || line.merchandise.title || null;
-  const value = line.cost && line.cost.totalAmount
-    ? line.cost.totalAmount.amount
-    : line.merchandise.price
-      ? line.merchandise.price.amount * (line.quantity || 1)
-      : null;
+  let value = null;
+  if (line.cost && line.cost.totalAmount) {
+    value = line.cost.totalAmount.amount;
+  } else if (line.merchandise.price) {
+    value = line.merchandise.price.amount * (line.quantity || 1);
+  }
   send('add_to_cart', { id: productId, name: productName }, value);
 });
 

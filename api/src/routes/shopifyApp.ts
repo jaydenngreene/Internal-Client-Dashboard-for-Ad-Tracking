@@ -16,7 +16,9 @@ import { v4 as uuidv4 } from 'uuid'
 // handler in routes/webhooks/shopify.ts needs zero changes to accept it.
 
 const SHOPIFY_API_VERSION = '2024-01'
-const REQUIRED_SCOPES = 'read_orders,read_customers'
+// read_all_orders is what unlocks orders older than 60 days — without it, the
+// OAuth-issued token can't see far enough back for the historical import script.
+const REQUIRED_SCOPES = 'read_all_orders,read_orders,read_customers'
 
 function getAppCredentials() {
   const clientId = process.env.SHOPIFY_APP_CLIENT_ID

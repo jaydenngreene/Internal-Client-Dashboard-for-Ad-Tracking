@@ -1403,6 +1403,7 @@ export interface CampaignDetailKpis {
   trueProfit: number;
   roas: number | null;
   cpl: number | null;
+  cpm: number | null;
   ctr: number | null;
 }
 
@@ -1419,6 +1420,7 @@ export interface CampaignCreativeRow {
   assetType: "image" | "video" | null;
   cpl: number | null;
   roas: number | null;
+  cpm: number | null;
   ctr: number | null;
   matched: boolean;
 }

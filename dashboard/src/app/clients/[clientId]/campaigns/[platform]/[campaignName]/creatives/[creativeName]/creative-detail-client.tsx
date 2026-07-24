@@ -68,10 +68,25 @@ function AdCopy({ copy }: { copy: CreativeDetailCopy }) {
       <CardHeader className="px-0">
         <CardTitle className="text-sm">Ad Copy</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 px-0">
-        {copy.headline && <p className="text-base font-semibold">{copy.headline}</p>}
-        {copy.primaryText && <p className="text-sm text-foreground">{copy.primaryText}</p>}
-        {copy.description && <p className="text-sm text-muted-foreground">{copy.description}</p>}
+      <CardContent className="flex flex-col gap-3 px-0">
+        {copy.headline && (
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Headline</p>
+            <p className="text-base font-semibold">{copy.headline}</p>
+          </div>
+        )}
+        {copy.primaryText && (
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Primary text</p>
+            <p className="text-sm text-foreground">{copy.primaryText}</p>
+          </div>
+        )}
+        {copy.description && (
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Description</p>
+            <p className="text-sm text-muted-foreground">{copy.description}</p>
+          </div>
+        )}
         {copy.landingPageUrl && (
           <a
             href={copy.landingPageUrl}
@@ -256,6 +271,9 @@ export function CreativeDetailClient({
             />
             <StatTile label="ROAS" value={formatRoas(data.kpis.roas)} />
             <StatTile label="Impressions" value={formatNumber(data.kpis.impressions)} />
+            {goal === "sales" && (
+              <StatTile label="CPM" value={data.kpis.cpm === null ? "-" : formatCurrency(data.kpis.cpm)} />
+            )}
           </div>
 
           <InsightsPanel

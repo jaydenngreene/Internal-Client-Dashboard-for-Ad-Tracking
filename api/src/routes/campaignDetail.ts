@@ -201,6 +201,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           ...r,
           cpl: r.leads > 0 ? r.cost / r.leads : null,
           roas: r.cost > 0 ? r.revenue / r.cost : null,
+          cpm: r.impressions > 0 ? (r.cost / r.impressions) * 1000 : null,
           ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,
           matched: r.cost > 0,
         }))
@@ -222,6 +223,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           trueProfit,
           roas: cost > 0 ? revenue / cost : null,
           cpl: leads > 0 ? cost / leads : null,
+          cpm: impressions > 0 ? (cost / impressions) * 1000 : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
         },
         creatives: creativesOut,
@@ -391,6 +393,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           trueProfit,
           roas: cost > 0 ? revenue / cost : null,
           cpl: leads > 0 ? cost / leads : null,
+          cpm: impressions > 0 ? (cost / impressions) * 1000 : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
         },
         customers: customerRows.map((r) => ({

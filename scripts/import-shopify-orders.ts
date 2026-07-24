@@ -117,10 +117,12 @@ async function main() {
   console.log(`Client: ${clientRows[0].name}`)
 
   const { rows: integrationRows } = await db.query(
-    `SELECT config->>'shop_domain' AS shop_domain FROM client_integrations WHERE client_id = $1 AND platform = 'shopify'`,
+    `SELECT config->>'shop_domain' AS shop_domain, config->>'access_token' AS access_token
+     FROM client_integrations WHERE client_id = $1 AND platform = 'shopify'`,
     [clientId]
   )
   const savedDomain = integrationRows[0]?.shop_domain ?? ''
+  const savedAccessToken = integrationRows[0]?.access_token ?? ''
   const shopDomain =
     (await ask(`Shopify store domain${savedDomain ? ` (default: ${savedDomain})` : ''}: `)) || savedDomain
   if (!shopDomain) {
@@ -128,18 +130,26 @@ async function main() {
     process.exit(1)
   }
 
-  box('Need an Admin API access token', [
-    'This is different from the webhook signing secret already saved.',
-    '',
-    'Shopify Admin → Settings → Apps and sales channels',
-    '→ Develop apps → Create an app',
-    '→ Configure Admin API scopes → enable read_orders',
-    '→ Install app → reveal the Admin API access token',
-  ])
-  const accessToken = await ask('Admin API access token (starts with shpat_): ')
-  if (!accessToken) {
-    console.error('An access token is required.')
-    process.exit(1)
+  // The OAuth install flow (routes/shopifyApp.ts) already saved a working token here —
+  // only clients still on the older manual custom-app setup need to paste one by hand.
+  let accessToken = savedAccessToken
+  if (accessToken) {
+    console.log('\nUsing the access token already saved from the Shopify OAuth install.\n')
+  } else {
+    box('Need an Admin API access token', [
+      'No token found on this client from the OAuth install flow.',
+      'This is different from the webhook signing secret already saved.',
+      '',
+      'Shopify Admin → Settings → Apps and sales channels',
+      '→ Develop apps → Create an app',
+      '→ Configure Admin API scopes → enable read_orders + read_all_orders',
+      '→ Install app → reveal the Admin API access token',
+    ])
+    accessToken = await ask('Admin API access token (starts with shpat_): ')
+    if (!accessToken) {
+      console.error('An access token is required.')
+      process.exit(1)
+    }
   }
 
   const daysBackInput = await ask('How many days back? (default 180, same window as ad platform backfill): ')

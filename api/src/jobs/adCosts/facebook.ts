@@ -57,7 +57,16 @@ interface FacebookAdCreativeResponse {
     video_id?: string
     title?: string
     body?: string
-    object_story_spec?: { link_data?: { link?: string; message?: string; name?: string; description?: string } }
+    object_story_spec?: {
+      link_data?: { link?: string; message?: string; name?: string; description?: string }
+      // Video and photo-only ads (as opposed to standard link ads) carry their copy
+      // and landing page under these siblings of link_data instead — a video ad's
+      // object_story_spec never populates link_data at all, which is why creatives
+      // like this were showing up with no landing page and copy silently falling
+      // back to the older top-level title/body fields.
+      video_data?: { title?: string; message?: string; call_to_action?: { value?: { link?: string } } }
+      photo_data?: { caption?: string; call_to_action?: { value?: { link?: string } } }
+    }
   }
   error?: { message: string }
 }
@@ -74,7 +83,14 @@ async function fetchVideoSource(accessToken: string, videoId: string): Promise<s
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${videoId}?fields=source&access_token=${encodeURIComponent(accessToken)}`
   const res = await fetch(url)
   const body = (await res.json()) as FacebookVideoResponse
-  if (!res.ok || body.error) return null
+  if (!res.ok || body.error) {
+    // Logged rather than silently swallowed — a missing video source falls back to
+    // rendering the (much lower-resolution) static thumbnail in the dashboard, which
+    // looks like a rendering bug but is actually this request failing upstream, most
+    // often a permissions gap on the token rather than anything wrong in this app.
+    console.error(`[facebook] video source fetch failed for ${videoId}:`, body.error?.message ?? res.statusText)
+    return null
+  }
   return body.source ?? null
 }
 
@@ -101,7 +117,9 @@ async function fetchCreativeInfo(accessToken: string, adId: string): Promise<Fac
   const url =
     `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
     `?fields=${encodeURIComponent(
-      'creative{image_url,thumbnail_url,object_type,video_id,title,body,object_story_spec{link_data{link,message,name,description}}}'
+      'creative{image_url,thumbnail_url,object_type,video_id,title,body,' +
+        'object_story_spec{link_data{link,message,name,description},' +
+        'video_data{title,message,call_to_action},photo_data{caption,call_to_action}}}'
     )}` +
     `&access_token=${encodeURIComponent(accessToken)}`
   const res = await fetch(url)
@@ -111,11 +129,13 @@ async function fetchCreativeInfo(accessToken: string, adId: string): Promise<Fac
   }
   const { creative } = body
   const linkData = creative.object_story_spec?.link_data
+  const videoData = creative.object_story_spec?.video_data
+  const photoData = creative.object_story_spec?.photo_data
   const copy = {
-    headline: linkData?.name ?? creative.title ?? null,
-    primaryText: linkData?.message ?? creative.body ?? null,
+    headline: linkData?.name ?? videoData?.title ?? creative.title ?? null,
+    primaryText: linkData?.message ?? videoData?.message ?? photoData?.caption ?? creative.body ?? null,
     description: linkData?.description ?? null,
-    landingPageUrl: linkData?.link ?? null,
+    landingPageUrl: linkData?.link ?? videoData?.call_to_action?.value?.link ?? photoData?.call_to_action?.value?.link ?? null,
   }
 
   if (creative.video_id) {

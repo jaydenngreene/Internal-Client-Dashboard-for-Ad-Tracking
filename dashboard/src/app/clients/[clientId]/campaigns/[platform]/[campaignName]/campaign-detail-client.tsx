@@ -22,9 +22,11 @@ import { formatCurrency, formatNumber, formatPercent, formatRoas, formatPlatform
 function CreativeRowCard({
   creative,
   href,
+  goal,
 }: {
   creative: CampaignCreativeRow;
   href: string;
+  goal: "leads" | "sales";
 }) {
   const router = useRouter();
   return (
@@ -53,8 +55,11 @@ function CreativeRowCard({
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
           <span>{formatCurrency(creative.cost)} spend</span>
-          <span>{formatNumber(creative.leads)} leads</span>
-          <span>{formatNumber(creative.sales)} sales</span>
+          {goal === "leads" ? (
+            <span>{formatNumber(creative.leads)} leads</span>
+          ) : (
+            <span>{formatNumber(creative.sales)} purchases</span>
+          )}
           <span className="text-chart-1">{formatCurrency(creative.revenue)} revenue</span>
           <span>{formatRoas(creative.roas)} ROAS</span>
           <span>{formatPercent(creative.ctr)} CTR</span>
@@ -139,6 +144,9 @@ export function CampaignDetailClient({
             />
             <StatTile label="ROAS" value={formatRoas(data.kpis.roas)} />
             <StatTile label="Impressions" value={formatNumber(data.kpis.impressions)} />
+            {goal === "sales" && (
+              <StatTile label="CPM" value={data.kpis.cpm === null ? "-" : formatCurrency(data.kpis.cpm)} />
+            )}
           </div>
 
           <InsightsPanel
@@ -163,6 +171,7 @@ export function CampaignDetailClient({
                   <CreativeRowCard
                     key={c.name}
                     creative={c}
+                    goal={goal}
                     href={`/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}/creatives/${encodeURIComponent(c.name)}`}
                   />
                 ))}

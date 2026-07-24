@@ -28,6 +28,7 @@ import {
   getClientAuditLog,
   getIntegrations,
   saveIntegration,
+  deleteIntegration,
   importShopifyOrders,
   generateTagWebhookSecret,
   getWebhookSubscriptions,
@@ -840,6 +841,7 @@ function IntegrationRow({
   savedConfig: Record<string, unknown> | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   // Seeded once from whatever the API already returned for this integration — not
   // secret fields (the API never sends those back, see clients.ts's redaction on
   // GET /integrations), just everything else: shop domain, ad account id, currency,
@@ -862,6 +864,15 @@ function IntegrationRow({
 
   const mutation = useMutation({
     mutationFn: () => saveIntegration(clientId, def.platform, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", clientId] });
+      setOpen(false);
+      setValues({});
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: () => deleteIntegration(clientId, def.platform),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations", clientId] });
       setOpen(false);
@@ -919,10 +930,34 @@ function IntegrationRow({
             })}
           </div>
           {mutation.isError && <p className="text-xs text-status-critical">Failed to save. Check the values and try again.</p>}
-          <div>
+          {disconnectMutation.isError && (
+            <p className="text-xs text-status-critical">Failed to disconnect. Try again.</p>
+          )}
+          <div className="flex items-center gap-2">
             <Button size="sm" disabled={!requiredFilled || mutation.isPending} onClick={() => mutation.mutate()}>
               {mutation.isPending ? "Saving…" : "Save"}
             </Button>
+            {connected && !confirmingDisconnect && (
+              <Button size="sm" variant="outline" onClick={() => setConfirmingDisconnect(true)}>
+                Disconnect
+              </Button>
+            )}
+            {connected && confirmingDisconnect && (
+              <>
+                <span className="text-xs text-muted-foreground">Stop sending data to this integration?</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={disconnectMutation.isPending}
+                  onClick={() => disconnectMutation.mutate()}
+                >
+                  {disconnectMutation.isPending ? "Disconnecting…" : "Confirm disconnect"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmingDisconnect(false)}>
+                  Cancel
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

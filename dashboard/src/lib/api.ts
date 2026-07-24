@@ -270,6 +270,17 @@ function postIntegration(clientId: string, platform: string, body: Record<string
 // so one function covers all of them instead of a bespoke wrapper per platform.
 export const saveIntegration = postIntegration;
 
+// 2026-07-25 — first real need was a client running Shopify's own official
+// Facebook & Instagram app (its own separate pixel + Conversions API), where
+// this app's own facebook_capi integration double-reports every purchase to
+// Meta since the two systems can't share an event id to de-dupe against each
+// other. Generic like saveIntegration above, not facebook-capi-specific.
+export function deleteIntegration(clientId: string, platform: string): Promise<void> {
+  return apiRequest(`${API_URL}/clients/${clientId}/integrations/${platform}`, { method: "DELETE" }).then((res) => {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  });
+}
+
 export interface IntegrationSummary {
   platform: string;
   created_at: string;

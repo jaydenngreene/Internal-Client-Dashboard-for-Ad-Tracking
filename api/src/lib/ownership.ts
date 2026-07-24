@@ -47,6 +47,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/tracking-numbers': 'client',
   '/clients/:id/webhook-subscriptions': 'client',
   '/clients/:id/integrations': 'client',
+  '/clients/:id/integrations/:platform': 'client',
   '/clients/:id/integrations/shopify': 'client',
   '/clients/:id/integrations/stripe': 'client',
   '/clients/:id/integrations/facebook-ads': 'client',

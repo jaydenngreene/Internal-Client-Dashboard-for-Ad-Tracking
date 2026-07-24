@@ -872,6 +872,34 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.send(rows)
   })
 
+  // Generic disconnect for any platform (2026-07-25) — every integration until now
+  // only had a POST/upsert to connect or update it, no way to remove one. First
+  // real need: a client running Shopify's own official Facebook & Instagram app
+  // (which has its own separate pixel + Conversions API) double-reports every
+  // purchase to Meta when this app's own `facebook_capi` integration is also
+  // connected, since the two systems can't share an event id to de-dupe against
+  // each other. One route for every platform rather than N single-purpose ones -
+  // this table's `(client_id, platform)` primary key already makes "remove this
+  // row" the same operation regardless of which integration it is.
+  app.delete<{ Params: { id: string; platform: string } }>(
+    '/clients/:id/integrations/:platform',
+    async (req, reply) => {
+      const { id } = req.params
+      // Every connect route is registered at a hyphenated URL (e.g. .../facebook-capi)
+      // while the DB's `platform` column stores the underscored form (facebook_capi,
+      // matching client_integrations everywhere else it's queried) - normalize here
+      // so the frontend can pass the exact same platform string it already uses to
+      // connect, no separate hyphen/underscore mapping needed on that side.
+      const platform = req.params.platform.replace(/-/g, '_')
+      const { rowCount } = await db.query(
+        `DELETE FROM client_integrations WHERE client_id = $1 AND platform = $2`,
+        [id, platform]
+      )
+      if (rowCount === 0) return reply.code(404).send({ error: 'Integration not found' })
+      return reply.code(200).send({ disconnected: true })
+    }
+  )
+
   // Client sharing (migration 028) — a collaborator gets the exact same data access
   // as the owner (see hasClientAccess in lib/ownership.ts, which the generic 'client'
   // resolver already applies to every route below this file's own DELETE and these

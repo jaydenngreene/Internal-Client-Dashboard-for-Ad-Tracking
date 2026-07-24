@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { Bell, Menu, Moon, Sun } from "lucide-react";
 import { DateRangeSelect } from "./date-range-select";
+import { SavedViews } from "./saved-views";
 import { useDateRangeState } from "@/lib/date-range";
 
 function ThemeToggle() {
@@ -56,7 +57,17 @@ export function HeaderBar({ onMenuClick }: { onMenuClick: () => void }) {
       </button>
       <div className="flex-1" />
       {showDateRange && (
-        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
+        <>
+          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
+          <SavedViews
+            preset={preset}
+            customRange={customRange}
+            onApply={(nextPreset, nextCustomRange) => {
+              setPreset(nextPreset);
+              if (nextCustomRange) setCustomRange(nextCustomRange);
+            }}
+          />
+        </>
       )}
       <button
         type="button"

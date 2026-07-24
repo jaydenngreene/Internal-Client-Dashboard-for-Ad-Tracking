@@ -316,7 +316,7 @@ export async function reportRoutes(app: FastifyInstance) {
       const clientId = req.params.id
       const { from, to } = defaultRange(req.query.from, req.query.to)
 
-      const [summary, marginConfig, costByDay, revenueByDay, salesByDay] = await Promise.all([
+      const [summary, marginConfig, costByDay, revenueByDay, attributedRevenueByDay, salesByDay] = await Promise.all([
         getOverviewSummary(clientId, from, to),
         db.query<MarginConfig>(
           `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
@@ -331,6 +331,19 @@ export async function reportRoutes(app: FastifyInstance) {
            GROUP BY date`,
           [clientId, from, to]
         ),
+        // Total revenue per day (every non-refunded purchase, attributed or not) —
+        // matches the headline `revenue`/`profit` from getOverviewSummary, not the
+        // attribution-only figure. Attributed-only revenue is still the campaign/
+        // creative breakdown pages' job, not this account-wide trend chart's.
+        db.query<{ date: string; total: string }>(
+          `SELECT purchased_at::date::text AS date, SUM(revenue) AS total FROM purchases
+           WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded
+           GROUP BY purchased_at::date`,
+          [clientId, from, to]
+        ),
+        // Same, but attribution-only — feeds the ROAS/ROI sparklines so they track
+        // the same attributed-revenue basis as their headline numbers instead of
+        // the total-revenue series above.
         db.query<{ date: string; total: string }>(
           `SELECT p.purchased_at::date::text AS date, SUM(a.attributed_revenue) AS total
            FROM attributions a JOIN purchases p ON p.id = a.purchase_id
@@ -346,23 +359,27 @@ export async function reportRoutes(app: FastifyInstance) {
         ),
       ])
 
-      const { cost, revenue, profit, roas, roi, trueProfit, trueRoi, leads, sales } = summary
+      const { cost, revenue, attributedRevenue, profit, roas, roi, trueProfit, trueRoi, leads, sales } = summary
       const margin = marginConfig.rows[0] ?? null
 
       const costByDate = new Map(costByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
       const revenueByDate = new Map(revenueByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
+      const attributedRevenueByDate = new Map(attributedRevenueByDay.rows.map((r) => [r.date, parseFloat(r.total)]))
       const salesByDate = new Map(salesByDay.rows.map((r) => [r.date, parseInt(r.total, 10)]))
 
       const series = dateList(from, to).map((date) => {
         const dailyCost = costByDate.get(date) ?? 0
         const dailyRevenue = revenueByDate.get(date) ?? 0
+        const dailyAttributedRevenue = attributedRevenueByDate.get(date) ?? 0
         const dailySales = salesByDate.get(date) ?? 0
         return {
           date,
           cost: dailyCost,
           revenue: dailyRevenue,
+          attributedRevenue: dailyAttributedRevenue,
           profit: dailyRevenue - dailyCost,
           trueProfit: computeTrueProfit(margin, dailyRevenue, dailyCost, dailySales).trueProfit,
+          trueProfitAttributed: computeTrueProfit(margin, dailyAttributedRevenue, dailyCost, dailySales).trueProfit,
         }
       })
 
@@ -371,6 +388,7 @@ export async function reportRoutes(app: FastifyInstance) {
         to,
         cost,
         revenue,
+        attributedRevenue,
         profit,
         roas,
         roi,

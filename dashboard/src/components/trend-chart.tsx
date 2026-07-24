@@ -9,7 +9,6 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { OverviewSeriesPoint } from "@/lib/api";
 import { formatDateShort } from "@/lib/format";
 
 const chartConfig = {
@@ -18,7 +17,18 @@ const chartConfig = {
   profit: { label: "Profit", color: "var(--color-chart-3)" },
 } satisfies ChartConfig;
 
-export function TrendChart({ series }: { series: OverviewSeriesPoint[] }) {
+// Deliberately just the four fields actually rendered below (not the full
+// OverviewSeriesPoint) — this chart is shared by the full Overview page's
+// series and the public share report's simpler one, which doesn't carry
+// attribution-split fields.
+interface TrendChartPoint {
+  date: string;
+  cost: number;
+  revenue: number;
+  profit: number;
+}
+
+export function TrendChart({ series }: { series: TrendChartPoint[] }) {
   const data = series.map((point) => ({
     ...point,
     label: formatDateShort(point.date),

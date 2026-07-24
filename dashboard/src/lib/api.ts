@@ -1179,8 +1179,10 @@ export interface OverviewSeriesPoint {
   date: string;
   cost: number;
   revenue: number;
+  attributedRevenue: number;
   profit: number;
   trueProfit: number;
+  trueProfitAttributed: number;
 }
 
 export interface OverviewReport {
@@ -1188,6 +1190,11 @@ export interface OverviewReport {
   to: string;
   cost: number;
   revenue: number;
+  // Revenue from purchases with a matched ad session — the subset of `revenue`
+  // ROAS/ROI are actually measured against (2026-07-24: split out after a
+  // historical CSV backfill showed $0 revenue despite thousands in real sales,
+  // because revenue used to mean attributed-only).
+  attributedRevenue: number;
   profit: number;
   roas: number | null;
   roi: number | null;

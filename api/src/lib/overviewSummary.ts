@@ -3,7 +3,15 @@ import { computeTrueProfit, MarginConfig } from './margin'
 
 export interface OverviewSummary {
   cost: number
+  // Total revenue from every non-refunded purchase, attributed or not — organic/
+  // direct sales and anything imported with no matching session (e.g. the
+  // historical CSV backfill) count here same as an ad-attributed sale.
   revenue: number
+  // Revenue from purchases with at least one ad-click/session match — the only
+  // revenue actually caused by ad spend, so this (not the total above) is what
+  // ROAS/ROI are measured against. Purely attribution accounting, never a
+  // second/duplicate revenue figure to add to `revenue`.
+  attributedRevenue: number
   profit: number
   roas: number | null
   roi: number | null
@@ -18,8 +26,15 @@ export interface OverviewSummary {
 // client would see on their own Overview page, instead of a second hand-written
 // copy of this SQL that could quietly drift out of sync with it. The route keeps
 // its own day-by-day series queries — the email only needs the totals.
+//
+// `revenue`/`profit`/`trueProfit` are whole-business figures (every non-refunded
+// sale) — split out from `attributedRevenue` (2026-07-24) after a historical CSV
+// backfill made it obvious that gating the headline Revenue tile on attribution
+// alone hid real, confirmed sales that just had no matching tracked session.
+// ROAS/ROI stay attribution-based on purpose: they measure ad spend's return,
+// and unattributed revenue wasn't caused by that spend.
 export async function getOverviewSummary(clientId: string, from: string, to: string): Promise<OverviewSummary> {
-  const [marginConfig, costTotal, revenueTotal, leadsTotal, salesTotal] = await Promise.all([
+  const [marginConfig, costTotal, revenueTotal, attributedRevenueTotal, leadsTotal, salesTotal] = await Promise.all([
     db.query<MarginConfig>(
       `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
       [clientId]
@@ -29,6 +44,11 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
          (SELECT COALESCE(SUM(spend), 0) FROM ad_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3) +
          (SELECT COALESCE(SUM(spend), 0) FROM custom_costs WHERE client_id = $1 AND date BETWEEN $2 AND $3)
          AS total`,
+      [clientId, from, to]
+    ),
+    db.query<{ total: string }>(
+      `SELECT COALESCE(SUM(revenue), 0) AS total FROM purchases
+       WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded`,
       [clientId, from, to]
     ),
     db.query<{ total: string }>(
@@ -50,16 +70,24 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
 
   const cost = parseFloat(costTotal.rows[0].total)
   const revenue = parseFloat(revenueTotal.rows[0].total)
+  const attributedRevenue = parseFloat(attributedRevenueTotal.rows[0].total)
   const sales = parseInt(salesTotal.rows[0].total, 10)
   const profit = revenue - cost
-  const roas = cost > 0 ? revenue / cost : null
-  const roi = cost > 0 ? (profit / cost) * 100 : null
+  const roas = cost > 0 ? attributedRevenue / cost : null
+  const roi = cost > 0 ? ((attributedRevenue - cost) / cost) * 100 : null
   const margin = marginConfig.rows[0] ?? null
-  const { trueProfit, trueRoi } = computeTrueProfit(margin, revenue, cost, sales)
+  // Two separate COGS/fee/fulfillment adjustments, deliberately not one shared
+  // call: trueProfit pairs with the total-revenue `profit` tile (whole-business
+  // number), trueRoi pairs with `roi`/`roas` (ad-spend-only, attributed revenue) —
+  // computeTrueProfit against the wrong revenue figure would silently blend the
+  // two groups back together.
+  const { trueProfit } = computeTrueProfit(margin, revenue, cost, sales)
+  const { trueRoi } = computeTrueProfit(margin, attributedRevenue, cost, sales)
 
   return {
     cost,
     revenue,
+    attributedRevenue,
     profit,
     roas,
     roi,

@@ -75,19 +75,20 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         value={formatRoas(data.roas)}
         fromDate={data.from}
         color="var(--color-chart-4)"
-        sparkline={data.series.map((p) => (p.cost > 0 ? p.revenue / p.cost : 0))}
+        sparkline={data.series.map((p) => (p.cost > 0 ? p.attributedRevenue / p.cost : 0))}
         dates={dates}
         formatValue={(v) => formatRoas(v)}
+        sublabel={`of ${formatCurrency(data.attributedRevenue)} attributed`}
       />
       <KpiTile
         label="ROI"
         value={formatPercent(data.hasMarginConfig ? data.trueRoi : data.roi)}
         fromDate={data.from}
         color="var(--color-chart-5)"
-        sparkline={data.series.map((p) => (p.cost > 0 ? (p.trueProfit / p.cost) * 100 : 0))}
+        sparkline={data.series.map((p) => (p.cost > 0 ? (p.trueProfitAttributed / p.cost) * 100 : 0))}
         dates={dates}
         formatValue={(v) => formatPercent(v)}
-        sublabel={data.hasMarginConfig ? "COGS-adjusted" : undefined}
+        sublabel={data.hasMarginConfig ? "COGS-adjusted, of attributed revenue" : "of attributed revenue"}
       />
     </div>
   );

@@ -137,8 +137,8 @@ async function detectAdLevelAnomalies(): Promise<number> {
     if (today.cost < 10) continue
 
     const { rowCount } = await db.query(
-      `INSERT INTO pause_candidates (client_id, platform, ad_id, ad_name, campaign_name, reason)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO pause_candidates (client_id, platform, ad_id, ad_name, campaign_name, reason, daily_spend, daily_revenue, baseline_roas)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (client_id, platform, ad_id) WHERE status = 'pending' DO NOTHING`,
       [
         today.client_id,
@@ -147,6 +147,9 @@ async function detectAdLevelAnomalies(): Promise<number> {
         today.ad_name,
         today.campaign_name,
         `ROAS dropped to ${todayRoas === null ? '0' : todayRoas.toFixed(2)} vs. a 7-day average of ${baselineRoas.toFixed(2)} (spend $${today.cost.toFixed(2)}/day).`,
+        today.cost,
+        today.revenue,
+        baselineRoas,
       ]
     )
     if (rowCount && rowCount > 0) {

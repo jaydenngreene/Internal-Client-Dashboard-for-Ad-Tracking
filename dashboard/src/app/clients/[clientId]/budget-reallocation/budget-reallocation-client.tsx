@@ -59,6 +59,16 @@ function SuggestionCard({ item, clientId }: { item: BudgetReallocationSuggestion
         <p className="text-xs text-muted-foreground">
           Suggested shift: <span className="font-medium text-foreground">{formatCurrency(item.suggested_shift_amount)}/day</span>
         </p>
+        {/* Translates the raw ROAS gap into a plain-language consequence - the
+            same "$4,200 saved" framing Ramp uses instead of a bare number, and
+            cheap to compute from fields this card already has on hand. */}
+        <p className="rounded-md bg-status-good/10 px-3 py-2 text-xs text-status-good">
+          Moving this daily amount could add roughly{" "}
+          <span className="font-semibold">
+            {formatCurrency(item.suggested_shift_amount * (item.to_roas - item.from_roas))}
+          </span>{" "}
+          in extra revenue per day, based on each campaign's own recent ROAS.
+        </p>
 
         {item.error && (
           <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{item.error}</p>

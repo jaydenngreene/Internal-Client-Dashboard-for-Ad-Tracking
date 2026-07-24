@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { formatCurrency } from "@/lib/format";
 
 const STATUS_OPTIONS: { value: PauseCandidateStatus; label: string }[] = [
   { value: "pending", label: "Pending Review" },
@@ -55,6 +56,18 @@ function CandidateCard({ candidate, clientId }: { candidate: PauseCandidate; cli
         </div>
 
         <p className="text-sm text-foreground/90">{candidate.reason}</p>
+
+        {candidate.daily_spend !== null && candidate.baseline_roas !== null && candidate.daily_revenue !== null && (
+          <p className="rounded-md bg-status-critical/10 px-3 py-2 text-xs text-status-critical">
+            At its usual return of {candidate.baseline_roas.toFixed(1)}x, this spend would normally bring back{" "}
+            <span className="font-semibold">{formatCurrency(candidate.daily_spend * candidate.baseline_roas)}</span>.
+            Yesterday it brought back only {formatCurrency(candidate.daily_revenue)}, roughly{" "}
+            <span className="font-semibold">
+              {formatCurrency(Math.max(candidate.daily_spend * candidate.baseline_roas - candidate.daily_revenue, 0))}
+            </span>{" "}
+            short.
+          </p>
+        )}
 
         {candidate.error && (
           <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{candidate.error}</p>

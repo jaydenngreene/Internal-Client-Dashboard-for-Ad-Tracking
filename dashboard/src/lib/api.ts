@@ -1759,6 +1759,11 @@ export interface PauseCandidate {
   error: string | null;
   created_at: string;
   resolved_at: string | null;
+  // Null for any candidate flagged before this was added - the outcome line
+  // simply doesn't render for those instead of showing a fabricated number.
+  daily_spend: number | null;
+  daily_revenue: number | null;
+  baseline_roas: number | null;
 }
 
 export function getPauseCandidates(

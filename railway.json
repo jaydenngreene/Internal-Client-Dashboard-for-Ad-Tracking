@@ -1,0 +1,9 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "npm install && npm run build --workspace=pixel && npm run build --workspace=api"
+  },
+  "deploy": {
+    "startCommand": "npm run start --workspace=api"
+  }
+}

@@ -239,14 +239,19 @@ export function CreativeDetailClient({
         <>
           <AssetPreview asset={data.asset} />
 
-          <VideoMetricsPanel metrics={data.videoMetrics} />
+          {/* Gated on the creative's current asset type, not just whether any video
+              stat exists — an ad name can get reused for a different creative over
+              time (a paused video swapped for a new static image), and video_plays
+              is summed across the whole selected date range, so a stale video figure
+              could otherwise survive under what's now a static image or catalog ad. */}
+          {data.asset.assetType === "video" && <VideoMetricsPanel metrics={data.videoMetrics} />}
 
           <AdCopy copy={data.copy} />
 
           <AiTagsPanel clientId={clientId} platform={platform} creativeName={creativeName} />
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Cost" value={formatCurrency(data.kpis.cost)} />
+            <StatTile label="Ad Spend" value={formatCurrency(data.kpis.cost)} />
             <StatTile label="CTR" value={formatPercent(data.kpis.ctr)} />
             {goal === "leads" ? (
               <>
@@ -257,7 +262,7 @@ export function CreativeDetailClient({
               <>
                 <StatTile label="Purchases" value={formatNumber(data.kpis.sales)} />
                 <StatTile
-                  label="Cost / Purchase"
+                  label="Ad Spend / Purchase"
                   value={data.kpis.sales > 0 ? formatCurrency(data.kpis.cost / data.kpis.sales) : "-"}
                 />
               </>

@@ -119,7 +119,7 @@ export function CampaignDetailClient({
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Cost" value={formatCurrency(data.kpis.cost)} />
+            <StatTile label="Ad Spend" value={formatCurrency(data.kpis.cost)} />
             <StatTile label="CTR" value={formatPercent(data.kpis.ctr)} />
             {goal === "leads" ? (
               <>
@@ -130,7 +130,7 @@ export function CampaignDetailClient({
               <>
                 <StatTile label="Purchases" value={formatNumber(data.kpis.sales)} />
                 <StatTile
-                  label="Cost / Purchase"
+                  label="Ad Spend / Purchase"
                   value={data.kpis.sales > 0 ? formatCurrency(data.kpis.cost / data.kpis.sales) : "-"}
                 />
               </>

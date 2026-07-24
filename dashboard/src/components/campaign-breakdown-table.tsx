@@ -72,13 +72,13 @@ export function CampaignBreakdownTable({
         ]
       : [
           { key: "sales", label: "Purchases", align: "right" },
-          { key: "costPerPurchase", label: "Cost / Purchase", align: "right" },
+          { key: "costPerPurchase", label: "Ad Spend / Purchase", align: "right" },
           { key: "aov", label: "AOV", align: "right" },
         ];
 
   const columns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "name", label: nameColumnLabel },
-    { key: "cost", label: "Cost", align: "right" },
+    { key: "cost", label: "Ad Spend", align: "right" },
     { key: "ctr", label: "CTR", align: "right" },
     { key: "cpc", label: "CPC", align: "right" },
     ...goalColumns,

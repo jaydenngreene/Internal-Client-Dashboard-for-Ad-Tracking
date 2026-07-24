@@ -37,7 +37,7 @@ export default function AgencyOverviewPage() {
 
   const columns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "name", label: "Client" },
-    { key: "cost", label: "Cost", align: "right" },
+    { key: "cost", label: "Ad Spend", align: "right" },
     { key: "revenue", label: "Revenue", align: "right" },
     { key: "profit", label: "Profit", align: "right" },
     { key: "roas", label: "ROAS", align: "right" },
@@ -101,7 +101,7 @@ export default function AgencyOverviewPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card className="px-4">
               <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Total Cost</p>
+                <p className="text-xs font-medium text-muted-foreground">Total Ad Spend</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums text-chart-2">
                   {formatCurrency(data.totals.cost)}
                 </p>

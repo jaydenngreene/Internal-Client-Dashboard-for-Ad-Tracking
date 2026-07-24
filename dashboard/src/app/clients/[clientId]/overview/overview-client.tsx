@@ -43,7 +43,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <KpiTile
-        label="Cost"
+        label="Ad Spend"
         value={formatCurrency(data.cost)}
         fromDate={data.from}
         color="var(--color-chart-2)"
@@ -163,7 +163,7 @@ function ForecastWindowCard({ window, label }: { window: ForecastWindow; label: 
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedRevenue)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Cost</p>
+          <p className="text-xs font-medium text-muted-foreground">Ad Spend</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedCost)}</p>
         </div>
         <div>
@@ -567,13 +567,13 @@ export function OverviewClient({ clientId }: { clientId: string }) {
                 title="Profitability"
                 data={data.series.map((p) => ({ label: p.date, cost: p.cost, revenue: p.revenue, profit: p.trueProfit }))}
                 stats={[
-                  { key: "cost", label: "Cost", value: formatCurrency(data.cost), color: "var(--color-chart-2)" },
+                  { key: "cost", label: "Ad Spend", value: formatCurrency(data.cost), color: "var(--color-chart-2)" },
                   { key: "revenue", label: "Total Revenue", value: formatCurrency(data.revenue), color: "var(--color-chart-1)" },
                   { key: "profit", label: "Profit", value: formatCurrency(data.trueProfit), color: "var(--color-chart-3)" },
                 ]}
                 series={[
                   { key: "revenue", label: "Revenue", color: "var(--color-chart-1)" },
-                  { key: "cost", label: "Cost", color: "var(--color-chart-2)" },
+                  { key: "cost", label: "Ad Spend", color: "var(--color-chart-2)" },
                   { key: "profit", label: "Profit", color: "var(--color-chart-3)", fillArea: false },
                 ]}
               />

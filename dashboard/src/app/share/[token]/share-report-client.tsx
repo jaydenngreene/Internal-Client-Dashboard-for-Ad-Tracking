@@ -76,7 +76,7 @@ export function ShareReportClient({ token }: { token: string }) {
             </Card>
             <Card className="px-4">
               <CardContent className="px-0">
-                <p className="text-xs font-medium text-muted-foreground">Cost</p>
+                <p className="text-xs font-medium text-muted-foreground">Ad Spend</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrency(data.cost)}</p>
               </CardContent>
             </Card>
@@ -102,7 +102,7 @@ export function ShareReportClient({ token }: { token: string }) {
 
           <Card className="px-4">
             <CardHeader className="px-0">
-              <CardTitle>Cost vs Revenue</CardTitle>
+              <CardTitle>Ad Spend vs Revenue</CardTitle>
             </CardHeader>
             <CardContent className="px-0">
               <TrendChart

@@ -75,13 +75,13 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         slug: "overview",
         title: "Overview",
-        purpose: "The home dashboard for one client: headline cost/revenue/profit/ROAS/ROI, a profitability trend, conversion rate, budget pacing, a rough forecast, best performing ads, and AI insights.",
+        purpose: "The home dashboard for one client: headline ad spend/revenue/profit/ROAS/ROI, a profitability trend, conversion rate, budget pacing, a rough forecast, best performing ads, and AI insights.",
         metrics: [
-          { term: "Cost", definition: "Total ad spend across every connected platform in the date range, plus any manually-added custom costs." },
+          { term: "Ad Spend", definition: "Total ad spend across every connected platform in the date range, plus any manually-added custom costs." },
           { term: "Total Revenue", definition: "Revenue attributed to ad-driven sessions, per the active attribution model." },
-          { term: "Profit", definition: "Revenue minus cost. \"True profit\" also subtracts COGS/payment fees/fulfillment cost if configured in Settings." },
-          { term: "ROAS", definition: "Return on ad spend — revenue ÷ cost." },
-          { term: "ROI", definition: "Profit ÷ cost, as a percentage." },
+          { term: "Profit", definition: "Revenue minus ad spend. \"True profit\" also subtracts COGS/payment fees/fulfillment cost if configured in Settings." },
+          { term: "ROAS", definition: "Return on ad spend — revenue ÷ ad spend." },
+          { term: "ROI", definition: "Profit ÷ ad spend, as a percentage." },
         ],
       },
       {
@@ -101,8 +101,8 @@ export const HELP_SECTIONS: HelpSection[] = [
         purpose: "The main performance breakdown table — switch between Campaign, Source, Keyword, and Creative (ad-level) views, plus an LTV-by-acquisition-campaign tab.",
         metrics: [
           { term: "CTR / CPC", definition: "Click-through rate and cost per click, straight from the ad platform." },
-          { term: "CPL / Cost per Purchase", definition: "Cost divided by leads or by purchases, whichever this client's niche optimizes for." },
-          { term: "ROAS", definition: "Revenue ÷ cost, per row." },
+          { term: "CPL / Ad Spend per Purchase", definition: "Ad spend divided by leads or by purchases, whichever this client's niche optimizes for." },
+          { term: "ROAS", definition: "Revenue ÷ ad spend, per row." },
         ],
         howToUse: "Sort any column by clicking its header. Export the current view to CSV with the button above the table.",
       },

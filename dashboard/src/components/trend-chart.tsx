@@ -13,7 +13,7 @@ import { OverviewSeriesPoint } from "@/lib/api";
 import { formatDateShort } from "@/lib/format";
 
 const chartConfig = {
-  cost: { label: "Cost", color: "var(--color-chart-2)" },
+  cost: { label: "Ad Spend", color: "var(--color-chart-2)" },
   revenue: { label: "Revenue", color: "var(--color-chart-1)" },
   profit: { label: "Profit", color: "var(--color-chart-3)" },
 } satisfies ChartConfig;

@@ -113,7 +113,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
               </Card>
               <Card className="px-4">
                 <CardContent className="px-0">
-                  <p className="text-xs font-medium text-muted-foreground">Cost Per Purchase</p>
+                  <p className="text-xs font-medium text-muted-foreground">Ad Spend Per Purchase</p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums">
                     {tof.data.costPerPurchase === null ? "-" : formatCurrency(tof.data.costPerPurchase)}
                   </p>
@@ -130,7 +130,7 @@ export function FunnelClient({ clientId }: { clientId: string }) {
           </Card>
           <Card className="px-4">
             <CardContent className="px-0">
-              <p className="text-xs font-medium text-muted-foreground">Cost Per Lead</p>
+              <p className="text-xs font-medium text-muted-foreground">Ad Spend Per Lead</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums">
                 {tof.data.cpl === null ? "-" : formatCurrency(tof.data.cpl)}
               </p>

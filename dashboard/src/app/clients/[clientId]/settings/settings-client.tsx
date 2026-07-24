@@ -210,26 +210,28 @@ async function getVisitorId() {
   return id;
 }
 
-async function send(eventType, product, value) {
+async function post(endpoint, body) {
   try {
     const anonymous_id = await getVisitorId();
-    const res = await fetch(API_URL + '/track/event', {
+    const res = await fetch(API_URL + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pixel_key: PIXEL_KEY,
-        anonymous_id,
-        event_type: eventType,
-        url: window.location.href,
-        product_id: product ? String(product.id) : null,
-        product_name: product ? product.name : null,
-        value: value != null ? value : null,
-      }),
+      body: JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body)),
     });
-    console.log('[Ad Dashboard pixel]', eventType, 'sent, status', res.status);
+    console.log('[Ad Dashboard pixel]', endpoint, 'sent, status', res.status);
   } catch (err) {
-    console.error('[Ad Dashboard pixel]', eventType, 'failed', err);
+    console.error('[Ad Dashboard pixel]', endpoint, 'failed', err);
   }
+}
+
+function send(eventType, product, value) {
+  post('/track/event', {
+    event_type: eventType,
+    url: window.location.href,
+    product_id: product ? String(product.id) : null,
+    product_name: product ? product.name : null,
+    value: value != null ? value : null,
+  });
 }
 
 analytics.subscribe('product_added_to_cart', (event) => {
@@ -257,6 +259,23 @@ analytics.subscribe('product_added_to_cart', (event) => {
 analytics.subscribe('checkout_started', (event) => {
   const checkout = event.data.checkout;
   send('begin_checkout', null, checkout ? checkout.totalPrice.amount : null);
+});
+
+// Identify-only, deliberately not a second /track/conversion call here - the
+// orders/create webhook (registered separately) already reliably records the
+// purchase itself, and this event's checkout.order.id is a different ID format
+// (Web Pixels GID) than the webhook's numeric Shopify order id, so sending it
+// through here too would create a second, un-deduplicated purchase row instead
+// of matching the webhook's. This just writes the email -> visitor link so
+// whichever purchase record lands (from the webhook) can find it.
+analytics.subscribe('checkout_completed', (event) => {
+  const checkout = event.data.checkout;
+  if (!checkout || !checkout.email) return;
+  post('/track/identify', {
+    email: checkout.email,
+    lead_type: 'checkout',
+    page: window.location.href,
+  });
 });`;
 }
 

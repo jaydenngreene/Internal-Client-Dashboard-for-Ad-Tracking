@@ -14,6 +14,11 @@ export interface NormalizedConversion {
   // client's base currency" (e.g. GoHighLevel's custom webhook schema has no
   // reliable currency field) — no conversion happens, same as today's behavior.
   currency?: string | null
+  // The order's real placed-at date. Omitted means "right now" (every live
+  // webhook/CAPI call wants that, via the purchased_at DEFAULT NOW()) — only the
+  // historical CSV importer sets this, so backfilled orders land on their real
+  // date instead of the moment they were uploaded.
+  purchased_at?: Date | string | null
 }
 
 type AttributionModel = 'first_click' | 'last_click' | 'linear' | 'time_decay' | 'u_shaped'
@@ -69,15 +74,16 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
 
   const { rows: purchaseRows } = await db.query(
-    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
      ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
      RETURNING id`,
-    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor]
+    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor, conv.purchased_at ?? null]
   )
   if (purchaseRows.length === 0) return false // duplicate (webhook retry)
 
   const purchaseId = purchaseRows[0].id
+  const purchaseTime = conv.purchased_at ? new Date(conv.purchased_at) : new Date()
 
   const { rows: identityRows } = await db.query(
     'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
@@ -91,9 +97,10 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     `SELECT id, utm_campaign, utm_content, utm_source, fbclid, gclid, msclkid, started_at
      FROM sessions
      WHERE visitor_id = $1
-       AND started_at >= NOW() - INTERVAL '90 days'
+       AND started_at >= $2::timestamptz - INTERVAL '90 days'
+       AND started_at <= $2::timestamptz
      ORDER BY started_at ASC`,
-    [visitorId]
+    [visitorId, purchaseTime]
   )
   if (sessionRows.length === 0) return true
 
@@ -107,7 +114,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   // attribution model — the model only changes how revenue credit is split for ROAS.
   const firstSession = sessionRows[0]
 
-  const timeDecayWeightsForSessions = model === 'time_decay' ? timeDecayWeights(sessionRows, new Date()) : null
+  const timeDecayWeightsForSessions = model === 'time_decay' ? timeDecayWeights(sessionRows, purchaseTime) : null
   const uShapedWeightsForSessions = model === 'u_shaped' ? uShapedWeights(sessionRows.length) : null
 
   const creditedTouches: Array<{ session: TouchSession; fraction: number }> =
@@ -132,13 +139,13 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   await db.query(
     `INSERT INTO customer_ltv
        (client_id, email, acquisition_campaign, acquisition_ad, acquisition_source, first_purchase_date, revenue_lifetime, purchase_count)
-     VALUES ($1, $2, $3, $4, $5, NOW(), $6, 1)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
      ON CONFLICT (client_id, email)
      DO UPDATE SET
        revenue_lifetime = customer_ltv.revenue_lifetime + EXCLUDED.revenue_lifetime,
        purchase_count   = customer_ltv.purchase_count + 1,
        last_updated     = NOW()`,
-    [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, revenue]
+    [clientId, email, firstSession.utm_campaign, firstSession.utm_content, firstSession.utm_source, purchaseTime, revenue]
   )
 
   // Signal the ad platforms using whichever click is most recently "live" for this

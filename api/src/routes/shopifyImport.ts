@@ -19,6 +19,7 @@ interface OrderAgg {
   financialStatus: string
   cancelledAt: string
   refundedAmount: string
+  createdAt: string
 }
 
 function groupOrders(rows: Record<string, string>[]): Map<string, OrderAgg> {
@@ -28,7 +29,7 @@ function groupOrders(rows: Record<string, string>[]): Map<string, OrderAgg> {
     if (!name) continue
     let order = orders.get(name)
     if (!order) {
-      order = { id: '', name, email: '', total: '', currency: '', financialStatus: '', cancelledAt: '', refundedAmount: '' }
+      order = { id: '', name, email: '', total: '', currency: '', financialStatus: '', cancelledAt: '', refundedAmount: '', createdAt: '' }
       orders.set(name, order)
     }
     if (row['Id']?.trim()) order.id = row['Id'].trim()
@@ -38,6 +39,7 @@ function groupOrders(rows: Record<string, string>[]): Map<string, OrderAgg> {
     if (row['Financial Status']?.trim()) order.financialStatus = row['Financial Status'].trim()
     if (row['Cancelled at']?.trim()) order.cancelledAt = row['Cancelled at'].trim()
     if (row['Refunded Amount']?.trim()) order.refundedAmount = row['Refunded Amount'].trim()
+    if (row['Created at']?.trim()) order.createdAt = row['Created at'].trim()
   }
   return orders
 }
@@ -96,6 +98,13 @@ export async function shopifyImportRoutes(app: FastifyInstance) {
         // for older exports that omit the Id column.
         const orderId = order.id || order.name.replace(/^#/, '')
 
+        // Shopify's export gives this as a local-timezone-offset ISO string (e.g.
+        // "2026-05-01 14:32:10 -0400") — the Date constructor parses that offset
+        // correctly, no separate timezone handling needed. Falls back to import
+        // time only if the column's missing/unparseable, matching the old behavior.
+        const createdAt = order.createdAt ? new Date(order.createdAt) : null
+        const purchasedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : null
+
         const wasNew = await recordPurchase(clientId, {
           email: order.email,
           revenue: total,
@@ -103,6 +112,7 @@ export async function shopifyImportRoutes(app: FastifyInstance) {
           order_id: orderId,
           processor: 'shopify',
           currency: order.currency || null,
+          purchased_at: purchasedAt,
         })
         if (wasNew) imported++
         else skipped++

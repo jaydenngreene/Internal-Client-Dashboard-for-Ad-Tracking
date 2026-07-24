@@ -15,7 +15,7 @@ export async function creativeTagRoutes(app: FastifyInstance) {
       const { platform, adName } = req.query
       if (!platform || !adName) return reply.code(400).send({ error: 'platform and adName are required' })
       const { rows } = await db.query(
-        `SELECT * FROM creative_tags WHERE client_id = $1 AND platform = $2 AND ad_name = LOWER(TRIM($3))`,
+        `SELECT * FROM creative_tags WHERE client_id = $1 AND platform = $2 AND LOWER(TRIM(ad_name)) = LOWER(TRIM($3))`,
         [req.params.id, platform, adName]
       )
       return reply.send(rows[0] ?? null)

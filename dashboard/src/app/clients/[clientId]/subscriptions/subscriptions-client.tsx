@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSubscriptions } from "@/lib/api";
-import { RangePreset, resolveRange } from "@/lib/date-range";
+import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { KpiTile } from "@/components/kpi-tile";
@@ -13,8 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
 
 export function SubscriptionsClient({ clientId }: { clientId: string }) {
-  const [preset, setPreset] = useState<RangePreset>("30d");
-  const range = resolveRange(preset);
+  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
+
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["subscriptions", clientId, range.from, range.to],
@@ -31,7 +30,7 @@ export function SubscriptionsClient({ clientId }: { clientId: string }) {
             MRR, trial conversion, and churn. Current MRR is a live snapshot, the rest is scoped to the selected range
           </p>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} />
+        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getFunnel, getLtv, getClients, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
-import { RangePreset, resolveRange } from "@/lib/date-range";
+import { useDateRangeState } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
@@ -75,9 +75,9 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
     ? (requestedView as ViewMode)
     : "campaign";
 
-  const [preset, setPreset] = useState<RangePreset>("30d");
+  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
   const [view, setView] = useState<ViewMode>(initialView);
-  const range = resolveRange(preset);
+
   const isLtv = view === "ltv";
 
   const funnelQuery = useQuery({
@@ -106,7 +106,7 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
         </div>
         <div className="flex items-center gap-3">
           <SegmentedToggle value={view} onChange={setView} options={VIEW_OPTIONS} />
-          <DateRangeSelect value={preset} onChange={setPreset} />
+          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
 

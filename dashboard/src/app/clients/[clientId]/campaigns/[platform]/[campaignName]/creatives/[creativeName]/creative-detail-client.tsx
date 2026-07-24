@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ImageIcon, Sparkles } from "lucide-react";
@@ -13,7 +12,7 @@ import {
   getCreativeTags,
   generateCreativeTagsFor,
 } from "@/lib/api";
-import { RangePreset, resolveRange } from "@/lib/date-range";
+import { useDateRangeState } from "@/lib/date-range";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
@@ -203,8 +202,8 @@ export function CreativeDetailClient({
   campaignName: string;
   creativeName: string;
 }) {
-  const [preset, setPreset] = useState<RangePreset>("30d");
-  const range = resolveRange(preset);
+  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
+
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["creative-detail", clientId, platform, campaignName, creativeName, range.from, range.to],
@@ -229,7 +228,7 @@ export function CreativeDetailClient({
             {formatPlatformLabel(platform) && <Badge variant="secondary">{formatPlatformLabel(platform)}</Badge>}
           </div>
         </div>
-        <DateRangeSelect value={preset} onChange={setPreset} />
+        <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
       </div>
 
       {isError && <p className="text-sm text-status-critical">Failed to load creative. Is the API running?</p>}

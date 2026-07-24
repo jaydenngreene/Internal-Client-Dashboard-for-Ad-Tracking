@@ -17,7 +17,7 @@ import {
   ForecastWindow,
   Niche,
 } from "@/lib/api";
-import { RangePreset, resolveRange } from "@/lib/date-range";
+import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { DateRangeSelect } from "@/components/date-range-select";
 import { KpiTile } from "@/components/kpi-tile";
@@ -484,9 +484,9 @@ function BestPerformingCard({
 }
 
 export function OverviewClient({ clientId }: { clientId: string }) {
-  const [preset, setPreset] = useState<RangePreset>("30d");
+  const { preset, setPreset, customRange, setCustomRange, range } = useDateRangeState("30d");
   const [view, setView] = useState<OverviewView>("basic");
-  const range = resolveRange(preset);
+
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["overview", clientId, range.from, range.to],
@@ -512,7 +512,7 @@ export function OverviewClient({ clientId }: { clientId: string }) {
               { value: "pro", label: "Pro View" },
             ]}
           />
-          <DateRangeSelect value={preset} onChange={setPreset} />
+          <DateRangeSelect value={preset} onChange={setPreset} customRange={customRange} onCustomRangeChange={setCustomRange} />
         </div>
       </div>
 

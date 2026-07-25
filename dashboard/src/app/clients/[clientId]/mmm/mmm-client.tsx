@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { MmmEfficiencyChart } from "@/components/mmm-efficiency-chart";
 import { cn } from "@/lib/utils";
 
 // Step 52 — Media Mix Modeling via a straightforward multiple linear regression,
@@ -158,6 +159,17 @@ export function MmmClient({ clientId }: { clientId: string }) {
               </div>
             </CardContent>
           </Card>
+
+          {data.channels && data.channels.length > 0 && (
+            <Card className="px-4">
+              <CardHeader className="px-0">
+                <CardTitle className="text-sm">Channel Efficiency Map</CardTitle>
+              </CardHeader>
+              <CardContent className="px-0">
+                <MmmEfficiencyChart channels={data.channels} />
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {data.channels?.map((c) => (

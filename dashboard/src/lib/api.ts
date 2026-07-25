@@ -1260,6 +1260,7 @@ export interface OverviewSeriesPoint {
   profit: number;
   trueProfit: number;
   trueProfitAttributed: number;
+  attributionRate: number;
 }
 
 export interface OverviewReport {
@@ -1287,6 +1288,13 @@ export interface OverviewReport {
   hasMarginConfig: boolean;
   leads: number;
   sales: number;
+  // How many of `sales` have a matched ad-click/session, and what percent
+  // (2026-07-25) — a tracking-health signal, not a performance one: a real
+  // live incident (Nothing But Buckets showing 8 attributed sales when 16
+  // real orders existed, traced to a checkout identify-vs-webhook race) is
+  // exactly what a dropping rate here should surface immediately.
+  attributedSales: number;
+  attributionRate: number | null;
   series: OverviewSeriesPoint[];
 }
 

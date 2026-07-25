@@ -26,6 +26,15 @@ export interface OverviewSummary {
   trueRoi: number | null
   leads: number
   sales: number
+  // How many of `sales` actually have a matched ad-click/session, and what
+  // percent that is (2026-07-25) — the tracking-health question this app kept
+  // needing to answer by hand (a real live incident: Nothing But Buckets
+  // showing 8 attributed when 16 real orders existed traced to a checkout
+  // identify-vs-webhook race). Surfacing it as its own number means a
+  // dropping rate shows up immediately instead of only being noticed when
+  // someone manually compares two counts.
+  attributedSales: number
+  attributionRate: number | null
 }
 
 // Extracted out of the `/reports/overview` route (Step 57) so the scheduled
@@ -41,7 +50,7 @@ export interface OverviewSummary {
 // ROAS/ROI stay attribution-based on purpose: they measure ad spend's return,
 // and unattributed revenue wasn't caused by that spend.
 export async function getOverviewSummary(clientId: string, from: string, to: string): Promise<OverviewSummary> {
-  const [marginConfig, costTotal, revenueTotal, attributedRevenueTotal, leadsTotal, salesTotal] = await Promise.all([
+  const [marginConfig, costTotal, revenueTotal, attributedRevenueTotal, leadsTotal, salesTotal, attributedSalesTotal] = await Promise.all([
     db.query<MarginConfig>(
       `SELECT cogs_percent, payment_fee_percent, fulfillment_cost_flat FROM clients WHERE id = $1`,
       [clientId]
@@ -73,6 +82,12 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
        WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT refunded`,
       [clientId, from, to]
     ),
+    db.query<{ total: string }>(
+      `SELECT COUNT(DISTINCT a.purchase_id) AS total
+       FROM attributions a JOIN purchases p ON p.id = a.purchase_id
+       WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3 AND NOT p.refunded`,
+      [clientId, from, to]
+    ),
   ])
 
   const cost = parseFloat(costTotal.rows[0].total)
@@ -91,6 +106,8 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
   // two groups back together.
   const { trueProfit } = computeTrueProfit(margin, revenue, cost, sales)
   const { trueRoi } = computeTrueProfit(margin, attributedRevenue, cost, sales)
+  const attributedSales = parseInt(attributedSalesTotal.rows[0].total, 10)
+  const attributionRate = sales > 0 ? (attributedSales / sales) * 100 : null
 
   return {
     cost,
@@ -104,5 +121,7 @@ export async function getOverviewSummary(clientId: string, from: string, to: str
     trueRoi,
     leads: parseInt(leadsTotal.rows[0].total, 10),
     sales,
+    attributedSales,
+    attributionRate,
   }
 }

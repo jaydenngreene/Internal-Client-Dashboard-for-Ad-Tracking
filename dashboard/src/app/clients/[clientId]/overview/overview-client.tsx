@@ -107,6 +107,16 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
           formatValue={(v) => formatRoas(v)}
           sublabel="total revenue ÷ ad spend, all sources"
         />
+        <KpiTile
+          label="Attribution Rate"
+          value={formatPercent(data.attributionRate)}
+          fromDate={data.from}
+          color="var(--color-chart-2)"
+          sparkline={data.series.map((p) => p.attributionRate)}
+          dates={dates}
+          formatValue={(v) => formatPercent(v)}
+          sublabel={`${formatNumber(data.attributedSales)} of ${formatNumber(data.sales)} sales matched`}
+        />
       </div>
     </div>
   );

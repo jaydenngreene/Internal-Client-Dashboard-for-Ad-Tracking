@@ -10,13 +10,13 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-export function formatRoas(value: number | null): string {
-  if (value === null) return "-";
+export function formatRoas(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
   return `${value.toFixed(2)}x`;
 }
 
-export function formatPercent(value: number | null): string {
-  if (value === null) return "-";
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
   return `${value.toFixed(1)}%`;
 }
 

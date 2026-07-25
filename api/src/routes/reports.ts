@@ -1532,17 +1532,24 @@ export async function reportRoutes(app: FastifyInstance) {
          SELECT client_id, SUM(spend) AS total FROM ad_costs
          WHERE date BETWEEN $1 AND $2 GROUP BY client_id
        ) spend ON spend.client_id = c.id
+       -- Total revenue from every non-refunded purchase, attributed or not — same
+       -- "trust the store's real revenue over Meta/Google's own attribution" basis
+       -- getOverviewSummary uses for a single client's headline Revenue tile.
+       -- Gating this on attributions.attributed_revenue (as before) silently
+       -- dropped organic/direct/unmatched sales, understating revenue below what
+       -- the store actually recognizes - worse than an ad platform's own
+       -- under-tracking, not a fix for it.
        LEFT JOIN (
-         SELECT a.client_id, SUM(a.attributed_revenue) AS total, COUNT(DISTINCT a.purchase_id) AS sales
-         FROM attributions a JOIN purchases p ON p.id = a.purchase_id
-         WHERE p.purchased_at::date BETWEEN $1 AND $2
-         GROUP BY a.client_id
+         SELECT client_id, SUM(revenue) AS total, COUNT(*) AS sales
+         FROM purchases
+         WHERE purchased_at::date BETWEEN $1 AND $2 AND NOT refunded
+         GROUP BY client_id
        ) rev ON rev.client_id = c.id
        LEFT JOIN (
-         SELECT a.client_id, SUM(a.attributed_revenue) AS total
-         FROM attributions a JOIN purchases p ON p.id = a.purchase_id
-         WHERE p.purchased_at::date BETWEEN $3 AND $4
-         GROUP BY a.client_id
+         SELECT client_id, SUM(revenue) AS total
+         FROM purchases
+         WHERE purchased_at::date BETWEEN $3 AND $4 AND NOT refunded
+         GROUP BY client_id
        ) prev_rev ON prev_rev.client_id = c.id
        WHERE c.owner_user_id = $5
           OR c.id IN (SELECT client_id FROM client_collaborators WHERE user_id = $5)

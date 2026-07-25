@@ -38,7 +38,7 @@ export default function AgencyOverviewPage() {
     { key: "cost", label: "Ad Spend", align: "right" },
     { key: "revenue", label: "Revenue", align: "right" },
     { key: "profit", label: "Profit", align: "right" },
-    { key: "roas", label: "ROAS", align: "right" },
+    { key: "roas", label: "Blended ROAS", align: "right" },
     { key: "roi", label: "ROI", align: "right" },
   ];
 

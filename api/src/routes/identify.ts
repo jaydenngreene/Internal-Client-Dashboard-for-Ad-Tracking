@@ -4,6 +4,7 @@ import { sendConversionSignals } from '../lib/conversionSignals'
 import { lookupVisitorId } from '../lib/visitorResolution'
 import { autoLinkByPhone, autoLinkByIp } from '../lib/identityLinking'
 import { dispatchEvent } from '../lib/outboundWebhooks'
+import { attemptRetroactiveAttribution } from '../lib/attribution'
 
 interface IdentifyBody {
   pixel_key: string
@@ -63,6 +64,17 @@ export async function identifyRoutes(app: FastifyInstance) {
       await autoLinkByIp(clientId, normalizedEmail, visitorId)
     } catch (err) {
       console.error(`[identityLinking] failed for client=${clientId}:`, (err as Error).message)
+    }
+
+    // Catches the common Shopify race (2026-07-25): the orders/create webhook
+    // fires and attempts attribution before this identify call — sent from the
+    // customer's own browser loading the thank-you page — even lands. Now that
+    // the email->visitor link above actually exists, retry any of this email's
+    // recent purchases that came up empty. Never blocks the identify response.
+    try {
+      await attemptRetroactiveAttribution(clientId, normalizedEmail)
+    } catch (err) {
+      console.error(`[attemptRetroactiveAttribution] failed for client=${clientId}:`, (err as Error).message)
     }
 
     // Record the lead event

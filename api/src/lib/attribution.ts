@@ -64,32 +64,22 @@ export function uShapedWeights(count: number): number[] {
   return Array.from({ length: count }, (_, i) => (i === 0 || i === count - 1 ? 0.4 : middleWeight))
 }
 
-// Insert a purchase, walk back through the customer's ad sessions, split revenue
-// credit across them per the client's attribution model, and roll revenue into customer_ltv.
-// Returns whether a purchase row was actually inserted (false for a missing
-// email/revenue or a duplicate order_id) — callers that only care about side
-// effects (the live webhook) can ignore it; the bulk CSV importer uses it to
-// report accurate imported/skipped counts instead of guessing.
-export async function recordPurchase(clientId: string, conv: NormalizedConversion): Promise<boolean> {
-  if (!conv.email || !conv.revenue) return false
-
-  const email = conv.email.toLowerCase().trim()
-
-  const baseCurrency = await getClientCurrency(clientId)
-  const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
-
-  const { rows: purchaseRows } = await db.query(
-    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at)
-     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
-     ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
-     RETURNING id`,
-    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor, conv.purchased_at ?? null]
-  )
-  if (purchaseRows.length === 0) return false // duplicate (webhook retry)
-
-  const purchaseId = purchaseRows[0].id
-  const purchaseTime = conv.purchased_at ? new Date(conv.purchased_at) : new Date()
-
+// The actual attribution walk-back: given a purchase that's already been
+// inserted, tries to find matching ad sessions and, if it does, splits credit,
+// rolls revenue into customer_ltv, and fires conversion signals/webhooks.
+// Extracted out of recordPurchase (2026-07-25) so the exact same logic can run
+// a second time, later, from attemptRetroactiveAttribution below — see that
+// function's own comment for why a purchase can legitimately need a second
+// attempt. Returns whether attribution succeeded (a session was found).
+async function attributePurchase(
+  clientId: string,
+  purchaseId: string,
+  email: string,
+  revenue: number,
+  purchaseTime: Date,
+  landingSite: string | null | undefined,
+  signal: { originalValue: number; currency: string; orderId: string | null; product: string | null; processor: string }
+): Promise<boolean> {
   const { rows: identityRows } = await db.query(
     'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
     [clientId, email]
@@ -119,12 +109,12 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   // first landing page itself, independent of any pixel — parsing UTM/click-ids
   // out of that gives a real single-touch attribution when our own tracking
   // came up empty, without depending on the broken cookie hop at all.
-  if (sessionRows.length === 0 && conv.landing_site) {
-    const adParams = parseAdParamsFromLandingSite(conv.landing_site)
+  if (sessionRows.length === 0 && landingSite) {
+    const adParams = parseAdParamsFromLandingSite(landingSite)
     if (adParams) {
       const fallbackVisitorId = await resolveVisitor({
         clientId,
-        anonymousId: `shopify-landing-site:${conv.order_id ?? purchaseId}`,
+        anonymousId: `shopify-landing-site:${signal.orderId ?? purchaseId}`,
         ip: null,
         userAgent: null,
       })
@@ -153,7 +143,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     }
   }
 
-  if (sessionRows.length === 0) return true // no ad history to attribute
+  if (sessionRows.length === 0) return false // no ad history to attribute (yet)
 
   const { rows: clientRows } = await db.query<{ attribution_model: AttributionModel }>(
     'SELECT attribution_model FROM clients WHERE id = $1',
@@ -203,16 +193,11 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   // visitor (the last touch), matching how the platforms' own pixels behave — their
   // click-id cookies get overwritten by the most recent click, not the first one.
   const lastSession = sessionRows[sessionRows.length - 1]
-  // Sent in the ORIGINAL transaction currency, not the base-currency-converted
-  // `revenue` above — the ad platform's own optimization/reporting needs the real
-  // amount that changed hands, not this app's internal reporting conversion. This
-  // also fixes a latent gap: currency was never passed here before Step 48, so
-  // every conversion signal silently claimed USD regardless of the real currency.
   await sendConversionSignals(clientId, {
     eventType: 'Purchase',
     email,
-    value: conv.revenue,
-    currency: conv.currency ?? baseCurrency,
+    value: signal.originalValue,
+    currency: signal.currency,
     fbclid: lastSession.fbclid,
     gclid: lastSession.gclid,
     msclkid: lastSession.msclkid,
@@ -220,7 +205,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     // Order id as the shared dedup key — a client's own native Meta pixel
     // needs to pass the same value as its Purchase event's eventID for Meta to
     // actually de-dupe against this CAPI call (see SignalPayload.eventId).
-    eventId: conv.order_id ?? undefined,
+    eventId: signal.orderId ?? undefined,
   })
 
   // Step 29 — notify any of the client's own systems subscribed to this event.
@@ -229,15 +214,107 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   await dispatchEvent(clientId, 'sale.attributed', {
     email,
     revenue,
-    original_revenue: conv.revenue,
-    original_currency: conv.currency ?? baseCurrency,
-    product: conv.product ?? null,
-    order_id: conv.order_id ?? null,
-    processor: conv.processor,
+    original_revenue: signal.originalValue,
+    original_currency: signal.currency,
+    product: signal.product,
+    order_id: signal.orderId,
+    processor: signal.processor,
     attribution_model: model,
   })
 
   return true
+}
+
+// Insert a purchase, walk back through the customer's ad sessions, split revenue
+// credit across them per the client's attribution model, and roll revenue into customer_ltv.
+// Returns whether a purchase row was actually inserted (false for a missing
+// email/revenue or a duplicate order_id) — callers that only care about side
+// effects (the live webhook) can ignore it; the bulk CSV importer uses it to
+// report accurate imported/skipped counts instead of guessing.
+export async function recordPurchase(clientId: string, conv: NormalizedConversion): Promise<boolean> {
+  if (!conv.email || !conv.revenue) return false
+
+  const email = conv.email.toLowerCase().trim()
+
+  const baseCurrency = await getClientCurrency(clientId)
+  const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
+
+  const { rows: purchaseRows } = await db.query(
+    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
+     ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor, conv.purchased_at ?? null]
+  )
+  if (purchaseRows.length === 0) return false // duplicate (webhook retry)
+
+  const purchaseId = purchaseRows[0].id
+  const purchaseTime = conv.purchased_at ? new Date(conv.purchased_at) : new Date()
+
+  // Sent in the ORIGINAL transaction currency, not the base-currency-converted
+  // `revenue` above — the ad platform's own optimization/reporting needs the real
+  // amount that changed hands, not this app's internal reporting conversion.
+  await attributePurchase(clientId, purchaseId, email, revenue, purchaseTime, conv.landing_site, {
+    originalValue: conv.revenue,
+    currency: conv.currency ?? baseCurrency,
+    orderId: conv.order_id ?? null,
+    product: conv.product ?? null,
+    processor: conv.processor,
+  })
+
+  return true
+}
+
+// Confirmed live (2026-07-25): Shopify's own orders/create webhook - which
+// triggers recordPurchase above, including its one-shot attribution attempt -
+// routinely fires and completes BEFORE the customer's browser has even
+// finished loading the thank-you page where the tracking pixel's identify()
+// call actually happens (that's a real page navigation + JS execution; the
+// webhook is a direct server-to-server call). Measured on live Nothing But
+// Buckets data: successful identify calls land 1-5 seconds after the purchase
+// is already recorded - too late for recordPurchase's single attempt, which
+// has no retry. Roughly 70% of real orders were losing this race.
+//
+// Called from /track/identify once a new email -> visitor link is written:
+// re-runs the exact same attribution attempt for any of this email's recent
+// purchases that came up empty the first time. Scoped to the last 24 hours
+// specifically so a coincidental, unrelated identify much later (a newsletter
+// signup weeks after a one-off organic sale) can't reach back and invent
+// attribution for a purchase that was genuinely never ad-driven.
+export async function attemptRetroactiveAttribution(clientId: string, email: string): Promise<void> {
+  const normalizedEmail = email.toLowerCase().trim()
+  const { rows } = await db.query<{
+    id: string
+    revenue: string
+    order_id: string | null
+    product: string | null
+    processor: string
+    purchased_at: string
+  }>(
+    `SELECT p.id, p.revenue, p.order_id, p.product, p.processor, p.purchased_at
+     FROM purchases p
+     WHERE p.client_id = $1 AND p.email = $2 AND NOT p.refunded
+       AND p.purchased_at >= NOW() - INTERVAL '24 hours'
+       AND NOT EXISTS (SELECT 1 FROM attributions WHERE purchase_id = p.id)`,
+    [clientId, normalizedEmail]
+  )
+  if (rows.length === 0) return
+
+  const baseCurrency = await getClientCurrency(clientId)
+  for (const p of rows) {
+    const revenue = parseFloat(p.revenue)
+    // The original pre-conversion currency/amount isn't stored on `purchases`
+    // (only the already-converted revenue is) - a disclosed simplification for
+    // this retroactive path only, same "can't perfectly reconstruct" trade-off
+    // recordRefund already accepts for its own currency conversion.
+    await attributePurchase(clientId, p.id, normalizedEmail, revenue, new Date(p.purchased_at), null, {
+      originalValue: revenue,
+      currency: baseCurrency,
+      orderId: p.order_id,
+      product: p.product,
+      processor: p.processor,
+    })
+  }
 }
 
 // Deduct a refund from the matching purchase, its attribution record(s), and customer_ltv.

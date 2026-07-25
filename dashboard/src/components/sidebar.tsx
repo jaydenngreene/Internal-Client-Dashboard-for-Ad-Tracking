@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Radar, X, Settings, Users, BarChart3, ChevronDown } from "lucide-react";
+import { X, Settings, Users, BarChart3, ChevronDown } from "lucide-react";
 import { getClients, getMe } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,12 +14,28 @@ import { NAV_SECTIONS, type NavItem } from "@/lib/nav-items";
 const navLinkBase =
   "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar";
 
-function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActive: boolean }) {
+// The Gojo AI assistant gets its own branded orb everywhere it's referenced
+// instead of a generic lucide glyph — same reasoning as Kado getting its own
+// mark: an AI feature this central deserves to look like a distinct product
+// moment, not just another nav row (matches how Hyros AI, ChatGPT, etc. give
+// their assistant its own avatar separate from the host app's icon).
+function NavIcon({ item }: { item: NavItem }) {
+  if (item.slug === "chat") {
+    return (
+      <span className="size-3.5 shrink-0 overflow-hidden rounded-full">
+        <img src="/gojo-logo.png" alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
   const Icon = item.icon;
+  return <Icon className="size-3.5 shrink-0" strokeWidth={2} />;
+}
+
+function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActive: boolean }) {
   if (!item.enabled) {
     return (
       <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
-        <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+        <NavIcon item={item} />
         <span className="truncate">{item.label}</span>
         <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
       </div>
@@ -35,7 +51,7 @@ function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActi
           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
       )}
     >
-      <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+      <NavIcon item={item} />
       <span className="truncate">{item.label}</span>
     </Link>
   );
@@ -131,11 +147,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
         )}
       >
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <Radar className="size-4" strokeWidth={2.25} />
-        </span>
+        {me?.agency_logo_url ? (
+          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border">
+            {/* eslint-disable-next-line @next/next/no-img-element -- agency-hosted or uploaded URL, not a static local asset */}
+            <img src={me.agency_logo_url} alt="" className="size-full object-cover" />
+          </span>
+        ) : (
+          <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+            <img src="/kado-logo.png" alt="Kado" className="size-full object-cover" />
+          </span>
+        )}
         <span className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
-          {me?.agency_name ?? "Ad Tracking"}
+          {me?.agency_name ?? "Kado"}
         </span>
         <button
           type="button"

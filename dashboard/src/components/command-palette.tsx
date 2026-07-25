@@ -149,7 +149,13 @@ export function CommandPalette({ clients, activeClientId }: { clients: Client[];
                   highlighted === i ? "bg-accent text-accent-foreground" : "text-foreground"
                 )}
               >
-                <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                {entry.key === "nav-chat" ? (
+                  <span className="size-3.5 shrink-0 overflow-hidden rounded-full">
+                    <img src="/gojo-logo.png" alt="" className="size-full object-cover" />
+                  </span>
+                ) : (
+                  <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
                 <span className="flex-1 truncate">{entry.label}</span>
                 <span className="shrink-0 truncate text-[11px] text-muted-foreground">{entry.group}</span>
               </button>

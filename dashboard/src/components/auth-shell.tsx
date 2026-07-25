@@ -1,4 +1,3 @@
-import { Radar } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 // Every logged-out screen (login, password reset, email verification) shares this
@@ -23,10 +22,10 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       />
       <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
-            <Radar className="size-5" strokeWidth={2.25} />
+          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl ring-1 ring-primary/20">
+            <img src="/kado-logo.png" alt="Kado" className="size-full object-cover" />
           </span>
-          <span className="text-base font-semibold tracking-tight text-foreground">Ad Tracking</span>
+          <span className="text-base font-semibold tracking-tight text-foreground">Kado</span>
         </div>
         <Card className="w-full px-5 py-1 shadow-2xl shadow-black/40 ring-1 ring-border">{children}</Card>
       </div>

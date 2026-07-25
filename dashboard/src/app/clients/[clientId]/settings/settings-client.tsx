@@ -51,6 +51,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { FieldLabel } from "@/components/ui/field-label";
+import { LogoUploadField } from "@/components/logo-upload-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,7 +119,7 @@ function CopyBlock({ code }: { code: string }) {
 // done here instead so it doesn't require someone running that script by hand.
 function shopifyThemeSnippet(apiUrl: string, pixelKey: string): string {
   return `{% comment %}
-  Ad Tracking Pixel — add to theme.liquid just before </body>
+  Kado Pixel — add to theme.liquid just before </body>
 {% endcomment %}
 
 <script>
@@ -200,13 +201,13 @@ async function getVisitorId() {
     const existing = await browser.cookie.get('_adt_vid');
     if (existing) return existing;
   } catch (err) {
-    console.error('[Ad Dashboard pixel] cookie read failed', err);
+    console.error('[Kado pixel] cookie read failed', err);
   }
   const id = crypto.randomUUID();
   try {
     await browser.cookie.set('_adt_vid', id);
   } catch (err) {
-    console.error('[Ad Dashboard pixel] cookie write failed', err);
+    console.error('[Kado pixel] cookie write failed', err);
   }
   return id;
 }
@@ -219,9 +220,9 @@ async function post(endpoint, body) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body)),
     });
-    console.log('[Ad Dashboard pixel]', endpoint, 'sent, status', res.status);
+    console.log('[Kado pixel]', endpoint, 'sent, status', res.status);
   } catch (err) {
-    console.error('[Ad Dashboard pixel]', endpoint, 'failed', err);
+    console.error('[Kado pixel]', endpoint, 'failed', err);
   }
 }
 
@@ -1525,17 +1526,20 @@ function ShareLinkSection({ clientId, client }: { clientId: string; client: Clie
 function BrandingSection({ clientId, client }: { clientId: string; client: Client }) {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["client", clientId] });
-  const [logoUrl, setLogoUrl] = useState(client.brand_logo_url ?? "");
   const [accentColor, setAccentColor] = useState(client.brand_accent_color ?? "");
-  const mutation = useMutation({
+
+  const logoMutation = useMutation({
+    mutationFn: (url: string | null) => updateClientBranding(clientId, { brand_logo_url: url }),
+    onSuccess: invalidate,
+  });
+  const accentMutation = useMutation({
     mutationFn: () =>
       updateClientBranding(clientId, {
-        brand_logo_url: logoUrl.trim() === "" ? null : logoUrl.trim(),
         brand_accent_color: accentColor.trim() === "" ? null : accentColor.trim(),
       }),
     onSuccess: invalidate,
   });
-  const dirty = logoUrl !== (client.brand_logo_url ?? "") || accentColor !== (client.brand_accent_color ?? "");
+  const accentDirty = accentColor !== (client.brand_accent_color ?? "");
 
   return (
     <Card className="px-4">
@@ -1547,16 +1551,14 @@ function BrandingSection({ clientId, client }: { clientId: string; client: Clien
           Replace this app&apos;s own logo/name on the public share link above with your own. Leave blank to use the
           default branding.
         </p>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Logo URL</FieldLabel>
-            <Input
-              className="w-72"
-              placeholder="https://yoursite.com/logo.png"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-            />
-          </div>
+        <LogoUploadField
+          label="Logo"
+          value={client.brand_logo_url}
+          onChange={(url) => logoMutation.mutate(url)}
+        />
+        {logoMutation.isError && <p className="text-xs text-status-critical">{(logoMutation.error as Error).message}</p>}
+
+        <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
             <FieldLabel>Accent color</FieldLabel>
             <div className="flex items-center gap-2">
@@ -1574,11 +1576,11 @@ function BrandingSection({ clientId, client }: { clientId: string; client: Clien
               />
             </div>
           </div>
-          <Button size="sm" disabled={!dirty || mutation.isPending} onClick={() => mutation.mutate()}>
+          <Button size="sm" disabled={!accentDirty || accentMutation.isPending} onClick={() => accentMutation.mutate()}>
             Save
           </Button>
         </div>
-        {mutation.isError && <p className="text-xs text-status-critical">{(mutation.error as Error).message}</p>}
+        {accentMutation.isError && <p className="text-xs text-status-critical">{(accentMutation.error as Error).message}</p>}
       </CardContent>
     </Card>
   );

@@ -47,6 +47,7 @@ import { insightsRoutes } from './routes/insights'
 import { journeyRoutes } from './routes/journey'
 import { jobRoutes } from './routes/jobs'
 import { authRoutes } from './routes/auth'
+import { uploadRoutes, uploadServeRoutes } from './routes/uploads'
 import { authenticate } from './lib/auth'
 import { requireOwnership } from './lib/ownership'
 import { startScheduledJobs } from './lib/scheduler'
@@ -144,6 +145,7 @@ app.register(dniRoutes)
 // is subject to browser CORS enforcement in the first place (no fetch/XHR
 // preflight involved).
 app.register(pixelAssetRoutes)
+app.register(uploadServeRoutes)
 app.register(webhookRoutes)
 app.register(shopifyWebhookRoutes)
 app.register(stripeWebhookRoutes)
@@ -210,6 +212,7 @@ app.register(
     instance.register(notificationsRoutes)
     instance.register(jobRoutes)
     instance.register(auditLogRoutes)
+    instance.register(uploadRoutes)
   }
 )
 

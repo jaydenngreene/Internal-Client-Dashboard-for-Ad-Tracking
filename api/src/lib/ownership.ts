@@ -112,6 +112,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/shopify-import': 'client',
   '/reports/agency-overview': 'skip',
   '/jobs/status': 'skip',
+  '/uploads/logo': 'skip',
 
   '/webhook-subscriptions/:subId': (req) =>
     clientIdFrom('outbound_webhook_subscriptions', 'id', (req.params as { subId: string }).subId),

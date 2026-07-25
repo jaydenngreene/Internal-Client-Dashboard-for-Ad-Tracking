@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Sparkles } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getChatHistory, sendChatMessage } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,10 +21,15 @@ const EXAMPLE_PROMPTS = [
   "What's my current budget pacing?",
 ];
 
-function GojoAvatar() {
+function GojoAvatar({ size = "md" }: { size?: "md" | "lg" }) {
   return (
-    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-      <Sparkles className="size-3.5" strokeWidth={2.25} />
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-primary/25",
+        size === "lg" ? "size-10" : "size-6"
+      )}
+    >
+      <img src="/gojo-logo.png" alt="Gojo" className="size-full object-cover" />
     </span>
   );
 }
@@ -70,8 +74,8 @@ export function ChatClient({ clientId }: { clientId: string }) {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center gap-2.5">
-        <GojoAvatar />
+      <div className="flex items-center gap-3">
+        <GojoAvatar size="lg" />
         <div>
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Gojo</h1>
@@ -87,6 +91,9 @@ export function ChatClient({ clientId }: { clientId: string }) {
 
           {!isLoading && (!messages || messages.length === 0) && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 py-8">
+              <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-primary/20">
+                <img src="/gojo-logo.png" alt="Gojo" className="size-full object-cover" />
+              </span>
               <p className="text-sm text-muted-foreground">Try asking Gojo something like:</p>
               <div className="flex flex-wrap justify-center gap-2 px-4">
                 {EXAMPLE_PROMPTS.map((prompt) => (

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ad Tracking Dashboard",
-  description: "Internal ad attribution and ROAS reporting",
+  title: "Kado",
+  description: "Full-funnel ad attribution and ROAS reporting",
 };
 
 export default function RootLayout({

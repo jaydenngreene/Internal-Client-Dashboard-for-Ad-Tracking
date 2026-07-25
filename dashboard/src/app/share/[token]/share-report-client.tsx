@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Radar } from "lucide-react";
 import { getPublicShareOverview } from "@/lib/api";
 import { formatCurrency, formatDateShort, formatRoas, formatPercent, formatNumber } from "@/lib/format";
 import { TrendChart } from "@/components/trend-chart";
@@ -26,8 +25,9 @@ export function ShareReportClient({ token }: { token: string }) {
           <img src={data.brandLogoUrl} alt={data.clientName} className="h-6 max-w-40 object-contain" />
         ) : (
           <>
-            <Radar className="size-5 text-chart-4" />
-            <span className="text-sm font-medium text-muted-foreground">Ad Tracking</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static local asset, but Next/Image's fixed-size requirement doesn't fit this inline-with-text layout */}
+            <img src="/kado-logo.png" alt="" className="size-5 rounded object-cover" />
+            <span className="text-sm font-medium text-muted-foreground">Kado</span>
           </>
         )}
       </div>
@@ -111,7 +111,7 @@ export function ShareReportClient({ token }: { token: string }) {
             </CardContent>
           </Card>
 
-          <p className="pb-6 text-center text-xs text-muted-foreground">Powered by Ad Tracking</p>
+          <p className="pb-6 text-center text-xs text-muted-foreground">Powered by Kado</p>
         </>
       )}
     </div>

@@ -10,7 +10,7 @@ import {
   signMfaPendingToken,
   verifyMfaPendingToken,
 } from '../lib/auth'
-import { isValidEmail } from '../lib/validation'
+import { isValidEmail, isValidUrl } from '../lib/validation'
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email'
 import { logAction } from '../lib/auditLog'
 import { generateBase32Secret, generateTotp, verifyTotp, buildOtpAuthUri } from '../lib/totp'
@@ -134,7 +134,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { rows } = await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [req.userId])
     const secret = generateBase32Secret()
     await db.query('UPDATE users SET totp_secret = $1, totp_enabled = false WHERE id = $2', [secret, req.userId])
-    const uri = buildOtpAuthUri(secret, rows[0].email, 'Ad Tracking')
+    const uri = buildOtpAuthUri(secret, rows[0].email, 'Kado')
     const qrCodeDataUrl = await QRCode.toDataURL(uri)
     return reply.send({ secret, qrCodeDataUrl })
   })
@@ -177,8 +177,15 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   app.get('/auth/me', { preHandler: authenticate }, async (req, reply) => {
-    const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean; totp_enabled: boolean }>(
-      'SELECT id, email, agency_name, email_verified, totp_enabled FROM users WHERE id = $1',
+    const { rows } = await db.query<{
+      id: string
+      email: string
+      agency_name: string
+      agency_logo_url: string | null
+      email_verified: boolean
+      totp_enabled: boolean
+    }>(
+      'SELECT id, email, agency_name, agency_logo_url, email_verified, totp_enabled FROM users WHERE id = $1',
       [req.userId]
     )
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
@@ -198,17 +205,26 @@ export async function authRoutes(app: FastifyInstance) {
   // Update account-level profile fields. Deliberately separate from /auth/password
   // below — changing your agency name shouldn't require re-typing your password,
   // and vice versa.
-  app.patch<{ Body: { agency_name?: string; email?: string } }>(
+  app.patch<{ Body: { agency_name?: string; email?: string; agency_logo_url?: string | null } }>(
     '/auth/me',
     { preHandler: authenticate },
     async (req, reply) => {
       const agencyName = req.body.agency_name?.trim()
       const email = req.body.email?.toLowerCase().trim()
-      if (!agencyName && !email) {
-        return reply.code(400).send({ error: 'agency_name and/or email required' })
+      // Distinct from agency_name/email above: the key being present at all
+      // (even as "" or null) means "update this," since blank is how the logo
+      // gets cleared back to the default Kado mark — omitted entirely is the
+      // only case that means "leave it alone."
+      const hasLogoUpdate = req.body.agency_logo_url !== undefined
+      const agencyLogoUrl = hasLogoUpdate ? req.body.agency_logo_url?.trim() || null : undefined
+      if (!agencyName && !email && !hasLogoUpdate) {
+        return reply.code(400).send({ error: 'agency_name, email, and/or agency_logo_url required' })
       }
       if (agencyName && agencyName.length > AGENCY_NAME_MAX_LENGTH) {
         return reply.code(400).send({ error: `agency_name must be ${AGENCY_NAME_MAX_LENGTH} characters or fewer` })
+      }
+      if (agencyLogoUrl && !isValidUrl(agencyLogoUrl)) {
+        return reply.code(400).send({ error: 'agency_logo_url must be a valid URL' })
       }
       if (email) {
         if (!isValidEmail(email)) {
@@ -224,14 +240,21 @@ export async function authRoutes(app: FastifyInstance) {
       }
       // Changing the email address invalidates whatever verification applied to
       // the old one — a new address needs its own verify step.
-      const { rows } = await db.query<{ id: string; email: string; agency_name: string; email_verified: boolean }>(
+      const { rows } = await db.query<{
+        id: string
+        email: string
+        agency_name: string
+        agency_logo_url: string | null
+        email_verified: boolean
+      }>(
         `UPDATE users
          SET agency_name = COALESCE($1, agency_name),
              email = COALESCE($2, email),
-             email_verified = CASE WHEN $2::text IS NOT NULL THEN false ELSE email_verified END
+             email_verified = CASE WHEN $2::text IS NOT NULL THEN false ELSE email_verified END,
+             agency_logo_url = CASE WHEN $4 THEN $5 ELSE agency_logo_url END
          WHERE id = $3
-         RETURNING id, email, agency_name, email_verified`,
-        [agencyName ?? null, email ?? null, req.userId]
+         RETURNING id, email, agency_name, agency_logo_url, email_verified`,
+        [agencyName ?? null, email ?? null, req.userId, hasLogoUpdate, agencyLogoUrl ?? null]
       )
       const updated = rows[0]
       if (email) {

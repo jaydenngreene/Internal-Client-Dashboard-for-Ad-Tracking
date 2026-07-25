@@ -284,18 +284,30 @@ export async function clientRoutes(app: FastifyInstance) {
     Body: { brand_logo_url?: string | null; brand_accent_color?: string | null }
   }>('/clients/:id/branding', async (req, reply) => {
     const { id } = req.params
-    const { brand_logo_url = null, brand_accent_color = null } = req.body
+    // Each field's presence in the body (not its value) decides whether it's
+    // touched at all - omitted means "leave alone," present-as-null means
+    // "clear it." The Settings UI now saves the logo (upload-or-URL) and the
+    // accent color as two independent actions, so a call updating just one
+    // must never silently blank out the other.
+    const hasLogoUpdate = 'brand_logo_url' in req.body
+    const hasAccentUpdate = 'brand_accent_color' in req.body
+    const brandLogoUrl = req.body.brand_logo_url ?? null
+    const brandAccentColor = req.body.brand_accent_color ?? null
 
-    if (brand_logo_url !== null && !isValidUrl(brand_logo_url)) {
+    if (brandLogoUrl !== null && !isValidUrl(brandLogoUrl)) {
       return reply.code(400).send({ error: 'brand_logo_url must be a valid http(s) URL' })
     }
-    if (brand_accent_color !== null && !/^#[0-9a-fA-F]{6}$/.test(brand_accent_color)) {
+    if (brandAccentColor !== null && !/^#[0-9a-fA-F]{6}$/.test(brandAccentColor)) {
       return reply.code(400).send({ error: 'brand_accent_color must be a 6-digit hex color (e.g. #3987e5)' })
     }
 
     const { rows } = await db.query(
-      'UPDATE clients SET brand_logo_url = $1, brand_accent_color = $2 WHERE id = $3 RETURNING *',
-      [brand_logo_url, brand_accent_color, id]
+      `UPDATE clients
+       SET brand_logo_url = CASE WHEN $1 THEN $2 ELSE brand_logo_url END,
+           brand_accent_color = CASE WHEN $3 THEN $4 ELSE brand_accent_color END
+       WHERE id = $5
+       RETURNING *`,
+      [hasLogoUpdate, brandLogoUrl, hasAccentUpdate, brandAccentColor, id]
     )
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' })
     return reply.send(rows[0])

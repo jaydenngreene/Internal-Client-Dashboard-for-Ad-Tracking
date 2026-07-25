@@ -45,6 +45,7 @@ export interface AuthUser {
   id: string;
   email: string;
   agency_name: string;
+  agency_logo_url: string | null;
   email_verified: boolean;
   totp_enabled?: boolean;
 }
@@ -145,12 +146,28 @@ export function getMe(): Promise<AuthUser> {
   });
 }
 
-export function updateMe(body: { agency_name?: string; email?: string }): Promise<AuthUser> {
+export function updateMe(body: { agency_name?: string; email?: string; agency_logo_url?: string | null }): Promise<AuthUser> {
   return apiRequest(`${API_URL}/auth/me`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then(async (res) => {
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      throw new Error(errorBody.error ?? `Request failed (${res.status})`);
+    }
+    return res.json();
+  });
+}
+
+// Uploads a logo image from the user's own device (agency branding, client
+// branding) — returns a URL on this API's own /uploads/:id route, which then
+// gets saved into whichever brand_logo_url-style field needs it. Alongside,
+// not replacing, the existing "paste a URL you host yourself" option.
+export function uploadLogo(file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest(`${API_URL}/uploads/logo`, { method: "POST", body: formData }).then(async (res) => {
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
       throw new Error(errorBody.error ?? `Request failed (${res.status})`);
@@ -404,7 +421,7 @@ export function updateReportSchedule(
 
 export function updateClientBranding(
   clientId: string,
-  branding: { brand_logo_url: string | null; brand_accent_color: string | null }
+  branding: { brand_logo_url?: string | null; brand_accent_color?: string | null }
 ): Promise<Client> {
   return apiRequest(`${API_URL}/clients/${clientId}/branding`, {
     method: "PATCH",

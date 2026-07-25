@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getMe, updateMe, updatePassword, deleteAccount, getJobStatus, resendVerificationEmail, getAccountAuditLog, startMfaSetup, confirmMfaSetup, disableMfa } from "@/lib/api";
 import { clearToken } from "@/lib/auth";
 import { AuditLogSection } from "@/components/audit-log-section";
+import { LogoUploadField } from "@/components/logo-upload-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,10 +186,12 @@ function SystemStatusSection() {
 
 function ProfileSection({
   agencyName,
+  agencyLogoUrl,
   email,
   emailVerified,
 }: {
   agencyName: string;
+  agencyLogoUrl: string | null;
   email: string;
   emailVerified: boolean;
 }) {
@@ -200,6 +203,10 @@ function ProfileSection({
 
   const nameMutation = useMutation({
     mutationFn: () => updateMe({ agency_name: name.trim() }),
+    onSuccess: invalidate,
+  });
+  const logoMutation = useMutation({
+    mutationFn: (url: string | null) => updateMe({ agency_logo_url: url }),
     onSuccess: invalidate,
   });
   const emailMutation = useMutation({
@@ -224,6 +231,16 @@ function ProfileSection({
           </Button>
         </div>
         {nameMutation.isError && <p className="text-xs text-status-critical">{(nameMutation.error as Error).message}</p>}
+
+        <LogoUploadField
+          label="Agency logo"
+          value={agencyLogoUrl}
+          onChange={(url) => logoMutation.mutate(url)}
+        />
+        {logoMutation.isError && <p className="text-xs text-status-critical">{(logoMutation.error as Error).message}</p>}
+        <p className="text-xs text-muted-foreground">
+          Shown in the sidebar and anywhere else your agency&apos;s own branding appears, in place of the default Kado mark.
+        </p>
 
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
@@ -382,7 +399,12 @@ export function AccountClient() {
       {isLoading && <Skeleton className="h-64 w-full" />}
       {me && (
         <>
-          <ProfileSection agencyName={me.agency_name} email={me.email} emailVerified={me.email_verified} />
+          <ProfileSection
+            agencyName={me.agency_name}
+            agencyLogoUrl={me.agency_logo_url}
+            email={me.email}
+            emailVerified={me.email_verified}
+          />
           <PasswordSection />
           <MfaSection enabled={!!me.totp_enabled} onChanged={() => queryClient.invalidateQueries({ queryKey: ["me"] })} />
           <SystemStatusSection />

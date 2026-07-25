@@ -2,11 +2,15 @@
 
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { formatDateShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface KpiTileProps {
   label: string;
+  // Definition shown by the hover/focus "i" next to the label — omit for a
+  // tile that doesn't need one (rare; most stats benefit from a definition).
+  tooltip?: string;
   value: string;
   fromDate: string;
   // Both omitted together = no background chart (e.g. Overview's Basic View
@@ -62,6 +66,7 @@ function SparkTooltip({
 // overlap and clip against the text above it.
 export function KpiTile({
   label,
+  tooltip,
   value,
   fromDate,
   color,
@@ -84,7 +89,10 @@ export function KpiTile({
       )}
     >
       <div className="min-w-0">
-        <p className={cn("font-medium text-muted-foreground", isHero ? "text-sm" : "text-xs")}>{label}</p>
+        <p className={cn("flex items-center gap-1 font-medium text-muted-foreground", isHero ? "text-sm" : "text-xs")}>
+          {label}
+          {tooltip && <InfoTooltip text={tooltip} />}
+        </p>
         <p
           className={cn(
             "font-semibold tabular-nums text-foreground",

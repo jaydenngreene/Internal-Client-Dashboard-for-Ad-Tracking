@@ -78,10 +78,12 @@ export const HELP_SECTIONS: HelpSection[] = [
         purpose: "The home dashboard for one client: headline ad spend/revenue/profit/ROAS/ROI, a profitability trend, conversion rate, budget pacing, a rough forecast, best performing ads, and AI insights.",
         metrics: [
           { term: "Ad Spend", definition: "Total ad spend across every connected platform in the date range, plus any manually-added custom costs." },
-          { term: "Total Revenue", definition: "Revenue attributed to ad-driven sessions, per the active attribution model." },
+          { term: "Total Revenue", definition: "Every purchase recorded in the date range, whether or not it could be matched back to an ad-driven session." },
           { term: "Profit", definition: "Revenue minus ad spend. \"True profit\" also subtracts COGS/payment fees/fulfillment cost if configured in Settings." },
-          { term: "ROAS", definition: "Return on ad spend: revenue ÷ ad spend." },
+          { term: "ROAS", definition: "Attributed revenue ÷ ad spend: only counts revenue the dashboard could trace back to an ad." },
+          { term: "Blended ROAS", definition: "Total revenue ÷ ad spend, counting every sale regardless of attribution. Runs higher than ROAS whenever revenue can't be matched to a session." },
           { term: "ROI", definition: "Profit ÷ ad spend, as a percentage." },
+          { term: "Attribution Rate", definition: "Share of sales the dashboard could match to an ad-driven session. A low rate usually means a tracking gap, not that ads aren't working." },
         ],
       },
       {

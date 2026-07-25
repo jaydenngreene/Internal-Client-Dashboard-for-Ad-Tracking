@@ -20,6 +20,8 @@ import {
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { KpiTile } from "@/components/kpi-tile";
+import { StatLabel } from "@/components/stat-label";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { StatChartCard } from "@/components/stat-chart-card";
 import { DonutChart } from "@/components/donut-chart";
 import { InsightsPanel } from "@/components/insights-panel";
@@ -48,6 +50,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
       <div className="lg:col-span-1">
         <KpiTile
           label="Profit"
+          tooltip="Total revenue minus ad spend. Shown as COGS-adjusted 'true profit' when a margin config is set in Settings; otherwise it only subtracts ad cost."
           value={formatCurrency(data.trueProfit)}
           fromDate={data.from}
           color="var(--color-chart-3)"
@@ -61,6 +64,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-3">
         <KpiTile
           label="Ad Spend"
+          tooltip="Total ad spend across every connected platform in this date range, plus any manually-added custom costs."
           value={formatCurrency(data.cost)}
           fromDate={data.from}
           color="var(--color-chart-2)"
@@ -70,6 +74,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         />
         <KpiTile
           label="Total Revenue"
+          tooltip="Every purchase recorded in this date range, whether or not it could be matched back to an ad-driven session. See Blended ROAS below for this figure's ROAS."
           value={formatCurrency(data.revenue)}
           fromDate={data.from}
           color="var(--color-chart-1)"
@@ -79,6 +84,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         />
         <KpiTile
           label="ROI"
+          tooltip="Profit ÷ ad spend, as a percentage. Uses attributed revenue, so it only reflects sales the dashboard could trace back to an ad."
           value={formatPercent(data.hasMarginConfig ? data.trueRoi : data.roi)}
           fromDate={data.from}
           color="var(--color-chart-5)"
@@ -89,6 +95,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         />
         <KpiTile
           label="ROAS"
+          tooltip="Attributed revenue ÷ ad spend: revenue the dashboard could actually trace back to your ads, per dollar spent."
           value={formatRoas(data.roas)}
           fromDate={data.from}
           color="var(--color-chart-4)"
@@ -99,6 +106,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         />
         <KpiTile
           label="Blended ROAS"
+          tooltip="Total revenue ÷ ad spend, counting every sale regardless of attribution. Runs higher than ROAS whenever revenue can't be matched to a session."
           value={formatRoas(data.blendedRoas)}
           fromDate={data.from}
           color="var(--color-chart-1)"
@@ -109,6 +117,7 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
         />
         <KpiTile
           label="Attribution Rate"
+          tooltip="Share of sales the dashboard could match to an ad-driven session. A low rate usually means a tracking gap (pixel not firing, missing UTMs) rather than ads underperforming."
           value={formatPercent(data.attributionRate)}
           fromDate={data.from}
           color="var(--color-chart-2)"
@@ -143,25 +152,32 @@ function BudgetPacingCard({ clientId }: { clientId: string }) {
           <Badge variant={statusVariant} className="text-[10px]">
             {statusLabel}
           </Badge>
+          <InfoTooltip text="Tracks this calendar month's spend against your monthly target, independent of Overview's own date-range preset." />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-wrap items-baseline gap-6 px-0">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Spend to date</p>
+          <StatLabel label="Spend to date" tooltip="Ad spend so far this calendar month." />
           <p className="mt-1 text-xl font-semibold tabular-nums">{formatCurrency(data.spendToDate)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Expected by now</p>
+          <StatLabel
+            label="Expected by now"
+            tooltip="What you'd expect to have spent by today if this month's target were spread evenly across every day."
+          />
           <p className="mt-1 text-xl font-semibold tabular-nums text-muted-foreground">
             {data.expectedSpendToDate === null ? "-" : formatCurrency(data.expectedSpendToDate)}
           </p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Monthly target</p>
+          <StatLabel label="Monthly target" tooltip="The monthly ad spend target set for this client." />
           <p className="mt-1 text-xl font-semibold tabular-nums">{formatCurrency(data.target)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Projected month-end</p>
+          <StatLabel
+            label="Projected month-end"
+            tooltip="Spend to date extrapolated at the current daily pace through the rest of the month."
+          />
           <p
             className={cn(
               "mt-1 text-xl font-semibold tabular-nums",
@@ -188,23 +204,23 @@ function ForecastWindowCard({ window, label }: { window: ForecastWindow; label: 
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-3 px-0 sm:grid-cols-5">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Revenue</p>
+          <StatLabel label="Revenue" tooltip="Projected revenue for this window, from a straight-line trend over the trailing lookback period." />
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedRevenue)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Ad Spend</p>
+          <StatLabel label="Ad Spend" tooltip="Projected ad spend for this window, same straight-line trend method." />
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatCurrency(window.projectedCost)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">ROAS</p>
+          <StatLabel label="ROAS" tooltip="Projected revenue ÷ projected ad spend for this window." />
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatRoas(window.projectedRoas)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">New Customers</p>
+          <StatLabel label="New Customers" tooltip="Projected count of new customers acquired in this window." />
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatNumber(window.projectedNewCustomers)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">CAC</p>
+          <StatLabel label="CAC" tooltip="Projected customer acquisition cost: projected ad spend ÷ projected new customers." />
           <p className="mt-1 text-lg font-semibold tabular-nums">
             {window.projectedCac === null ? "-" : formatCurrency(window.projectedCac)}
           </p>
@@ -274,7 +290,10 @@ function CartConversionCard({ clientId, range }: { clientId: string; range: { fr
   return (
     <Card className="px-4">
       <CardHeader className="px-0">
-        <CardTitle className="text-sm">Cart → Purchase Conversion</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          Cart → Purchase Conversion
+          <InfoTooltip text="Share of add-to-carts in this range that went on to complete a purchase." />
+        </CardTitle>
       </CardHeader>
       <CardContent className="px-0">
         {data.addToCartCount > 0 ? (
@@ -306,7 +325,10 @@ function ConversionCard({ leads, sales }: { leads: number; sales: number }) {
   return (
     <Card className="px-4">
       <CardHeader className="px-0">
-        <CardTitle className="text-sm">Lead → Sale Conversion</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          Lead → Sale Conversion
+          <InfoTooltip text="Share of leads in this range that went on to purchase (sales ÷ leads)." />
+        </CardTitle>
       </CardHeader>
       <CardContent className="px-0">
         {leads > 0 ? (
@@ -329,10 +351,20 @@ function ConversionCard({ leads, sales }: { leads: number; sales: number }) {
 // A small stat row shared by the three niche snapshot cards below — same shape
 // as BudgetPacingCard's stat row, just reused three times instead of hand-built
 // once per card.
-function SnapshotStat({ label, value, tone }: { label: string; value: string; tone?: "positive" | "negative" }) {
+function SnapshotStat({
+  label,
+  tooltip,
+  value,
+  tone,
+}: {
+  label: string;
+  tooltip?: string;
+  value: string;
+  tone?: "positive" | "negative";
+}) {
   return (
     <div>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <StatLabel label={label} tooltip={tooltip} />
       <p
         className={cn(
           "mt-1 text-xl font-semibold tabular-nums",
@@ -390,11 +422,30 @@ function EcommerceSnapshotCard({
         </Link>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-6 px-0">
-        <SnapshotStat label="AOV" value={aov === null ? "-" : formatCurrency(aov)} tone="positive" />
-        <SnapshotStat label="Avg Customer LTV" value={avgLtv === null ? "-" : formatCurrency(avgLtv)} tone="positive" />
-        <SnapshotStat label="Add to Cart" value={formatNumber(data.addToCartCount)} />
-        <SnapshotStat label="Checkout Initiated" value={formatNumber(data.initiateCheckoutCount)} />
-        <SnapshotStat label="Cart Abandonment" value={formatPercent(data.cartAbandonmentRate)} tone="negative" />
+        <SnapshotStat
+          label="AOV"
+          tooltip="Average order value: total revenue ÷ number of orders."
+          value={aov === null ? "-" : formatCurrency(aov)}
+          tone="positive"
+        />
+        <SnapshotStat
+          label="Avg Customer LTV"
+          tooltip="Average lifetime value across customers acquired in this range, weighted by how many customers each campaign brought in."
+          value={avgLtv === null ? "-" : formatCurrency(avgLtv)}
+          tone="positive"
+        />
+        <SnapshotStat label="Add to Cart" tooltip="Number of add-to-cart events in this range." value={formatNumber(data.addToCartCount)} />
+        <SnapshotStat
+          label="Checkout Initiated"
+          tooltip="Number of checkouts started in this range."
+          value={formatNumber(data.initiateCheckoutCount)}
+        />
+        <SnapshotStat
+          label="Cart Abandonment"
+          tooltip="Share of add-to-carts that never converted to a purchase."
+          value={formatPercent(data.cartAbandonmentRate)}
+          tone="negative"
+        />
       </CardContent>
     </Card>
   );
@@ -419,9 +470,23 @@ function SaasSnapshotCard({ clientId, range }: { clientId: string; range: { from
         </Link>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-6 px-0">
-        <SnapshotStat label="Current MRR" value={formatCurrency(data.currentMrr)} tone="positive" />
-        <SnapshotStat label="Churn Rate" value={formatPercent(data.churnRate)} tone="negative" />
-        <SnapshotStat label="Trial Conversion" value={formatPercent(data.trialConversionRate)} />
+        <SnapshotStat
+          label="Current MRR"
+          tooltip="Monthly recurring revenue right now — a live snapshot, not scoped to the selected date range."
+          value={formatCurrency(data.currentMrr)}
+          tone="positive"
+        />
+        <SnapshotStat
+          label="Churn Rate"
+          tooltip="Share of active subscriptions canceled in this range."
+          value={formatPercent(data.churnRate)}
+          tone="negative"
+        />
+        <SnapshotStat
+          label="Trial Conversion"
+          tooltip="Share of trials in this range that converted to a paid subscription."
+          value={formatPercent(data.trialConversionRate)}
+        />
       </CardContent>
     </Card>
   );
@@ -443,10 +508,16 @@ function CallsSnapshotCard({ clientId, range }: { clientId: string; range: { fro
         </Link>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-6 px-0">
-        <SnapshotStat label="Total Calls" value={formatNumber(data.totalCalls)} />
-        <SnapshotStat label="Qualified Rate" value={formatPercent(data.qualifiedRate)} tone="positive" />
+        <SnapshotStat label="Total Calls" tooltip="Number of tracked calls in this range." value={formatNumber(data.totalCalls)} />
+        <SnapshotStat
+          label="Qualified Rate"
+          tooltip="Share of calls manually marked qualified on the Funnel page."
+          value={formatPercent(data.qualifiedRate)}
+          tone="positive"
+        />
         <SnapshotStat
           label="Top Campaign"
+          tooltip="The campaign that drove the most calls in this range."
           value={data.byCampaign[0]?.campaign_name ?? "-"}
         />
       </CardContent>
@@ -575,17 +646,33 @@ export function OverviewClient({ clientId }: { clientId: string }) {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {isEcomLike(niche) ? (
                 <>
-                  <KpiTile label="Orders" value={formatNumber(data.sales)} fromDate={data.from} />
+                  <KpiTile
+                    label="Orders"
+                    tooltip="Total number of completed purchases in this date range."
+                    value={formatNumber(data.sales)}
+                    fromDate={data.from}
+                  />
                   <KpiTile
                     label="AOV"
+                    tooltip="Average order value: total revenue ÷ number of orders."
                     value={data.sales > 0 ? formatCurrency(data.revenue / data.sales) : "-"}
                     fromDate={data.from}
                   />
                 </>
               ) : (
                 <>
-                  <KpiTile label="Leads" value={formatNumber(data.leads)} fromDate={data.from} />
-                  <KpiTile label="Sales" value={formatNumber(data.sales)} fromDate={data.from} />
+                  <KpiTile
+                    label="Leads"
+                    tooltip="Total number of leads captured in this date range."
+                    value={formatNumber(data.leads)}
+                    fromDate={data.from}
+                  />
+                  <KpiTile
+                    label="Sales"
+                    tooltip="Total number of purchases in this date range."
+                    value={formatNumber(data.sales)}
+                    fromDate={data.from}
+                  />
                 </>
               )}
             </div>
@@ -603,9 +690,27 @@ export function OverviewClient({ clientId }: { clientId: string }) {
                 title="Profitability"
                 data={data.series.map((p) => ({ label: p.date, cost: p.cost, revenue: p.revenue, profit: p.trueProfit }))}
                 stats={[
-                  { key: "cost", label: "Ad Spend", value: formatCurrency(data.cost), color: "var(--color-chart-2)" },
-                  { key: "revenue", label: "Total Revenue", value: formatCurrency(data.revenue), color: "var(--color-chart-1)" },
-                  { key: "profit", label: "Profit", value: formatCurrency(data.trueProfit), color: "var(--color-chart-3)" },
+                  {
+                    key: "cost",
+                    label: "Ad Spend",
+                    value: formatCurrency(data.cost),
+                    color: "var(--color-chart-2)",
+                    tooltip: "Total ad spend across every connected platform in this date range, plus any manually-added custom costs.",
+                  },
+                  {
+                    key: "revenue",
+                    label: "Total Revenue",
+                    value: formatCurrency(data.revenue),
+                    color: "var(--color-chart-1)",
+                    tooltip: "Every purchase recorded in this date range, whether or not it could be matched back to an ad-driven session.",
+                  },
+                  {
+                    key: "profit",
+                    label: "Profit",
+                    value: formatCurrency(data.trueProfit),
+                    color: "var(--color-chart-3)",
+                    tooltip: "Total revenue minus ad spend (COGS-adjusted if a margin config is set in Settings).",
+                  },
                 ]}
                 series={[
                   { key: "revenue", label: "Revenue", color: "var(--color-chart-1)" },

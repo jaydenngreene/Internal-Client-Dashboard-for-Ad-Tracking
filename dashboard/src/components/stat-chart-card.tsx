@@ -10,6 +10,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 export interface StatChartSeries {
   key: string;
@@ -26,6 +27,7 @@ export interface StatChartStat {
   label: string;
   value: string;
   color?: string;
+  tooltip?: string;
 }
 
 // Hyros's "Profitability" widget shape: a few headline numbers and one
@@ -64,6 +66,7 @@ export function StatChartCard({
               <div className="flex items-center gap-1.5">
                 {s.color && <span className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: s.color }} />}
                 <p className="text-xs font-medium text-muted-foreground">{s.label}</p>
+                {s.tooltip && <InfoTooltip text={s.tooltip} />}
               </div>
               <p className="text-xl font-semibold tabular-nums text-foreground">{s.value}</p>
             </div>

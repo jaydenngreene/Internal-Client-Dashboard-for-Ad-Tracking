@@ -81,7 +81,10 @@ async function getAdDayMetrics(fromDate: string, toDate: string): Promise<Map<st
        JOIN purchases p ON p.id = a.purchase_id
        WHERE p.purchased_at::date BETWEEN $1 AND $2
        GROUP BY a.client_id, s.utm_content
-     ) rev ON rev.client_id = ac.client_id AND LOWER(TRIM(rev.utm_content)) = LOWER(TRIM(ac.ad_name))
+     -- A client's ad URLs can carry Meta's raw {{ad.id}} in utm_content instead
+     -- of the ad name (confirmed live) - match on either.
+     ) rev ON rev.client_id = ac.client_id
+       AND (LOWER(TRIM(rev.utm_content)) = LOWER(TRIM(ac.ad_name)) OR rev.utm_content = ac.ad_id)
      WHERE ac.date BETWEEN $1 AND $2
      GROUP BY ac.client_id, ac.platform, ac.ad_id, ac.ad_name, ac.campaign_name, rev.total`,
     [fromDate, toDate]

@@ -79,7 +79,9 @@ async function getCampaignBreakdown(clientId: string, days: number, limit: numbe
             COALESCE((SELECT SUM(a.attributed_revenue) FROM attributions a
                       JOIN sessions s ON s.id = a.session_id JOIN purchases p ON p.id = a.purchase_id
                       WHERE a.client_id = ac.client_id AND p.purchased_at::date BETWEEN $2 AND $3
-                        AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM(ac.campaign_name))), 0) AS revenue
+                        -- A client's ad URLs can carry Meta's raw {{campaign.id}} in
+                        -- utm_campaign instead of the name (confirmed live) - match on either.
+                        AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM(ac.campaign_name)) OR s.utm_campaign = ac.campaign_id)), 0) AS revenue
      FROM ad_costs ac
      WHERE client_id = $1 AND date BETWEEN $2 AND $3 AND campaign_name IS NOT NULL
      GROUP BY campaign_name, platform, client_id

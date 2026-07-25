@@ -52,15 +52,17 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
     `SELECT COALESCE(spend.campaign_name, rev.utm_campaign) AS campaign_name,
             COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales
      FROM (
-       SELECT campaign_name, SUM(spend) AS cost FROM ad_costs
-       WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY campaign_name
+       SELECT campaign_name, campaign_id, SUM(spend) AS cost FROM ad_costs
+       WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY campaign_name, campaign_id
      ) spend
      FULL OUTER JOIN (
        SELECT s.utm_campaign, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
        FROM attributions a JOIN sessions s ON s.id = a.session_id JOIN purchases p ON p.id = a.purchase_id
        WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
        GROUP BY s.utm_campaign
-     ) rev ON lower(trim(rev.utm_campaign)) = lower(trim(spend.campaign_name))
+     -- A client's ad URLs can carry Meta's raw {{campaign.id}} in utm_campaign
+     -- instead of the campaign name (confirmed live) - match on either.
+     ) rev ON lower(trim(rev.utm_campaign)) = lower(trim(spend.campaign_name)) OR rev.utm_campaign = spend.campaign_id
      ORDER BY COALESCE(spend.cost, 0) DESC
      LIMIT 10`,
     [clientId]
@@ -74,15 +76,15 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
     `SELECT COALESCE(spend.ad_name, rev.utm_content) AS ad_name,
             COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue
      FROM (
-       SELECT ad_name, SUM(spend) AS cost FROM ad_costs
-       WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY ad_name
+       SELECT ad_name, ad_id, SUM(spend) AS cost FROM ad_costs
+       WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY ad_name, ad_id
      ) spend
      FULL OUTER JOIN (
        SELECT s.utm_content, SUM(a.attributed_revenue) AS revenue
        FROM attributions a JOIN sessions s ON s.id = a.session_id JOIN purchases p ON p.id = a.purchase_id
        WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
        GROUP BY s.utm_content
-     ) rev ON lower(trim(rev.utm_content)) = lower(trim(spend.ad_name))
+     ) rev ON lower(trim(rev.utm_content)) = lower(trim(spend.ad_name)) OR rev.utm_content = spend.ad_id
      ORDER BY COALESCE(spend.cost, 0) DESC
      LIMIT 10`,
     [clientId]
@@ -178,10 +180,10 @@ async function gatherPlatformData(clientId: string, platform: string): Promise<R
     `SELECT COALESCE(spend.campaign_name, rev.utm_campaign) AS campaign_name,
             COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales
      FROM (
-       SELECT campaign_name, SUM(spend) AS cost FROM ad_costs
+       SELECT campaign_name, campaign_id, SUM(spend) AS cost FROM ad_costs
        WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days'
          AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-       GROUP BY campaign_name
+       GROUP BY campaign_name, campaign_id
      ) spend
      FULL OUTER JOIN (
        SELECT s.utm_campaign, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
@@ -189,7 +191,7 @@ async function gatherPlatformData(clientId: string, platform: string): Promise<R
        WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
          AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
        GROUP BY s.utm_campaign
-     ) rev ON lower(trim(rev.utm_campaign)) = lower(trim(spend.campaign_name))
+     ) rev ON lower(trim(rev.utm_campaign)) = lower(trim(spend.campaign_name)) OR rev.utm_campaign = spend.campaign_id
      ORDER BY COALESCE(spend.cost, 0) DESC
      LIMIT 10`,
     [clientId, platform]
@@ -239,6 +241,19 @@ async function gatherCampaignData(
        AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($3))`,
     [clientId, platform, campaignName]
   )
+  // A client's ad URLs can carry Meta's raw {{campaign.id}} in utm_campaign
+  // instead of the campaign name (confirmed live) - resolved once here and
+  // matched as a fallback everywhere below, same reasoning as
+  // campaignDetail.ts's resolveCampaignId (kept as an inline subquery instead
+  // of importing that helper, matching this file's own stated isolation).
+  const campaignIdSubquery = `(
+    SELECT campaign_id FROM ad_costs
+    WHERE client_id = $1
+      AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
+      AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($3))
+      AND campaign_id IS NOT NULL
+    LIMIT 1
+  )`
   const { rows: leadRows } = await db.query<{ leads: string }>(
     `SELECT COUNT(DISTINCT l.id) AS leads
      FROM leads l
@@ -250,7 +265,7 @@ async function gatherCampaignData(
      ) s ON true
      WHERE l.client_id = $1 AND l.created_at >= NOW() - INTERVAL '30 days'
        AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-       AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3))`,
+       AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3)) OR s.utm_campaign = ${campaignIdSubquery})`,
     [clientId, platform, campaignName]
   )
   const { rows: revRows } = await db.query<{ revenue: string; sales: string }>(
@@ -260,27 +275,27 @@ async function gatherCampaignData(
      JOIN purchases p ON p.id = a.purchase_id
      WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
        AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-       AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3))`,
+       AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3)) OR s.utm_campaign = ${campaignIdSubquery})`,
     [clientId, platform, campaignName]
   )
   const { rows: creativeRows } = await db.query<{ ad_name: string | null; cost: string; revenue: string }>(
     `SELECT COALESCE(spend.ad_name, rev.utm_content) AS ad_name,
             COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue
      FROM (
-       SELECT ad_name, SUM(spend) AS cost FROM ad_costs
+       SELECT ad_name, ad_id, SUM(spend) AS cost FROM ad_costs
        WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days'
          AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
          AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($3))
-       GROUP BY ad_name
+       GROUP BY ad_name, ad_id
      ) spend
      FULL OUTER JOIN (
        SELECT s.utm_content, SUM(a.attributed_revenue) AS revenue
        FROM attributions a JOIN sessions s ON s.id = a.session_id JOIN purchases p ON p.id = a.purchase_id
        WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
          AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-         AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3))
+         AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3)) OR s.utm_campaign = ${campaignIdSubquery})
        GROUP BY s.utm_content
-     ) rev ON lower(trim(rev.utm_content)) = lower(trim(spend.ad_name))
+     ) rev ON lower(trim(rev.utm_content)) = lower(trim(spend.ad_name)) OR rev.utm_content = spend.ad_id
      ORDER BY COALESCE(spend.cost, 0) DESC
      LIMIT 15`,
     [clientId, platform, campaignName]
@@ -326,6 +341,25 @@ async function gatherCreativeData(
        AND LOWER(TRIM(ad_name)) = LOWER(TRIM($4))`,
     [clientId, platform, campaignName, creativeName]
   )
+  // Same fallback reasoning as gatherCampaignData above, extended to also
+  // resolve the ad's own id for utm_content matching.
+  const campaignIdSubquery = `(
+    SELECT campaign_id FROM ad_costs
+    WHERE client_id = $1
+      AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
+      AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($3))
+      AND campaign_id IS NOT NULL
+    LIMIT 1
+  )`
+  const adIdSubquery = `(
+    SELECT ad_id FROM ad_costs
+    WHERE client_id = $1
+      AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
+      AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($3))
+      AND LOWER(TRIM(ad_name)) = LOWER(TRIM($4))
+      AND ad_id IS NOT NULL
+    LIMIT 1
+  )`
   const { rows: leadRows } = await db.query<{ leads: string }>(
     `SELECT COUNT(DISTINCT l.id) AS leads
      FROM leads l
@@ -337,8 +371,8 @@ async function gatherCreativeData(
      ) s ON true
      WHERE l.client_id = $1 AND l.created_at >= NOW() - INTERVAL '30 days'
        AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-       AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3))
-       AND LOWER(TRIM(s.utm_content)) = LOWER(TRIM($4))`,
+       AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3)) OR s.utm_campaign = ${campaignIdSubquery})
+       AND (LOWER(TRIM(s.utm_content)) = LOWER(TRIM($4)) OR s.utm_content = ${adIdSubquery})`,
     [clientId, platform, campaignName, creativeName]
   )
   const { rows: revRows } = await db.query<{ revenue: string; sales: string }>(
@@ -348,8 +382,8 @@ async function gatherCreativeData(
      JOIN purchases p ON p.id = a.purchase_id
      WHERE a.client_id = $1 AND p.purchased_at >= NOW() - INTERVAL '30 days'
        AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
-       AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3))
-       AND LOWER(TRIM(s.utm_content)) = LOWER(TRIM($4))`,
+       AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($3)) OR s.utm_campaign = ${campaignIdSubquery})
+       AND (LOWER(TRIM(s.utm_content)) = LOWER(TRIM($4)) OR s.utm_content = ${adIdSubquery})`,
     [clientId, platform, campaignName, creativeName]
   )
 

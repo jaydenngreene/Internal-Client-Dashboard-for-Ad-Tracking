@@ -61,7 +61,16 @@ export async function computeIncrementalityResult(test: IncrementalityTest): Pro
        JOIN purchases p ON p.id = a.purchase_id
        WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
          AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = $4
-         AND LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($5))`,
+         -- A client's ad URLs can carry Meta's raw {{campaign.id}} in utm_campaign
+         -- instead of the name (confirmed live) - match on either.
+         AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($5)) OR s.utm_campaign = (
+           SELECT campaign_id FROM ad_costs
+           WHERE client_id = $1
+             AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = $4
+             AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($5))
+             AND campaign_id IS NOT NULL
+           LIMIT 1
+         ))`,
       [test.client_id, preStartStr, preEndStr, normalizeSource(test.platform), test.campaign_name]
     ),
   ])

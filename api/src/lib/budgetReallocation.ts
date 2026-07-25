@@ -50,7 +50,11 @@ async function getCampaignPerformance(sinceDate: string, untilDate: string, days
        JOIN purchases p ON p.id = a.purchase_id
        WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
          AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = $4
-         AND LOWER(TRIM(s.utm_campaign)) = (SELECT LOWER(TRIM(MAX(campaign_name))) FROM ad_costs WHERE client_id = $1 AND platform = $5 AND campaign_id = $6)`,
+         -- A client's ad URLs can carry Meta's raw {{campaign.id}} in utm_campaign
+         -- instead of the name (confirmed live) - match directly against the id we
+         -- already have (r.campaign_id) as well as the resolved name.
+         AND (LOWER(TRIM(s.utm_campaign)) = (SELECT LOWER(TRIM(MAX(campaign_name))) FROM ad_costs WHERE client_id = $1 AND platform = $5 AND campaign_id = $6)
+              OR s.utm_campaign = $6)`,
       [r.client_id, sinceDate, untilDate, normalizeSource(r.platform), r.platform, r.campaign_id]
     )
     const avgDailyRevenue = parseFloat(revRows[0].total) / days

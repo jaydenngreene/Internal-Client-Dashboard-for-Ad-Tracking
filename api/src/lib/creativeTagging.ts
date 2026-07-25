@@ -179,6 +179,10 @@ export async function getCreativeTagPerformance(clientId: string): Promise<TagPe
        WHERE a.client_id = $1
        GROUP BY s.utm_content
      ) rev ON LOWER(TRIM(rev.utm_content)) = LOWER(TRIM(ac.ad_name))
+       -- A client's ad URLs can carry Meta's raw {{ad.id}} in utm_content instead
+       -- of the ad name (confirmed live - see reports.ts's funnel breakdown fix) -
+       -- matches on either so tagged creatives' real performance isn't silently 0.
+       OR rev.utm_content = ac.ad_id
      WHERE ac.client_id = $1
      GROUP BY LOWER(REGEXP_REPLACE(ac.platform, '_ads$', '')), LOWER(TRIM(ac.ad_name)), rev.total`,
     [clientId]

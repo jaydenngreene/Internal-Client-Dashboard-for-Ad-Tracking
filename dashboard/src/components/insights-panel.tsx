@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GojoBadge } from "@/components/gojo-badge";
+import { BoldText } from "@/components/bold-text";
 
 const PRIORITY_VARIANT: Record<Insight["priority"], "destructive" | "outline" | "secondary"> = {
   high: "destructive",
@@ -42,12 +43,16 @@ function InsightCard({ insight }: { insight: Insight }) {
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium">{insight.title}</p>
+            <p className="text-sm font-medium">
+              <BoldText text={insight.title} />
+            </p>
             <Badge variant={PRIORITY_VARIANT[insight.priority]} className="shrink-0">
               {insight.priority}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{insight.detail}</p>
+          <p className="text-sm text-muted-foreground">
+            <BoldText text={insight.detail} />
+          </p>
         </div>
       </CardContent>
     </Card>

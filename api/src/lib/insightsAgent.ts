@@ -389,7 +389,7 @@ DATA:
 {{DATA}}
 
 Respond with ONLY a JSON array, no other text, in this exact shape:
-[{"title": "short headline", "detail": "1-2 sentence explanation citing the specific number", "priority": "high" | "medium" | "low"}]`
+[{"title": "short headline", "detail": "1-2 sentence explanation citing the specific number, with the single most important number or phrase wrapped in **double asterisks**", "priority": "high" | "medium" | "low"}]`
 }
 
 export async function generateInsights(clientId: string, scope: InsightScope = { type: 'client' }): Promise<Insight[]> {

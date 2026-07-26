@@ -1244,13 +1244,17 @@ export async function reportRoutes(app: FastifyInstance) {
           canceled_count: string
           new_mrr: string
           churned_mrr: string
+          expansion_mrr: string
+          contraction_mrr: string
         }>(
           `SELECT
              COUNT(*) FILTER (WHERE event_type = 'trial_started') AS trials_started,
              COUNT(*) FILTER (WHERE event_type = 'trial_converted') AS trials_converted,
              COUNT(*) FILTER (WHERE event_type = 'canceled') AS canceled_count,
              COALESCE(SUM(mrr_delta) FILTER (WHERE event_type IN ('created', 'trial_converted', 'reactivated')), 0) AS new_mrr,
-             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type = 'canceled'), 0) AS churned_mrr
+             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type = 'canceled'), 0) AS churned_mrr,
+             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type = 'plan_changed' AND mrr_delta > 0), 0) AS expansion_mrr,
+             COALESCE(SUM(mrr_delta) FILTER (WHERE event_type = 'plan_changed' AND mrr_delta < 0), 0) AS contraction_mrr
            FROM subscription_events
            WHERE client_id = $1 AND occurred_at::date BETWEEN $2 AND $3`,
           [clientId, from, to]
@@ -1284,24 +1288,51 @@ export async function reportRoutes(app: FastifyInstance) {
         return { date, mrr: lastKnown }
       })
 
+      // Starting MRR for Net Revenue Retention — the running total as of the last
+      // event strictly before `from` (0 if this client has no subscription history
+      // that far back). allDates/cumulativeByDate already cover every event up to
+      // `to` with no lower bound, so this is the same reconstruction the trend
+      // series above already does, just read at one specific point instead of
+      // forward-filled across the whole range.
+      let startingMrr = 0
+      for (const date of allDates) {
+        if (date >= from) break
+        startingMrr = cumulativeByDate.get(date)!
+      }
+
       const trialsStarted = parseInt(rangeStatsRow.rows[0].trials_started, 10)
       const trialsConverted = parseInt(rangeStatsRow.rows[0].trials_converted, 10)
       const canceledCount = parseInt(rangeStatsRow.rows[0].canceled_count, 10)
       const currentMrr = parseFloat(currentMrrRow.rows[0].current_mrr)
       const activeCount = parseInt(currentMrrRow.rows[0].active_count, 10)
+      const expansionMrr = parseFloat(rangeStatsRow.rows[0].expansion_mrr)
+      const contractionMrr = parseFloat(rangeStatsRow.rows[0].contraction_mrr)
+      const churnedMrr = parseFloat(rangeStatsRow.rows[0].churned_mrr)
       // Logo churn rate: canceled-in-range / (currently active + canceled-in-range) —
       // an approximation of "active at the start of the period" without needing a
       // point-in-time historical snapshot, same simplicity as the BOF report's
       // refund-rate math elsewhere in this file.
       const churnBase = activeCount + canceledCount
+      // Net Revenue Retention: what happened to the STARTING cohort's revenue
+      // over the range — expansion/contraction/churn only, new-customer MRR
+      // deliberately excluded (NRR measures retention of who was already there,
+      // not new growth). Simple standard approximation, not cohort-exact: a
+      // customer who both signed up AND churned within the same range still
+      // counts its churned_mrr against the starting base here, same "simple
+      // method, clearly disclosed" tradeoff as this app's forecast/predictive-LTV.
+      const nrr = startingMrr > 0 ? ((startingMrr + expansionMrr + contractionMrr + churnedMrr) / startingMrr) * 100 : null
 
       return reply.send({
         from,
         to,
         currentMrr,
+        arr: currentMrr * 12,
         activeCount,
         newMrr: parseFloat(rangeStatsRow.rows[0].new_mrr),
-        churnedMrr: parseFloat(rangeStatsRow.rows[0].churned_mrr),
+        expansionMrr,
+        contractionMrr,
+        churnedMrr,
+        nrr,
         trialsStarted,
         trialsConverted,
         trialConversionRate: trialsStarted > 0 ? (trialsConverted / trialsStarted) * 100 : null,

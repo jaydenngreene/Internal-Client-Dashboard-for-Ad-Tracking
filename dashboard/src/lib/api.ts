@@ -1874,9 +1874,13 @@ export interface SubscriptionsReport {
   from: string;
   to: string;
   currentMrr: number;
+  arr: number;
   activeCount: number;
   newMrr: number;
+  expansionMrr: number;
+  contractionMrr: number;
   churnedMrr: number;
+  nrr: number | null;
   trialsStarted: number;
   trialsConverted: number;
   trialConversionRate: number | null;

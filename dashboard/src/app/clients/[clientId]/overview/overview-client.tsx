@@ -464,11 +464,36 @@ function EcommerceSnapshotCard({
   );
 }
 
-function SaasSnapshotCard({ clientId, range }: { clientId: string; range: { from: string; to: string } }) {
+function SaasSnapshotCard({
+  clientId,
+  range,
+  cost,
+}: {
+  clientId: string;
+  range: { from: string; to: string };
+  cost: number;
+}) {
   const { data } = useQuery({
     queryKey: ["subscriptions", clientId, range.from, range.to],
     queryFn: () => getSubscriptions(clientId, range),
   });
+  // Same weighted-by-customer-count LTV as EcommerceSnapshotCard, reused here as
+  // the numerator for LTV:CAC — a campaign with 2 customers and one with 200
+  // shouldn't count equally toward the account-wide figure.
+  const { data: ltv } = useQuery({
+    queryKey: ["ltv", clientId, range.from, range.to],
+    queryFn: () => getLtv(clientId, range),
+  });
+  const { avgLtv, totalCustomers } = useMemo(() => {
+    if (!ltv || ltv.campaigns.length === 0) return { avgLtv: null, totalCustomers: 0 };
+    const customers = ltv.campaigns.reduce((sum, c) => sum + c.customers, 0);
+    if (customers === 0) return { avgLtv: null, totalCustomers: 0 };
+    const weighted = ltv.campaigns.reduce((sum, c) => sum + c.avgLtvLifetime * c.customers, 0);
+    return { avgLtv: weighted / customers, totalCustomers: customers };
+  }, [ltv]);
+  const cac = totalCustomers > 0 ? cost / totalCustomers : null;
+  const ltvToCac = avgLtv !== null && cac !== null && cac > 0 ? avgLtv / cac : null;
+
   if (!data) return null;
 
   return (
@@ -488,6 +513,24 @@ function SaasSnapshotCard({ clientId, range }: { clientId: string; range: { from
           tooltip="Monthly recurring revenue right now — a live snapshot, not scoped to the selected date range."
           value={formatCurrency(data.currentMrr)}
           tone="positive"
+        />
+        <SnapshotStat
+          label="ARR"
+          tooltip="Annual recurring revenue: current MRR × 12, a live snapshot like MRR."
+          value={formatCurrency(data.arr)}
+          tone="positive"
+        />
+        <SnapshotStat
+          label="Net Revenue Retention"
+          tooltip="What happened to existing subscribers' revenue over this range (expansion, contraction, and churn) — new-customer MRR is deliberately excluded, this measures retention/growth of who was already there. Above 100% means upgrades outpaced downgrades and cancellations."
+          value={formatPercent(data.nrr)}
+          tone={data.nrr !== null && data.nrr >= 100 ? "positive" : "negative"}
+        />
+        <SnapshotStat
+          label="LTV : CAC"
+          tooltip="Average customer lifetime value ÷ customer acquisition cost (ad spend ÷ new customers in this range). 3:1 or higher is generally considered healthy for a SaaS business."
+          value={ltvToCac === null ? "-" : `${ltvToCac.toFixed(1)}:1`}
+          tone={ltvToCac !== null && ltvToCac >= 3 ? "positive" : undefined}
         />
         <SnapshotStat
           label="Churn Rate"
@@ -543,14 +586,16 @@ function NicheSnapshotRow({
   range,
   niche,
   aov,
+  cost,
 }: {
   clientId: string;
   range: { from: string; to: string };
   niche: Niche | undefined;
   aov: number | null;
+  cost: number;
 }) {
   if (isEcomLike(niche)) return <EcommerceSnapshotCard clientId={clientId} range={range} aov={aov} />;
-  if (niche === "saas") return <SaasSnapshotCard clientId={clientId} range={range} />;
+  if (niche === "saas") return <SaasSnapshotCard clientId={clientId} range={range} cost={cost} />;
   if (niche === "call" || niche === "lead_gen") return <CallsSnapshotCard clientId={clientId} range={range} />;
   return null;
 }
@@ -744,6 +789,7 @@ export function OverviewClient({ clientId }: { clientId: string }) {
             range={range}
             niche={niche}
             aov={data.sales > 0 ? data.revenue / data.sales : null}
+            cost={data.cost}
           />
 
           <BudgetPacingCard clientId={clientId} />

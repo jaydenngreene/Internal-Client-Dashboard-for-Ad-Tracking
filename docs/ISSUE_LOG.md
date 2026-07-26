@@ -6,6 +6,18 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-26 — Two catalog ads' spend "missing" from Kado — investigated, not a bug
+
+**Reported:** two Advantage+ catalog ads (`Abandoned_Cart_Retargeting`, `Abandoned_Cart_Retargeting_2`) confirmed in Ads Manager to have real spend and purchases, but purchases attributed to their `ad_id` resolved to no creative name in Kado.
+
+**Investigated, in order:** (1) confirmed via a direct replay of the exact sync query against Meta's live API that Facebook does return both ads' data correctly — ruled out a broken/wrong query. (2) Hypothesized `upsertAdCosts`'s per-row loop (no per-row try/catch — one throwing row could silently drop every row after it in the same batch) as the cause. (3) Tested that hypothesis directly by calling the real `upsertAdCosts` function with the actual rows Facebook returns — **it inserted cleanly, no error.** Hypothesis disproven, not just assumed fine.
+
+**What was actually true, once checked fully:** `Abandoned_Cart_Retargeting` (ad_id `120248579004850253`) was never missing — full unbroken 29-day sync history the whole time. `Abandoned_Cart_Retargeting_2` (ad_id `120249405436560253`) has had spend on exactly one day, ever: the day this was investigated. Kado's routine sync deliberately never pulls "today" (`runAdCostSync`'s `until = yesterday`, ad platforms finalize same-day numbers late) — this was never lost, just not synced yet by design; the next routine run would have picked it up. A **third**, unrelated ad_id (`120249034033030253`, a different purchase's attribution) genuinely has zero data in Meta's own Insights API even queried directly for its exact click date — not a Kado-side gap, Meta itself isn't returning delivery data for that specific ad (most likely deleted or a short-lived automated variant).
+
+**No code changed.** Recorded here specifically so a future session doesn't re-chase the same "maybe it's a batch-upsert bug" theory — it was checked directly and disproven, not just plausible-sounding.
+
+---
+
 ## 2026-07-26 — Ad-click data trapped in `document.referrer`, lost entirely
 
 **Reported:** user asked to double-check that Nothing But Buckets' "Direct/Organic" bucket was genuinely organic and not masking a real bug.

@@ -748,6 +748,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     { key: "webhook_secret", label: "Shared secret", type: "password" },
   ] },
   {
+    platform: "housecallpro",
+    label: "Housecall Pro",
+    category: "Payment Processors",
+    fields: [{ key: "webhook_secret", label: "Signing secret", type: "password" }],
+    helpText:
+      "Requires the MAX plan. Housecall Pro Settings → Webhooks → Add Webhook URL: /webhooks/housecallpro/<this client's ID, shown in the URL above>. Enable invoice.paid, invoice.payment.succeeded, and invoice.refund.succeeded. Paste the signing secret it shows you after saving into the field below.",
+  },
+  {
     platform: "facebook-ads",
     label: "Facebook Ads",
     category: "Ad Platforms",

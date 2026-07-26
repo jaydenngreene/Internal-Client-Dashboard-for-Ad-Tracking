@@ -3,6 +3,7 @@ import * as crypto from 'crypto'
 import { verifyShopifyHmac } from '../../routes/webhooks/shopify'
 import { verifySquareSignature } from '../../routes/webhooks/square'
 import { verifyTwilioSignature } from '../../routes/webhooks/twilio'
+import { verifyHousecallProSignature } from '../../routes/webhooks/housecallpro'
 
 describe('verifyShopifyHmac', () => {
   const secret = 'shopify-test-secret'
@@ -69,5 +70,24 @@ describe('verifyTwilioSignature', () => {
     const validSig = sign(url, params, authToken)
     const tamperedParams = { ...params, From: '+19995551234' }
     expect(verifyTwilioSignature(url, tamperedParams, validSig, authToken)).toBe(false)
+  })
+})
+
+describe('verifyHousecallProSignature', () => {
+  const config = { webhook_secret: 'hcp-test-secret' }
+  const rawBody = Buffer.from(JSON.stringify({ event: 'invoice.paid' }))
+
+  it('accepts a correctly computed HMAC-SHA256 hex signature over the raw body', () => {
+    const validSig = crypto.createHmac('sha256', config.webhook_secret).update(rawBody).digest('hex')
+    expect(verifyHousecallProSignature(rawBody, validSig, config)).toBe(true)
+  })
+
+  it('rejects a signature computed with the wrong secret', () => {
+    const wrongSig = crypto.createHmac('sha256', 'wrong-secret').update(rawBody).digest('hex')
+    expect(verifyHousecallProSignature(rawBody, wrongSig, config)).toBe(false)
+  })
+
+  it('rejects a malformed header instead of throwing', () => {
+    expect(verifyHousecallProSignature(rawBody, 'not-a-real-signature', config)).toBe(false)
   })
 })

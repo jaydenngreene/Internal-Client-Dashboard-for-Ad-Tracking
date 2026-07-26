@@ -23,7 +23,7 @@ function box(title: string, lines: string[]) {
 }
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
-const PROCESSORS = ['paypal', 'square', 'gohighlevel', 'generic'] as const
+const PROCESSORS = ['paypal', 'square', 'gohighlevel', 'housecallpro', 'generic'] as const
 type Processor = (typeof PROCESSORS)[number]
 
 async function askFrom(label: string, options: readonly string[], fallback: string): Promise<string> {
@@ -37,7 +37,7 @@ async function askFrom(label: string, options: readonly string[], fallback: stri
 }
 
 async function main() {
-  console.log('\n🔧  Generic Client Setup (PayPal / Square / GoHighLevel / fully generic)\n')
+  console.log('\n🔧  Generic Client Setup (PayPal / Square / GoHighLevel / Housecall Pro / fully generic)\n')
 
   const clientName = await ask('Client name: ')
   const apiUrl = await ask('Your API URL (e.g. https://api.yourdomain.com): ')
@@ -115,6 +115,26 @@ async function main() {
     await db.query(
       `INSERT INTO client_integrations (client_id, platform, config)
        VALUES ($1, 'gohighlevel', $2)
+       ON CONFLICT (client_id, platform) DO UPDATE SET config = EXCLUDED.config`,
+      [clientId, JSON.stringify({ webhook_secret: webhookSecret })]
+    )
+  } else if (processor === 'housecallpro') {
+    box('Step 1 — Register this webhook in Housecall Pro', [
+      'Requires the MAX plan. Settings → Webhooks → Add Webhook URL.',
+      '',
+      `Webhook URL:  ${webhookUrl}`,
+      '',
+      'Events to enable: invoice.paid, invoice.payment.succeeded,',
+      'invoice.refund.succeeded',
+      '',
+      'HCP hands you a signing secret right after you save the URL —',
+      'paste that below (unlike GHL, this one is real HMAC verification).',
+    ])
+    const webhookSecret = await ask('\nSigning secret (shown after saving the webhook above): ')
+
+    await db.query(
+      `INSERT INTO client_integrations (client_id, platform, config)
+       VALUES ($1, 'housecallpro', $2)
        ON CONFLICT (client_id, platform) DO UPDATE SET config = EXCLUDED.config`,
       [clientId, JSON.stringify({ webhook_secret: webhookSecret })]
     )

@@ -596,6 +596,22 @@ export async function clientRoutes(app: FastifyInstance) {
     return reply.code(200).send(await upsertIntegration(id, 'gohighlevel', fields))
   })
 
+  // Save or update a Housecall Pro integration. Unlike GoHighLevel/Customers.ai,
+  // HCP issues a real signing secret when the webhook URL is registered (Settings
+  // -> Webhooks, MAX plan only) - see routes/webhooks/housecallpro.ts for the
+  // signature verification this webhook_secret actually backs.
+  app.post<{
+    Params: { id: string }
+    Body: { webhook_secret: string }
+  }>('/clients/:id/integrations/housecallpro', async (req, reply) => {
+    const { id } = req.params
+    const fields = await resolveIntegrationFields(id, 'housecallpro', { webhook_secret: req.body.webhook_secret })
+    if (!fields.webhook_secret) {
+      return reply.code(400).send({ error: 'webhook_secret required' })
+    }
+    return reply.code(200).send(await upsertIntegration(id, 'housecallpro', fields))
+  })
+
   // Save or update a TikTok Ads integration — Step 16 (signals) / Step 19 (cost sync)
   // share this same client_integrations row, unlike Facebook's split facebook_ads/
   // facebook_capi — TikTok's Events API and Marketing API use the same access token.

@@ -18,6 +18,7 @@ import { stripeWebhookRoutes } from './routes/webhooks/stripe'
 import { paypalWebhookRoutes } from './routes/webhooks/paypal'
 import { squareWebhookRoutes } from './routes/webhooks/square'
 import { goHighLevelWebhookRoutes } from './routes/webhooks/gohighlevel'
+import { housecallProWebhookRoutes } from './routes/webhooks/housecallpro'
 import { twilioWebhookRoutes } from './routes/webhooks/twilio'
 import { customersAiWebhookRoutes } from './routes/webhooks/customersAi'
 import { tagWebhookRoutes } from './routes/webhooks/tags'
@@ -152,6 +153,7 @@ app.register(stripeWebhookRoutes)
 app.register(paypalWebhookRoutes)
 app.register(squareWebhookRoutes)
 app.register(goHighLevelWebhookRoutes)
+app.register(housecallProWebhookRoutes)
 app.register(twilioWebhookRoutes)
 app.register(customersAiWebhookRoutes)
 app.register(tagWebhookRoutes)

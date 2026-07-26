@@ -180,8 +180,8 @@
 
   // ── URL Params ──────────────────────────────────────────────────────────────
 
-  function getParams() {
-    var params = new URLSearchParams(window.location.search)
+  function extractAdParams(search) {
+    var params = new URLSearchParams(search)
     return {
       fbclid: params.get('fbclid'),
       gclid: params.get('gclid'),
@@ -193,6 +193,34 @@
       utm_content: params.get('utm_content'),
       utm_term: params.get('utm_term'),
     }
+  }
+
+  function hasAnyAdSignal(p) {
+    return !!(p.fbclid || p.gclid || p.ttclid || p.msclkid || p.utm_source)
+  }
+
+  function getReferrerSearch() {
+    try {
+      return document.referrer ? new URL(document.referrer).search : ''
+    } catch (e) {
+      return ''
+    }
+  }
+
+  // A "Buy Now"/dynamic-checkout ad click can land a visitor directly on
+  // Shopify's checkout (ad params in THAT url) before this pixel ever runs on
+  // a page - by the time they reach one, the current url is clean but
+  // document.referrer still carries the checkout url's full query string.
+  // Falls back to parsing ad params out of the referrer rather than losing
+  // them entirely - confirmed live 2026-07-26 (real fbclid/utm_campaign/ad_id
+  // data sitting in a session's referrer while the session itself had none,
+  // silently miscounted as direct/organic traffic).
+  function getParams() {
+    var fromUrl = extractAdParams(window.location.search)
+    if (hasAnyAdSignal(fromUrl)) return fromUrl
+    var fromReferrer = extractAdParams(getReferrerSearch())
+    if (hasAnyAdSignal(fromReferrer)) return fromReferrer
+    return fromUrl
   }
 
   // Store ad params in sessionStorage so they persist across page navigations

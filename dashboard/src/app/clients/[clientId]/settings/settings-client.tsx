@@ -219,6 +219,11 @@ async function post(endpoint, body) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body)),
+      // checkout_completed fires right before Shopify redirects to the thank-you
+      // page - without keepalive the browser can cancel this request mid-flight
+      // during that navigation. Shopify's own Web Pixels docs call this out
+      // specifically for this event (a documented 3-7% loss without it).
+      keepalive: true,
     });
     console.log('[Kado pixel]', endpoint, 'sent, status', res.status);
   } catch (err) {

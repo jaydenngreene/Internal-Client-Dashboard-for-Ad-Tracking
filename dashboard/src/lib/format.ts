@@ -32,21 +32,29 @@ export function formatDateShort(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(d);
 }
 
+// Keyed by normalized platform (strip a trailing "_ads", lowercase) so both an
+// ad_costs.platform value ("facebook_ads") and a bare utm_source value
+// ("facebook", "Facebook") resolve to the same readable label — a spend-less
+// row assembled only from leads/revenue only ever carries the bare utm_source
+// form, and previously fell through to showing that raw, lowercase string.
 const PLATFORM_LABELS: Record<string, string> = {
-  facebook_ads: "Facebook",
-  google_ads: "Google",
-  bing_ads: "Bing",
-  tiktok_ads: "TikTok",
-  snapchat_ads: "Snapchat",
-  pinterest_ads: "Pinterest",
-  linkedin_ads: "LinkedIn",
-  reddit_ads: "Reddit",
+  facebook: "Facebook",
+  google: "Google",
+  bing: "Bing",
+  tiktok: "TikTok",
+  snapchat: "Snapchat",
+  pinterest: "Pinterest",
+  linkedin: "LinkedIn",
+  reddit: "Reddit",
+  klaviyo: "Klaviyo",
 };
 
-// A row's `platform` is either a real ad_costs.platform value (facebook_ads, etc,
-// normalized here to a readable label) or, for a manual Custom Cost row, whatever
-// free-text label the client typed in — shown as-is since there's no fixed taxonomy for it.
+// A row's `platform` is either a real ad_costs.platform value (facebook_ads, etc),
+// a bare utm_source value (facebook, Klaviyo), or, for a manual Custom Cost row,
+// whatever free-text label the client typed in — shown as-is since there's no
+// fixed taxonomy for that last case.
 export function formatPlatformLabel(platform: string | null): string | null {
   if (!platform) return null;
-  return PLATFORM_LABELS[platform] ?? platform;
+  const normalized = platform.trim().toLowerCase().replace(/_ads$/, "");
+  return PLATFORM_LABELS[normalized] ?? platform;
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Compass } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlatformIcon } from "@/components/platform-icon";
+import { PlatformIcon, isAdPlatform } from "@/components/platform-icon";
 import { FunnelRow } from "@/lib/api";
 import { formatCurrency, formatNumber, formatRoas, formatPercent, formatPlatformLabel } from "@/lib/format";
 import { downloadCsv } from "@/lib/csv";
@@ -201,14 +202,25 @@ export function CampaignBreakdownTable({
             >
               <TableCell className="sticky left-0 z-10 max-w-64 truncate bg-card font-medium group-hover:bg-muted/50">
                 <div className="flex items-center gap-2">
-                  {showPlatformBadge && <PlatformIcon platform={row.platform} />}
+                  {showPlatformBadge && row.platform === null && (
+                    <span className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <Compass className="size-3" />
+                    </span>
+                  )}
+                  {showPlatformBadge && row.platform !== null && <PlatformIcon platform={row.platform} />}
                   <span className="truncate">{row.name}</span>
-                  {showPlatformBadge && formatPlatformLabel(row.platform) && (
+                  {showPlatformBadge && (
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
-                      {formatPlatformLabel(row.platform)}
+                      {row.platform === null ? "Direct / Organic" : (formatPlatformLabel(row.platform) ?? row.name)}
                     </Badge>
                   )}
-                  {!row.matched && (
+                  {/* A row assembled only from leads/revenue (no ad_costs match) only means a
+                      real tracking gap when the source is actually an ad platform Kado syncs
+                      spend for — Klaviyo, direct/organic, or any other non-ad source was never
+                      going to have a spend row to match in the first place. Source-breakdown
+                      rows (showPlatformBadge=false) carry the same platform value in row.name,
+                      so this check applies there too even without the badge/icon above it. */}
+                  {!row.matched && isAdPlatform(showPlatformBadge ? row.platform : row.name) && (
                     <Badge variant="outline" className="shrink-0 text-[10px] text-status-warning border-status-warning/40">
                       unmatched
                     </Badge>

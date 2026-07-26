@@ -143,7 +143,30 @@ async function attributePurchase(
     }
   }
 
-  if (sessionRows.length === 0) return false // no ad history to attribute (yet)
+  // No ad-tracked session for this purchase (never visited while the pixel was
+  // active, or a phone/referral lead with no web touch at all) - this purchase
+  // stays unattributed in every Kado report (Campaigns/Creatives/Funnel/ROAS all
+  // key off the attributions table, untouched below), exactly as before. But
+  // Meta can still use this as an Advanced-Matching (hashed email only) Purchase
+  // signal to build Lookalike Audiences and improve Advantage+ targeting - "who
+  // actually becomes a paying customer" is a broader, still-valuable signal than
+  // only sending events for sales Kado could trace to a specific ad. Deliberately
+  // skipped: attributions/customer_ltv (nothing real to attribute) and the
+  // sale.attributed outbound webhook (that event specifically means Kado found a
+  // real ad-attributed touch - firing it here would be misleading to anything a
+  // client has subscribed to it). This is a side channel to Meta only, not a
+  // change to anything Kado itself reports.
+  if (sessionRows.length === 0) {
+    await sendConversionSignals(clientId, {
+      eventType: 'Purchase',
+      email,
+      value: signal.originalValue,
+      currency: signal.currency,
+      eventTime: purchaseTime,
+      eventId: signal.orderId ?? undefined,
+    })
+    return false // no ad history to attribute (yet)
+  }
 
   const { rows: clientRows } = await db.query<{ attribution_model: AttributionModel }>(
     'SELECT attribution_model FROM clients WHERE id = $1',

@@ -747,11 +747,18 @@ const INTEGRATIONS: IntegrationDef[] = [
   { platform: "gohighlevel", label: "GoHighLevel", category: "Payment Processors", fields: [
     { key: "webhook_secret", label: "Shared secret", type: "password" },
   ] },
-  { platform: "facebook-ads", label: "Facebook Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "ad_account_id", label: "Ad account ID" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
+  {
+    platform: "facebook-ads",
+    label: "Facebook Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "ad_account_id", label: "Ad account ID" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "Pulls spend/impressions/clicks/creative data FROM Meta — separate from the Conversions API integration below, which pushes conversion events TO Meta. Needs a token with permission on the AD ACCOUNT specifically (ads_read at minimum, ads_management if Budget Reallocation should be able to push budget changes, not just recommend them). Meta Business Settings → System Users → your system user → Add Assets → assign this ad account (Advertise access) → Generate New Token. If that System User token also has the pixel assigned (Manage access), the same token works in the Conversions API card below too — no need for two separate credentials.",
+  },
   {
     platform: "facebook-capi",
     label: "Facebook Conversions API",
@@ -761,7 +768,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "access_token", label: "Access token", type: "password" },
     ],
     helpText:
-      "Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID. On that same screen, under Conversions API, click \"Generate access token\" for the token. This sends server-side conversion signals to Meta for ad optimization, separate from (and doesn't require) the website pixel above.",
+      "Pushes Lead/Purchase conversion events TO Meta for ad optimization — separate from (and doesn't require) the website pixel above, and separate from the Facebook Ads integration above, which pulls spend data the other direction. Needs a token with permission on the PIXEL specifically, not the ad account. Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID; on that same screen, under Conversions API, click \"Generate access token\" for a token scoped correctly for just this. If you already made a broader System User token for the Facebook Ads card above (with the pixel also assigned as an asset), that same token works here too.",
   },
   { platform: "google-ads", label: "Google Ads", category: "Ad Platforms", fields: [
     { key: "customer_id", label: "Customer ID" },

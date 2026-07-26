@@ -43,7 +43,18 @@ type OverviewView = "basic" | "pro";
 // equal visual weight, which research on Northbeam/Triple Whale/Stripe/Vercel's own
 // "one dominant number" convention flagged as the single biggest generic-internal-
 // tool tell on this exact page.
-function HeroKpiRow({ data }: { data: OverviewReport }) {
+// Attributed ROAS only means something when revenue realizes on-site, in the
+// same session/attribution window the pixel can actually see (ecommerce,
+// info-product). Lead-gen/call/SaaS clients close and get paid later, often
+// through a completely separate system (Housecall Pro, a CRM) with no session
+// to match back to - their real revenue shows up in Blended ROAS just fine
+// (it's not attribution-gated), but the plain ROAS tile would always read as
+// artificially bad for them, not because ads are underperforming but because
+// there was never a realistic path to a session match. Hidden for those goals
+// rather than shown-and-caveated - a permanently-misleading number, even with
+// a tooltip explaining it, isn't worth the tile.
+function HeroKpiRow({ data, goal }: { data: OverviewReport; goal: "leads" | "sales" }) {
+  const showAttributedRoas = goal === "sales";
   const dates = data.series.map((p) => p.date);
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -93,17 +104,19 @@ function HeroKpiRow({ data }: { data: OverviewReport }) {
           formatValue={(v) => formatPercent(v)}
           sublabel={data.hasMarginConfig ? "COGS-adjusted, of attributed revenue" : "of attributed revenue"}
         />
-        <KpiTile
-          label="ROAS"
-          tooltip="Attributed revenue ÷ ad spend: revenue the dashboard could actually trace back to your ads, per dollar spent."
-          value={formatRoas(data.roas)}
-          fromDate={data.from}
-          color="var(--color-chart-4)"
-          sparkline={data.series.map((p) => (p.cost > 0 ? p.attributedRevenue / p.cost : 0))}
-          dates={dates}
-          formatValue={(v) => formatRoas(v)}
-          sublabel={`of ${formatCurrency(data.attributedRevenue)} attributed`}
-        />
+        {showAttributedRoas && (
+          <KpiTile
+            label="ROAS"
+            tooltip="Attributed revenue ÷ ad spend: revenue the dashboard could actually trace back to your ads, per dollar spent."
+            value={formatRoas(data.roas)}
+            fromDate={data.from}
+            color="var(--color-chart-4)"
+            sparkline={data.series.map((p) => (p.cost > 0 ? p.attributedRevenue / p.cost : 0))}
+            dates={dates}
+            formatValue={(v) => formatRoas(v)}
+            sublabel={`of ${formatCurrency(data.attributedRevenue)} attributed`}
+          />
+        )}
         <KpiTile
           label="Blended ROAS"
           tooltip="Total revenue ÷ ad spend, counting every sale regardless of attribution. Runs higher than ROAS whenever revenue can't be matched to a session."
@@ -637,7 +650,7 @@ export function OverviewClient({ clientId }: { clientId: string }) {
 
       {data && view === "basic" && (
         <>
-          <HeroKpiRow data={data} />
+          <HeroKpiRow data={data} goal={goal} />
 
           <div className="flex flex-col gap-3">
             <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -682,7 +695,7 @@ export function OverviewClient({ clientId }: { clientId: string }) {
 
       {data && view === "pro" && (
         <>
-          <HeroKpiRow data={data} />
+          <HeroKpiRow data={data} goal={goal} />
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className="lg:col-span-2">

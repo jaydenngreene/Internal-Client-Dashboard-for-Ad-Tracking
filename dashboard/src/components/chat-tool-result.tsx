@@ -21,7 +21,12 @@ function StatRow({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-wrap gap-4 rounded-md border border-border bg-card px-3 py-2.5">{children}</div>;
 }
 
-export function ChatToolResult({ call }: { call: ChatToolCall }) {
+// goal mirrors the same leads-vs-sales niche classification used everywhere
+// else ROAS shows up (Overview, Campaigns) — see campaign-breakdown-table.tsx
+// for why: attributed ROAS always reads as artificially bad for a niche whose
+// revenue realizes later through a separate system with no session to match
+// back to, so it's dropped rather than shown-and-caveated.
+export function ChatToolResult({ call, goal }: { call: ChatToolCall; goal: "leads" | "sales" }) {
   const r = call.result;
 
   if (call.tool === "get_overview_metrics" && typeof r.cost === "number") {
@@ -30,7 +35,7 @@ export function ChatToolResult({ call }: { call: ChatToolCall }) {
         <Stat label="Ad Spend" value={formatCurrency(r.cost as number)} />
         <Stat label="Revenue" value={formatCurrency(r.revenue as number)} />
         <Stat label="Profit" value={formatCurrency(r.trueProfit as number)} />
-        <Stat label="ROAS" value={formatRoas(r.roas as number | null)} />
+        {goal === "sales" && <Stat label="ROAS" value={formatRoas(r.roas as number | null)} />}
         <Stat label="Leads" value={formatNumber(r.leads as number)} />
         <Stat label="Sales" value={formatNumber(r.sales as number)} />
       </StatRow>
@@ -48,7 +53,7 @@ export function ChatToolResult({ call }: { call: ChatToolCall }) {
               <th className="px-2.5 py-1.5 text-left font-medium">Campaign</th>
               <th className="px-2.5 py-1.5 text-right font-medium">Spend</th>
               <th className="px-2.5 py-1.5 text-right font-medium">Revenue</th>
-              <th className="px-2.5 py-1.5 text-right font-medium">ROAS</th>
+              {goal === "sales" && <th className="px-2.5 py-1.5 text-right font-medium">ROAS</th>}
             </tr>
           </thead>
           <tbody>
@@ -57,7 +62,7 @@ export function ChatToolResult({ call }: { call: ChatToolCall }) {
                 <td className="max-w-40 truncate px-2.5 py-1.5 font-medium">{c.campaignName}</td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums">{formatCurrency(c.cost)}</td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums text-chart-1">{formatCurrency(c.revenue)}</td>
-                <td className="px-2.5 py-1.5 text-right tabular-nums">{formatRoas(c.roas)}</td>
+                {goal === "sales" && <td className="px-2.5 py-1.5 text-right tabular-nums">{formatRoas(c.roas)}</td>}
               </tr>
             ))}
           </tbody>

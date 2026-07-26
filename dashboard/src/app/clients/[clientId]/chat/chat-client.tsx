@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getChatHistory, sendChatMessage } from "@/lib/api";
+import { getChatHistory, sendChatMessage, getClients, campaignGoalForNiche } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,8 @@ export function ChatClient({ clientId }: { clientId: string }) {
     queryKey: ["chat", clientId],
     queryFn: () => getChatHistory(clientId),
   });
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
+  const goal = campaignGoalForNiche(clients?.find((c) => c.id === clientId)?.niche ?? "other");
 
   const send = useMutation({
     mutationFn: (message: string) => sendChatMessage(clientId, message),
@@ -125,7 +127,7 @@ export function ChatClient({ clientId }: { clientId: string }) {
                 >
                   {m.content}
                 </div>
-                {m.tool_calls?.map((call, i) => <ChatToolResult key={i} call={call} />)}
+                {m.tool_calls?.map((call, i) => <ChatToolResult key={i} call={call} goal={goal} />)}
               </div>
             </div>
           ))}

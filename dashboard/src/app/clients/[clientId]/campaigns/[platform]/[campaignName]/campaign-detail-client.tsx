@@ -59,7 +59,7 @@ function CreativeRowCard({
             <span>{formatNumber(creative.sales)} purchases</span>
           )}
           <span className="text-chart-1">{formatCurrency(creative.revenue)} revenue</span>
-          <span>{formatRoas(creative.roas)} ROAS</span>
+          {goal === "sales" && <span>{formatRoas(creative.roas)} ROAS</span>}
           <span>{formatPercent(creative.ctr)} CTR</span>
         </div>
       </div>
@@ -138,7 +138,7 @@ export function CampaignDetailClient({
               value={formatCurrency(data.kpis.trueProfit)}
               tone={data.kpis.trueProfit >= 0 ? "positive" : "negative"}
             />
-            <StatTile label="ROAS" value={formatRoas(data.kpis.roas)} />
+            {goal === "sales" && <StatTile label="ROAS" value={formatRoas(data.kpis.roas)} />}
             <StatTile label="Impressions" value={formatNumber(data.kpis.impressions)} />
             {goal === "sales" && (
               <StatTile label="CPM" value={data.kpis.cpm === null ? "-" : formatCurrency(data.kpis.cpm)} />

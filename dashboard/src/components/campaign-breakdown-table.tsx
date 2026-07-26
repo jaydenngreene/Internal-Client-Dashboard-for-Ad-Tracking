@@ -87,6 +87,14 @@ export function CampaignBreakdownTable({
     { key: "cpc", label: "CPC", align: "right" },
   ];
 
+  // Per-row ROAS divides a row's revenue (attribution-matched only, same
+  // limitation as Overview's plain ROAS tile) by that row's spend — for a
+  // leads-goal niche (lead-gen/call/SaaS), revenue realizes later through a
+  // separate system with no session to match back to, so this always reads as
+  // artificially bad. Unlike Overview's account-wide Blended ROAS, there's no
+  // per-row substitute to show instead: unattributed revenue has no known
+  // campaign/creative to blend into by definition, so the column is just
+  // dropped rather than replaced with a number that would be fabricated.
   const allColumns: { key: SortKey; label: string; align?: "right" }[] = [
     { key: "name", label: nameColumnLabel },
     { key: "cost", label: "Ad Spend", align: "right" },
@@ -94,7 +102,7 @@ export function CampaignBreakdownTable({
     ...goalColumns,
     { key: "revenue", label: "Revenue", align: "right" },
     { key: "profit", label: "Profit", align: "right" },
-    { key: "roas", label: "ROAS", align: "right" },
+    ...(goal === "sales" ? [{ key: "roas" as SortKey, label: "ROAS", align: "right" as const }] : []),
   ];
   const columns = allColumns.filter((c) => !hiddenColumns.has(c.key));
 
@@ -265,7 +273,9 @@ export function CampaignBreakdownTable({
               >
                 {formatCurrency(row.trueProfit)}
               </TableCell>
-              <TableCell className="text-right tabular-nums">{formatRoas(row.roas)}</TableCell>
+              {goal === "sales" && (
+                <TableCell className="text-right tabular-nums">{formatRoas(row.roas)}</TableCell>
+              )}
             </TableRow>
             );
           })}

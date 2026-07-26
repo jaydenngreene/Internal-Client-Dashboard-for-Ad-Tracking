@@ -49,7 +49,9 @@ function viewSubtitle(view: ViewMode, goal: "leads" | "sales"): string {
   const perOutcome = goal === "leads" ? "cost per lead" : "cost per purchase";
   switch (view) {
     case "campaign":
-      return `Performance for each individual ad campaign: cost, ${perOutcome}, revenue, and ROAS.`;
+      return goal === "leads"
+        ? `Performance for each individual ad campaign: cost, ${perOutcome}, and revenue.`
+        : `Performance for each individual ad campaign: cost, ${perOutcome}, revenue, and ROAS.`;
     case "source":
       return "The same numbers rolled up by platform only (all of Facebook combined, all of Google combined, etc.), a quick where's-my-budget-going read across many campaigns, rather than one campaign at a time.";
     case "keyword":

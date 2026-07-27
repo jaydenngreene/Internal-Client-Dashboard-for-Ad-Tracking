@@ -1675,7 +1675,9 @@ export interface JourneySession {
   id: string;
   started_at: string;
   utm_source: string | null;
-  utm_medium: string | null;
+  // utm_medium dropped (Phase 2, 2026-07-28) — captured everywhere sessions
+  // are written but never read by any matching/attribution/report query in
+  // this app; pure passthrough noise on this view.
   utm_campaign: string | null;
   utm_content: string | null;
   utm_term: string | null;
@@ -1684,6 +1686,11 @@ export interface JourneySession {
   fbclid: string | null;
   gclid: string | null;
   ttclid: string | null;
+  // Resolved server-side from utm_content via the same ad_costs id-or-name
+  // match every report in this app uses — null means no ad_costs row exists
+  // for it yet (never synced, or a genuinely deleted ad); fall back to the
+  // raw utm_content id in that case.
+  resolved_creative_name: string | null;
 }
 
 export interface JourneyPurchaseAttribution {
@@ -1742,6 +1749,29 @@ export interface Journey {
 
 export function getJourney(clientId: string, email: string): Promise<Journey> {
   return fetchJson<Journey>(`/clients/${clientId}/leads/${encodeURIComponent(email)}/journey`);
+}
+
+// Phase 2 (2026-07-28) — "Customer Buying Journey" tab, ecom clients only.
+export interface TopConvertingCreative {
+  name: string;
+  customers: number;
+}
+
+export interface PurchasingCustomer {
+  email: string;
+  totalSpent: number;
+  sessionsToConvert: number | null;
+}
+
+export interface BuyingJourneySummary {
+  avgDaysToConvert: number | null;
+  avgSessionsToConvert: number | null;
+  topConvertingCreatives: TopConvertingCreative[];
+  customers: PurchasingCustomer[];
+}
+
+export function getBuyingJourney(clientId: string, range: DateRange): Promise<BuyingJourneySummary> {
+  return fetchJson<BuyingJourneySummary>(`/clients/${clientId}/reports/buying-journey${rangeQuery(range)}`);
 }
 
 export type CallDisposition =

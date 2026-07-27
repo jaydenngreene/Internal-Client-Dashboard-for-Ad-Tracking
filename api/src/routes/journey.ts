@@ -5,7 +5,6 @@ interface SessionRow {
   id: string
   started_at: string
   utm_source: string | null
-  utm_medium: string | null
   utm_campaign: string | null
   utm_content: string | null
   utm_term: string | null
@@ -14,6 +13,12 @@ interface SessionRow {
   fbclid: string | null
   gclid: string | null
   ttclid: string | null
+  // Resolved from utm_content via the same ad_costs id-or-name matching
+  // convention every other report/job in this app uses (Phase 2, 2026-07-28)
+  // — null means no ad_costs row exists for it yet (never synced, or a
+  // genuinely deleted ad); the frontend falls back to the raw utm_content in
+  // that case, same "graceful" behavior as everywhere else in this app.
+  resolved_creative_name: string | null
 }
 
 interface PurchaseRow {
@@ -77,12 +82,29 @@ export async function journeyRoutes(app: FastifyInstance) {
       )
       const identity = identityRows[0] ?? null
 
+      // Phase 2 (2026-07-28): utm_medium dropped — grepped the whole codebase
+      // and confirmed it's captured everywhere sessions are written but never
+      // read by any matching/attribution/report query, pure passthrough
+      // noise. Creative name resolved here via a LATERAL join against
+      // ad_costs (id-or-name match on utm_content, platform-scoped via
+      // utm_source with the same "_ads" suffix stripped everywhere else in
+      // this app) instead of showing the raw numeric id.
       const sessions = identity
         ? (
             await db.query<SessionRow>(
-              `SELECT id, started_at, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-                      landing_page, referrer, fbclid, gclid, ttclid
-               FROM sessions WHERE client_id = $1 AND visitor_id = $2 ORDER BY started_at ASC`,
+              `SELECT s.id, s.started_at, s.utm_source, s.utm_campaign, s.utm_content, s.utm_term,
+                      s.landing_page, s.referrer, s.fbclid, s.gclid, s.ttclid,
+                      ac.ad_name AS resolved_creative_name
+               FROM sessions s
+               LEFT JOIN LATERAL (
+                 SELECT ad_name FROM ad_costs
+                 WHERE client_id = s.client_id
+                   AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE(COALESCE(s.utm_source, ''), '_ads$', ''))
+                   AND (ad_id = s.utm_content OR LOWER(TRIM(ad_name)) = LOWER(TRIM(s.utm_content)))
+                 LIMIT 1
+               ) ac ON s.utm_content IS NOT NULL
+               WHERE s.client_id = $1 AND s.visitor_id = $2
+               ORDER BY s.started_at ASC`,
               [clientId, identity.visitor_id]
             )
           ).rows

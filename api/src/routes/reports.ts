@@ -6,6 +6,7 @@ import { projectSum } from '../lib/forecasting'
 import { computeMMM } from '../lib/mmm'
 import { computeMmmScenario, ScenarioAdjustment } from '../lib/mmmScenario'
 import { computeBestPaths } from '../lib/bestPaths'
+import { computeBuyingJourneySummary } from '../lib/buyingJourney'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 import { resolveAdObjectFallback } from '../lib/adObjectFallback'
@@ -1013,6 +1014,18 @@ export async function reportRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const { from, to } = defaultRange(req.query.from, req.query.to)
       return reply.send(await computeBestPaths(req.params.id, from, to))
+    }
+  )
+
+  // Phase 2 (2026-07-28) — Customer Buying Journey tab (ecom clients only):
+  // avg days/sessions to convert, top converting creatives, and the
+  // per-customer table backing "Customers Who Purchased". See
+  // lib/buyingJourney.ts for the full methodology.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/buying-journey',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      return reply.send(await computeBuyingJourneySummary(req.params.id, from, to))
     }
   )
 

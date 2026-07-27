@@ -35,6 +35,11 @@ export interface NavItem {
   // "Reporting") instead of rendering it as a flat top-level link — see
   // Sidebar's grouping logic. Items without a group render exactly as before.
   group?: string;
+  // Per-niche label override (Phase 2, 2026-07-28) — e.g. "Leads" reads
+  // "Customer Buying Journey" for ecom clients, matching that page's own
+  // header, without needing a second nav entry or a niche-specific route.
+  // Falls back to `label` for any niche not listed here.
+  nicheLabels?: Record<string, string>;
 }
 
 export interface NavSection {
@@ -67,7 +72,14 @@ export const NAV_SECTIONS: NavSection[] = [
         enabled: true,
         group: "Reporting",
       },
-      { slug: "leads", label: "Leads", icon: UserSearch, enabled: true, group: "Reporting" },
+      {
+        slug: "leads",
+        label: "Leads",
+        icon: UserSearch,
+        enabled: true,
+        group: "Reporting",
+        nicheLabels: { ecommerce: "Customer Buying Journey" },
+      },
       {
         slug: "subscriptions",
         label: "Subscriptions",

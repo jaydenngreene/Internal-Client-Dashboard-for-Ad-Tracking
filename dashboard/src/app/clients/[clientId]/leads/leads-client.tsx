@@ -7,11 +7,14 @@ import {
   getJourney,
   updateCallQualification,
   getBestPaths,
+  getClients,
+  getBuyingJourney,
   CALL_DISPOSITIONS,
   CallDisposition,
   Journey,
   JourneySession,
   JourneyCall,
+  PurchasingCustomer,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +24,8 @@ import { FieldLabel } from "@/components/ui/field-label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SegmentedToggle } from "@/components/segmented-toggle";
+import { StatTile } from "@/components/stat-tile";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -104,8 +109,11 @@ function SessionRow({ session, index }: { session: JourneySession; index: number
         </div>
         <div className="flex flex-wrap gap-1.5">
           {session.utm_source && <Badge variant="outline" className="text-[10px]">source: {session.utm_source}</Badge>}
-          {session.utm_medium && <Badge variant="outline" className="text-[10px]">medium: {session.utm_medium}</Badge>}
-          {session.utm_content && <Badge variant="outline" className="text-[10px]">creative: {session.utm_content}</Badge>}
+          {session.utm_content && (
+            <Badge variant="outline" className="text-[10px]">
+              creative: {session.resolved_creative_name ?? session.utm_content}
+            </Badge>
+          )}
           {session.utm_term && <Badge variant="outline" className="text-[10px]">keyword: {session.utm_term}</Badge>}
           {session.fbclid && <Badge variant="outline" className="text-[10px]">fbclid</Badge>}
           {session.gclid && <Badge variant="outline" className="text-[10px]">gclid</Badge>}
@@ -291,6 +299,80 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
   );
 }
 
+// Phase 2 (2026-07-28) — "Customers Who Purchased" tab, ecom clients only.
+// Top 3 converting creatives, then one row per purchasing customer in the
+// selected date range; clicking an email hands off to the single-customer
+// lookup view instead of duplicating that view's own detail rendering here.
+function CustomersWhoPurchasedTab({
+  data,
+  isLoading,
+  onSelectEmail,
+}: {
+  data: { topConvertingCreatives: { name: string; customers: number }[]; customers: PurchasingCustomer[] } | undefined;
+  isLoading: boolean;
+  onSelectEmail: (email: string) => void;
+}) {
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  if (!data || data.customers.length === 0) {
+    return (
+      <Card className="px-4 py-8">
+        <CardContent className="px-0 text-center text-sm text-muted-foreground">
+          No customers purchased in this range.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {data.topConvertingCreatives.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-sm font-semibold">Top Converting Creatives</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {data.topConvertingCreatives.map((c) => (
+              <Card key={c.name} className="px-4 py-3">
+                <p className="truncate text-sm font-medium">{c.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatNumber(c.customers)} customer{c.customers === 1 ? "" : "s"} converted
+                </p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Card className="overflow-hidden px-0 py-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Email</th>
+                <th className="px-4 py-2 font-medium">Total spent</th>
+                <th className="px-4 py-2 font-medium">Sessions to convert</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.customers.map((c) => (
+                <tr key={c.email} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-4 py-2">
+                    <button className="text-primary hover:underline" onClick={() => onSelectEmail(c.email)}>
+                      {c.email}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2">{formatCurrency(c.totalSpent)}</td>
+                  <td className="px-4 py-2">{c.sessionsToConvert ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+type BuyingJourneyTab = "lookup" | "customers";
+
 export function LeadsClient({ clientId }: { clientId: string }) {
   const searchParams = useSearchParams();
   // Lets a campaign/creative detail page's converted-customer list deep-link straight
@@ -302,6 +384,16 @@ export function LeadsClient({ clientId }: { clientId: string }) {
   const emailFromUrl = searchParams.get("email");
   const [email, setEmail] = useState(emailFromUrl ?? "");
   const [searchedEmail, setSearchedEmail] = useState(emailFromUrl?.trim().toLowerCase() ?? "");
+  const [tab, setTab] = useState<BuyingJourneyTab>("lookup");
+
+  // Phase 2: "Customer Buying Journey" (renamed tab, summary metrics, the
+  // Customers Who Purchased tab) is ecom-only — every other niche keeps this
+  // page exactly as it was ("Leads", single lookup, Best Paths callouts).
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
+  const niche = clients?.find((c) => c.id === clientId)?.niche;
+  const isEcom = niche === "ecommerce";
+
+  const { range } = useDateRangeState("30d");
 
   const { data: journey, isLoading, isError } = useQuery({
     queryKey: ["journey", clientId, searchedEmail],
@@ -309,42 +401,86 @@ export function LeadsClient({ clientId }: { clientId: string }) {
     enabled: searchedEmail.trim().length > 3,
   });
 
+  const { data: buyingJourney, isLoading: buyingJourneyLoading } = useQuery({
+    queryKey: ["buying-journey", clientId, range.from, range.to],
+    queryFn: () => getBuyingJourney(clientId, range),
+    enabled: isEcom,
+  });
+
+  function selectCustomer(customerEmail: string) {
+    setEmail(customerEmail);
+    setSearchedEmail(customerEmail.trim().toLowerCase());
+    setTab("lookup");
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div>
         <ClientKicker clientId={clientId} />
-        <h1 className="text-lg font-semibold">Leads</h1>
+        <h1 className="text-lg font-semibold">{isEcom ? "Customer Buying Journey" : "Leads"}</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Look up one lead by email to see their full journey: every session that led here, which one got credit for
-          which sale, every tag, every call.
+          {isEcom
+            ? "Look up one customer to see their full journey, or browse everyone who purchased in the selected date range."
+            : "Look up one lead by email to see their full journey: every session that led here, which one got credit for which sale, every tag, every call."}
         </p>
       </div>
 
-      <BestPathsCallouts clientId={clientId} />
+      {!isEcom && <BestPathsCallouts clientId={clientId} />}
 
-      <Card className="px-4">
-        <CardContent className="flex flex-wrap items-end gap-2 px-0">
-          <div className="flex flex-col gap-1">
-            <FieldLabel>Lead email</FieldLabel>
-            <Input
-              className="w-72"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setSearchedEmail(email.trim().toLowerCase());
-              }}
-              placeholder="lead@example.com"
+      {isEcom && (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <StatTile
+              label="Avg days to convert"
+              value={buyingJourney?.avgDaysToConvert != null ? buyingJourney.avgDaysToConvert.toFixed(1) : "—"}
+            />
+            <StatTile
+              label="Avg sessions to convert"
+              value={buyingJourney?.avgSessionsToConvert != null ? buyingJourney.avgSessionsToConvert.toFixed(1) : "—"}
             />
           </div>
-          <Button size="sm" disabled={!email.trim()} onClick={() => setSearchedEmail(email.trim().toLowerCase())}>
-            Search
-          </Button>
-        </CardContent>
-      </Card>
+          <SegmentedToggle
+            value={tab}
+            onChange={(v) => setTab(v as BuyingJourneyTab)}
+            options={[
+              { value: "lookup", label: "Look up one customer" },
+              { value: "customers", label: "Customers Who Purchased" },
+            ]}
+          />
+        </>
+      )}
 
-      {isLoading && <Skeleton className="h-64 w-full" />}
-      {isError && <p className="text-sm text-status-critical">Failed to load. Is the API running?</p>}
-      {journey && <JourneyView journey={journey} clientId={clientId} />}
+      {(!isEcom || tab === "lookup") && (
+        <>
+          <Card className="px-4">
+            <CardContent className="flex flex-wrap items-end gap-2 px-0">
+              <div className="flex flex-col gap-1">
+                <FieldLabel>{isEcom ? "Customer email" : "Lead email"}</FieldLabel>
+                <Input
+                  className="w-72"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") setSearchedEmail(email.trim().toLowerCase());
+                  }}
+                  placeholder={isEcom ? "customer@example.com" : "lead@example.com"}
+                />
+              </div>
+              <Button size="sm" disabled={!email.trim()} onClick={() => setSearchedEmail(email.trim().toLowerCase())}>
+                Search
+              </Button>
+            </CardContent>
+          </Card>
+
+          {isLoading && <Skeleton className="h-64 w-full" />}
+          {isError && <p className="text-sm text-status-critical">Failed to load. Is the API running?</p>}
+          {journey && <JourneyView journey={journey} clientId={clientId} />}
+        </>
+      )}
+
+      {isEcom && tab === "customers" && (
+        <CustomersWhoPurchasedTab data={buyingJourney} isLoading={buyingJourneyLoading} onSelectEmail={selectCustomer} />
+      )}
     </div>
   );
 }

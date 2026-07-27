@@ -31,12 +31,27 @@ function NavIcon({ item }: { item: NavItem }) {
   return <Icon className="size-3.5 shrink-0" strokeWidth={2} />;
 }
 
-function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActive: boolean }) {
+function navLabel(item: NavItem, activeNiche: string | undefined): string {
+  return (activeNiche && item.nicheLabels?.[activeNiche]) ?? item.label;
+}
+
+function NavLink({
+  item,
+  href,
+  isActive,
+  activeNiche,
+}: {
+  item: NavItem;
+  href: string;
+  isActive: boolean;
+  activeNiche?: string;
+}) {
+  const label = navLabel(item, activeNiche);
   if (!item.enabled) {
     return (
       <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/40">
         <NavIcon item={item} />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate">{label}</span>
         <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
       </div>
     );
@@ -52,7 +67,7 @@ function NavLink({ item, href, isActive }: { item: NavItem; href: string; isActi
       )}
     >
       <NavIcon item={item} />
-      <span className="truncate">{item.label}</span>
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
@@ -68,11 +83,13 @@ function NavGroup({
   items,
   activeClientId,
   pathname,
+  activeNiche,
 }: {
   label: string;
   items: NavItem[];
   activeClientId: string;
   pathname: string;
+  activeNiche?: string;
 }) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const isGroupActive = items.some((item) => pathname === `/clients/${activeClientId}/${item.slug}`);
@@ -101,7 +118,7 @@ function NavGroup({
             const href = `/clients/${activeClientId}/${item.slug}`;
             return (
               <li key={item.slug}>
-                <NavLink item={item} href={href} isActive={pathname === href} />
+                <NavLink item={item} href={href} isActive={pathname === href} activeNiche={activeNiche} />
               </li>
             );
           })}
@@ -280,7 +297,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                       const href = `/clients/${activeClientId}/${item.slug}`;
                       return (
                         <li key={item.slug}>
-                          <NavLink item={item} href={href} isActive={pathname === href} />
+                          <NavLink item={item} href={href} isActive={pathname === href} activeNiche={activeNiche} />
                         </li>
                       );
                     })}
@@ -292,6 +309,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         items={section.items.filter((item) => item.group === groupName)}
                         activeClientId={activeClientId}
                         pathname={pathname}
+                        activeNiche={activeNiche}
                       />
                     </div>
                   ))}

@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-28 (later still) — Built: Phase 2, Leads → Customer Buying Journey (ecom only)
+
+**Ask:** rebuild the Leads tab as "Customer Buying Journey" for ecom clients — two new summary metrics (avg days/sessions to convert), fix numeric creative/ad ids showing instead of names, drop `medium: cpc` if unused, pull in product images if the data supports it, and add a new "Customers Who Purchased" tab. Non-ecom clients keep the existing Leads page untouched.
+
+**Backend:**
+- `journey.ts`: `utm_content` now resolves to the real creative name via a `LEFT JOIN LATERAL` against `ad_costs` (same id-or-name matching convention every other report in this app already uses) — verified live against real Nothing But Buckets sessions (`120245594915910253` → `Howard_UGC_Ad`, etc.). `utm_medium` dropped entirely — confirmed via a full-codebase grep that it's captured everywhere sessions are written but read by nothing.
+- New `lib/buyingJourney.ts` + `GET /clients/:id/reports/buying-journey`: avg days/sessions to convert (measured from a customer's first-ever tracked session to their first purchase in the selected range), top 3 converting creatives, and the per-customer table.
+- **Real bug caught during verification, not shipped:** the first cut produced a negative `avgDaysToConvert` (-2.05 days) for BlackB4U — a purchase timestamped before the customer's first tracked session, which is impossible for a genuine conversion. Root cause: this app's own well-documented identify()-at-checkout gaps (see multiple entries below) mean a purchase can go completely untracked, and a LATER touch (e.g. a marketing-email click) is what eventually creates the identity→visitor link — so "first session for this visitor_id" can legitimately postdate the purchase. Fixed by excluding these from the average the same way a fully untracked purchase already is (not a real days-to-convert, a tracking-gap artifact) rather than presenting a number that reads as broken.
+- **Not built — genuine gap, flagged rather than faked:** product images. `purchases.product` is just the first line item's title (`api/src/routes/webhooks/shopify.ts`); no `product_id` is even captured, let alone an image URL, and no Shopify Admin API call fetches one. Doing this properly needs a schema change, a `ShopifyOrder` type update to capture `product_id`, and an Admin API call — which additionally only works for clients onboarded via the Step 11 native app flow (an access token), not the older manually-pasted-webhook-secret clients. Flagged instead of building a half-measure.
+
+**Frontend (`leads-client.tsx`):** ecom clients get a niche-conditional header ("Customer Buying Journey"), two `StatTile`s for the new summary metrics, and a segmented toggle between the renamed "Look up one customer" view and the new "Customers Who Purchased" tab (top-3-creatives cards + a sortable-by-nothing-yet table; clicking an email hands off to the lookup view via the same `?email=` deep-link mechanism the campaign/creative detail pages already use). Non-ecom clients render exactly as before — same component, branches on niche. Also made the **sidebar nav label** niche-aware (`nav-items.ts`'s new `nicheLabels` field) so it reads "Customer Buying Journey" to match the page header instead of just the page content changing under a sidebar that still says "Leads" — command palette search results were left showing the generic label (not client-scoped, so a single niche-aware label isn't well-defined there); a minor, acceptable inconsistency.
+
+**Verified:** both workspaces typecheck clean, 98/98 API tests pass, live-verified against real Supabase data (creative-name resolution, corrected buying-journey averages for BlackB4U/Nothing But Buckets/Starstruckofficiall) with temp scripts deleted after.
+
+---
+
 ## 2026-07-28 (later) — Item 8 wasn't actually fixed: creative_fatigue_signals still wrote CTR at the source
 
 **Reported:** the previous pass's item 8 fix only changed the UI headline (`creative-fatigue-client.tsx`) — `run.ts`'s INSERT still always wrote `recent_ctr`/`prior_ctr`/`decline_pct` from CTR regardless of which metric actually triggered. An ad flagged solely on ROAS could write a `decline_pct` reading as zero or negative — a false claim about why it was flagged at the data level, not just a display bug.

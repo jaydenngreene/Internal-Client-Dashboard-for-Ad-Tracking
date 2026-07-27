@@ -113,21 +113,12 @@ const EMPTY_CREATIVE: FacebookCreative = {
 // `message`/`description`/`link` under `object_story_spec.link_data` are how a
 // standard link ad actually carries headline/primary-text/description/destination —
 // preferred when present, falling back to the older fields otherwise.
-async function fetchCreativeInfo(accessToken: string, adId: string): Promise<FacebookCreative> {
-  const url =
-    `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
-    `?fields=${encodeURIComponent(
-      'creative{image_url,thumbnail_url,object_type,video_id,title,body,' +
-        'object_story_spec{link_data{link,message,name,description},' +
-        'video_data{title,message,call_to_action},photo_data{caption,call_to_action}}}'
-    )}` +
-    `&access_token=${encodeURIComponent(accessToken)}`
-  const res = await fetch(url)
-  const body = (await res.json()) as FacebookAdCreativeResponse
-  if (!res.ok || body.error || !body.creative) {
-    return EMPTY_CREATIVE
-  }
-  const { creative } = body
+// Shared by fetchCreativeInfo (Insights-side enrichment, run per unique ad_id
+// after a sync) and fetchAdObjectFallback (Step "ad-object-fallback" — recovers
+// a creative with zero Insights data at all) so both go through the same
+// video/link/photo field-precedence logic instead of drifting apart.
+async function parseCreative(accessToken: string, creative: FacebookAdCreativeResponse['creative']): Promise<FacebookCreative> {
+  if (!creative) return EMPTY_CREATIVE
   const linkData = creative.object_story_spec?.link_data
   const videoData = creative.object_story_spec?.video_data
   const photoData = creative.object_story_spec?.photo_data
@@ -146,6 +137,80 @@ async function fetchCreativeInfo(accessToken: string, adId: string): Promise<Fac
     return { thumbnailUrl: creative.thumbnail_url ?? creative.image_url, assetUrl: creative.image_url, assetType: 'image', ...copy }
   }
   return { thumbnailUrl: creative.thumbnail_url ?? null, assetUrl: null, assetType: null, ...copy }
+}
+
+async function fetchCreativeInfo(accessToken: string, adId: string): Promise<FacebookCreative> {
+  const url =
+    `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
+    `?fields=${encodeURIComponent(
+      'creative{image_url,thumbnail_url,object_type,video_id,title,body,' +
+        'object_story_spec{link_data{link,message,name,description},' +
+        'video_data{title,message,call_to_action},photo_data{caption,call_to_action}}}'
+    )}` +
+    `&access_token=${encodeURIComponent(accessToken)}`
+  const res = await fetch(url)
+  const body = (await res.json()) as FacebookAdCreativeResponse
+  if (!res.ok || body.error || !body.creative) {
+    return EMPTY_CREATIVE
+  }
+  return parseCreative(accessToken, body.creative)
+}
+
+interface FacebookAdObjectResponse {
+  name?: string
+  campaign?: { id?: string; name?: string }
+  adset?: { id?: string; name?: string }
+  creative?: FacebookAdCreativeResponse['creative']
+  error?: { message: string; type?: string; code?: number; error_subcode?: number }
+}
+
+export interface AdObjectFallback {
+  ad_name: string | null
+  campaign_id: string | null
+  campaign_name: string | null
+  adset_id: string | null
+  adset_name: string | null
+  creative: FacebookCreative
+}
+
+// docs/ISSUE_LOG.md "Proposed enhancements" (2026-07-26): the Insights API only
+// returns a row for an ad+date with actual measurable delivery, so a brand-new
+// ad (not yet synced) or a paused ad (Insights stopped reporting it) resolves to
+// nothing there even though the ad object itself still exists. This hits the ad
+// object endpoint directly instead — same fields fetchCreativeInfo already pulls
+// for enrichment, plus name/campaign/adset since there's no Insights row here to
+// supply those.
+//
+// Confirmed limit, tested live against a genuinely deleted ad_id
+// (120249034033030253, error_subcode 33 "does not exist"): this does NOT recover
+// a fully-deleted ad — that 400s here exactly like it does on Insights. Returns
+// null for that case (and any other failure) so the caller falls back to its
+// existing raw-ad_id display; only returns non-null for the "not yet synced" /
+// "paused and dropped from Insights" case this is actually meant to fix.
+export async function fetchAdObjectFallback(accessToken: string, adId: string): Promise<AdObjectFallback | null> {
+  const url =
+    `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
+    `?fields=${encodeURIComponent(
+      'name,campaign{id,name},adset{id,name},' +
+        'creative{image_url,thumbnail_url,object_type,video_id,title,body,' +
+        'object_story_spec{link_data{link,message,name,description},' +
+        'video_data{title,message,call_to_action},photo_data{caption,call_to_action}}}'
+    )}` +
+    `&access_token=${encodeURIComponent(accessToken)}`
+  const res = await fetch(url)
+  const body = (await res.json()) as FacebookAdObjectResponse
+  if (!res.ok || body.error) {
+    return null
+  }
+  const creative = await parseCreative(accessToken, body.creative)
+  return {
+    ad_name: body.name ?? null,
+    campaign_id: body.campaign?.id ?? null,
+    campaign_name: body.campaign?.name ?? null,
+    adset_id: body.adset?.id ?? null,
+    adset_name: body.adset?.name ?? null,
+    creative,
+  }
 }
 
 // Pulls ad-level spend/impressions/clicks for [since, until] (inclusive), one row per ad per day.

@@ -58,9 +58,25 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ## Proposed enhancements (validated technically sound, not yet built — pick up in a separate session)
 
-- **Fall back to a direct ad-object lookup when a creative has no `ad_costs` row.** User's idea (2026-07-26), validated before logging: Meta has two separate APIs — the **Insights API** (`fetchFacebookAdCosts` in `api/src/jobs/adCosts/facebook.ts`, only returns a row for an ad+date with actual measurable delivery) vs. the **Ad object endpoint** (`GET /{ad_id}?fields=name,creative{...}` — already used elsewhere in the same file as `fetchCreativeInfo`, just for creative asset enrichment on ads Insights *did* return, not as a fallback). When a purchase's `utm_content`/ad_id has no matching row in `ad_costs` (see `campaignDetail.ts`'s `resolveAdId`/creative-matching, and the equivalent in `reports.ts`), a live (or cached) call to the ad object endpoint could recover the real name/thumbnail even with zero Insights data — genuinely useful for a **new ad that hasn't synced yet** or a **paused ad Insights stopped reporting on**, which is a real, recurring pattern (see the `Abandoned_Cart_Retargeting_2` case above, which was in exactly this state before being manually synced).
-  - **Confirmed limit, tested live, not just theorized:** this will NOT help an ad that's been fully deleted from the account — tested directly against `120249034033030253` (the ad_id with zero Insights data from the entry above), and the object endpoint 400s with "does not exist" too (`error_subcode: 33`). Nothing recovers a truly deleted ad's creative info from any API. Don't re-promise this will fix 100% of unresolved creatives — it recovers the "not yet synced" case specifically, not the "gone" case.
-  - **Implementation notes for whoever builds this:** needs graceful handling of the 400/"does not exist" response (fall back to showing the raw ad_id, current behavior, don't throw). Worth caching the result (e.g. writing a `$0`-spend row into `ad_costs` with just the name/creative fields populated) so it's a one-time lookup per ad_id, not a live API call on every report page load.
+_(none currently — see "Fall back to a direct ad-object lookup" below, built 2026-07-27)_
+
+---
+
+## 2026-07-27 — Built: ad-object-fallback creative resolution
+
+Built the enhancement proposed in the previous session (see the git history of this file for the original write-up). Summary of what shipped:
+
+- `fetchAdObjectFallback(accessToken, adId)` in `api/src/jobs/adCosts/facebook.ts` — hits the ad object endpoint (`name,campaign{id,name},adset{id,name},creative{...}`) directly, sharing creative-parsing logic with the existing `fetchCreativeInfo` via an extracted `parseCreative()`.
+- `resolveAdObjectFallback(clientId, adId)` in new `api/src/lib/adObjectFallback.ts` — the caching/orchestration layer: skips anything not shaped like a Facebook numeric ad id, skips if `ad_costs` already has a row for that `(client_id, ad_id)` (cache hit), looks up the client's `facebook_ads` access token from `client_integrations`, calls the fetch above, and on success writes a `$0`-spend `ad_costs` row via the existing `upsertAdCosts` (so it's a one-time live lookup per ad_id — the routine Insights sync overwrites it with real spend once the ad actually starts reporting).
+- Wired into `campaignDetail.ts`'s creative-detail route (`assetRows.length === 0 && !adId` → try the URL's `creativeName` as a raw ad_id) and `reports.ts`'s `/reports/funnel?breakdown=creative` (any unmatched row — `cost === 0` — whose `name` is numeric-ad-id-shaped gets its `name`/`campaignName` upgraded in place).
+
+**Verified against the real Supabase DB and live Meta API** (temp test client cloned from Nothing But Buckets' real `facebook_ads` integration, cleaned up after):
+1. The confirmed-deleted ad (`120249034033030253`) → no row created, route returns the same graceful null-asset response as before. Limit holds as documented.
+2. A real ad with no `ad_costs` row for the test client (`120249405436560253`, `Abandoned_Cart_Retargeting_2`) → recovered real name, campaign name, thumbnail, and copy through both `campaignDetail.ts`'s creative-detail route and `reports.ts`'s creative breakdown (unmatched row's `name` upgraded from the raw id to the real ad name).
+3. Re-running against the same ad_id → cache hit, no duplicate row, no second live API call.
+4. A non-numeric name (e.g. a real UTM-tagged creative name) → skipped without any network call, confirming this doesn't add live-API latency to the common case.
+
+**Commit:** (see git log for the commit hash following this entry)
 
 ---
 

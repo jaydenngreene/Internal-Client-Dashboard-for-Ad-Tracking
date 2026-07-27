@@ -8,6 +8,7 @@ import { computeMmmScenario, ScenarioAdjustment } from '../lib/mmmScenario'
 import { computeBestPaths } from '../lib/bestPaths'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
+import { resolveAdObjectFallback } from '../lib/adObjectFallback'
 
 export function defaultRange(from?: string, to?: string): { from: string; to: string } {
   if (from && to) return { from, to }
@@ -1535,6 +1536,35 @@ export async function reportRoutes(app: FastifyInstance) {
         if (row.platform === null && source) row.platform = source
         row.revenue = parseFloat(r.revenue)
         row.sales = parseInt(r.sales, 10)
+      }
+
+      // ad-object-fallback (docs/ISSUE_LOG.md "Proposed enhancements"): an unmatched
+      // creative row with no ad_costs backing shows its raw utm_content as `name` —
+      // for a client using Meta's dynamic {{ad.id}} URL token, that raw value IS the
+      // ad's real id. Try recovering the real name/campaign for those specifically
+      // (skips anything not shaped like a Facebook ad id, and anything Meta itself
+      // reports as truly deleted) so the table shows a real ad name instead of a
+      // bare numeric id, same fix as the campaign-detail drill-down page.
+      if (breakdown === 'creative') {
+        const unmatched = Array.from(rows.values()).filter((r) => r.cost === 0 && /^\d{10,20}$/.test(r.name))
+        for (const row of unmatched) {
+          await resolveAdObjectFallback(clientId, row.name)
+        }
+        if (unmatched.length > 0) {
+          const { rows: recovered } = await db.query<{ ad_id: string; ad_name: string | null; campaign_name: string | null }>(
+            `SELECT ad_id, ad_name, campaign_name FROM ad_costs
+             WHERE client_id = $1 AND ad_id = ANY($2::text[]) AND ad_name IS NOT NULL`,
+            [clientId, unmatched.map((r) => r.name)]
+          )
+          const byAdId = new Map(recovered.map((r) => [r.ad_id, r]))
+          for (const row of unmatched) {
+            const found = byAdId.get(row.name)
+            if (found?.ad_name) {
+              row.name = found.ad_name
+              row.campaignName = found.campaign_name
+            }
+          }
+        }
       }
 
       // "matched" means real ad-platform spend backs this row — the anchor dimension

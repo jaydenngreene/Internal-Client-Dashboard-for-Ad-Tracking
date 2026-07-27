@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
+import { resolveAdObjectFallback } from '../lib/adObjectFallback'
 
 async function getMarginConfig(clientId: string): Promise<MarginConfig | null> {
   const { rows } = await db.query<MarginConfig>(
@@ -292,7 +293,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const campaignId = await resolveCampaignId(clientId, platform, campaignName)
       const adId = await resolveAdId(clientId, platform, campaignName, creativeName)
 
-      const { rows: assetRows } = await db.query<{
+      let { rows: assetRows } = await db.query<{
         creative_thumbnail_url: string | null
         creative_asset_url: string | null
         creative_type: string | null
@@ -314,6 +315,27 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
          LIMIT 1`,
         [clientId, platform, campaignName, creativeName]
       )
+
+      // ad-object-fallback (docs/ISSUE_LOG.md "Proposed enhancements"): no ad_costs
+      // row at all means resolveAdId above also came back null, which happens for
+      // an ad that's too new for Insights to have reported on yet, or paused and
+      // dropped from it — in both cases a client using Meta's dynamic {{ad.id}} URL
+      // token lands the raw ad_id directly in creativeName instead of a real name.
+      // Try it as one; resolveAdObjectFallback no-ops for anything that isn't
+      // Facebook-ad-id-shaped or that Meta itself 400s on (genuinely deleted ads).
+      if (assetRows.length === 0 && !adId) {
+        await resolveAdObjectFallback(clientId, creativeName)
+        const { rows: fallbackRows } = await db.query<(typeof assetRows)[number]>(
+          `SELECT creative_thumbnail_url, creative_asset_url, creative_type,
+                  creative_headline, creative_primary_text, creative_description, creative_landing_page_url
+           FROM ad_costs
+           WHERE client_id = $1 AND ad_id = $2
+           ORDER BY date DESC
+           LIMIT 1`,
+          [clientId, creativeName]
+        )
+        assetRows = fallbackRows
+      }
 
       const { rows: kpiRows } = await db.query<{ cost: string; impressions: string; clicks: string }>(
         `SELECT COALESCE(SUM(spend), 0) AS cost, COALESCE(SUM(impressions), 0) AS impressions, COALESCE(SUM(clicks), 0) AS clicks

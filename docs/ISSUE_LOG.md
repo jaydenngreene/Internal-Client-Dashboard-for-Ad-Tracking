@@ -6,6 +6,20 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-27 (follow-up) — Verified live: identify()/attribution is working post-deploy; found a real deploy-boundary gap
+
+Follow-up to the "(no utm_campaign)" entry below, same day. After shipping the `campaign_id`/`ad_id` fallback fix (commit `f37ee50`), dug into why the *daily* attributed-purchase rate for Nothing But Buckets had stayed flat around 30-37% for several days even across the 07-26 keepalive/Data-Sale fix — wanted to know if `/track/identify` itself was still broken.
+
+**Confirmed via Railway (browser-driven) + direct DB checks, not assumed:**
+- Railway's "Active" badge timestamp is **not** when the container starts serving traffic. Deployment `99aacbc1` showed "Active" at 11:48 AM EDT in the UI, but its own Deploy Logs show `Starting Container` / `Server listening` only at **11:51:28 AM EDT** — a ~3.5 minute gap. A real NBB sale at 11:50:42 AM (order `6082135064627`) landed 46 seconds *before* the new container was listening — initially misread as a live identify() failure, corrected once the container-start log line was found. This is a real, separate risk (single-replica Railway service, no explicit healthcheck configured in `railway.json` — a checkout completing during a deploy's boot window could plausibly drop `/track/identify` or the Shopify webhook) but wasn't the cause of the historical gap, since that gap predates today's deploys.
+- Once the container was confirmed stable (post 11:51:28), asked the user to place real orders and checked three live ones directly against the DB: `ingak305@gmail.com` (Bethune Cookman hat), `roddrew@mchsi.com` (NC Central hat), `kayjaylove@aol.com` (Norfolk State hat). **All three fully attributed**: identity created 1-2 seconds before the purchase record (the expected checkout_completed → /track/identify → order-webhook sequence), real session with `fbclid`/`utm_source`/`utm_campaign`, and `utm_content` (the ad's raw `ad_id`) matched a real row in `ad_costs` — resolving to actual creative names (`Abandoned_Cart_Retargeting_2`, `NCAT_UGC_Ad_2` under campaign `Nothing_But_Buckets_Cold_V1`), confirming creative-level attribution, not just campaign-level.
+
+**Conclusion:** no active identify()/pixel bug found on a clean (non-deploy-boundary) live test — 3/3 real orders attributed correctly end-to-end, including creative-level resolution. The likely explanation for the flat ~30-37%/day historical average is a mix of (a) whatever was broken before the 07-26 fix, averaged into the same daily bucket, and (b) deploy-boundary gaps like the one caught here — not an ongoing client-side failure. Set up a session-local recurring check (cron job `cc40b016`, every 2 hours, session-only — dies if this session ends) to keep tracking the attributed rate for orders since the 11:51:28 deploy and flag any real ad-click purchase that still lands unattributed, which would indicate this conclusion is wrong.
+
+**No code changed in this follow-up** — recorded so a future session doesn't re-chase "identify() is broken" from the daily aggregate alone without checking whether a deploy boundary or the pre-fix period is skewing it.
+
+---
+
 ## 2026-07-26 — Two catalog ads' spend "missing" from Kado — investigated, not a bug
 
 **Reported:** two Advantage+ catalog ads (`Abandoned_Cart_Retargeting`, `Abandoned_Cart_Retargeting_2`) confirmed in Ads Manager to have real spend and purchases, but purchases attributed to their `ad_id` resolved to no creative name in Kado.

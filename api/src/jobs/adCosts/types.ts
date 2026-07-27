@@ -27,4 +27,8 @@ export interface AdCostRow {
   video_p50_watched?: number | null
   video_p75_watched?: number | null
   video_p100_watched?: number | null
+  // Impressions/reach, as Meta's Insights API reports it directly (Phase 1
+  // creative-fatigue guardrails, 2026-07-27) — same Facebook-only-for-now
+  // disclosure as the fields above.
+  frequency?: number | null
 }

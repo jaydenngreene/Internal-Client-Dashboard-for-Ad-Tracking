@@ -31,7 +31,35 @@ const PRIORITY_CHIP_CLASS: Record<Insight["priority"], string> = {
   low: "bg-status-good/15 text-status-good",
 };
 
+const CONFIDENCE_VARIANT: Record<"low" | "medium" | "high", "outline" | "secondary" | "destructive"> = {
+  high: "secondary",
+  medium: "outline",
+  low: "outline",
+};
+
+// Phase 1 guardrails (2026-07-27): a gate-failed entity never reaches the
+// model at all — this renders that state distinctly from a real
+// recommendation (no priority chip, since there's no recommendation to
+// prioritize) instead of forcing it into the same card shape.
+function InsufficientDataCard({ insight }: { insight: Insight }) {
+  return (
+    <Card className="border-dashed px-4 py-3">
+      <CardContent className="flex items-start gap-3 px-0">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Lightbulb className="size-3.5" strokeWidth={2.25} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-sm font-medium">Insufficient data</p>
+          <p className="text-sm text-muted-foreground">{insight.detail}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function InsightCard({ insight }: { insight: Insight }) {
+  if (insight.insufficientData) return <InsufficientDataCard insight={insight} />;
+
   const Icon = PRIORITY_ICON[insight.priority];
   return (
     <Card className="px-4 py-3">
@@ -46,13 +74,23 @@ function InsightCard({ insight }: { insight: Insight }) {
             <p className="text-sm font-medium">
               <BoldText text={insight.title} />
             </p>
-            <Badge variant={PRIORITY_VARIANT[insight.priority]} className="shrink-0">
-              {insight.priority}
-            </Badge>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {insight.confidence && (
+                <Badge variant={CONFIDENCE_VARIANT[insight.confidence]} className="text-[10px]">
+                  {insight.confidence} confidence
+                </Badge>
+              )}
+              <Badge variant={PRIORITY_VARIANT[insight.priority]} className="shrink-0">
+                {insight.priority}
+              </Badge>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             <BoldText text={insight.detail} />
           </p>
+          {typeof insight.daysLive === "number" && (
+            <p className="text-[10px] text-muted-foreground">{insight.daysLive} days live</p>
+          )}
         </div>
       </CardContent>
     </Card>

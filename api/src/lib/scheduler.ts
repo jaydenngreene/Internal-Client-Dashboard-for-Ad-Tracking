@@ -9,6 +9,7 @@ import { retryFailedWebhookDeliveries } from '../lib/outboundWebhooks'
 import { runWarehouseExports } from '../lib/bigqueryExport'
 import { runKlaviyoSync } from '../jobs/klaviyoSync/run'
 import { detectCreativeFatigue } from '../jobs/creativeFatigue/run'
+import { refreshCostPerPurchase } from '../jobs/costPerPurchase/run'
 import { detectTrackingHealthIssues } from '../jobs/trackingHealth/run'
 import { detectReallocationOpportunities } from '../lib/budgetReallocation'
 import { sendWeeklyReports, sendMonthlyReports } from '../jobs/scheduledReports/run'
@@ -84,6 +85,14 @@ export function startScheduledJobs(): void {
   cron.schedule('0 7 * * *', () => {
     console.log('[scheduler] running anomaly detection')
     runAndRecord('anomaly_detection', detectAnomalies)
+  })
+
+  // Runs before the 7am recommendation-generating jobs so their gate checks
+  // (recommendationGate.ts) read a same-day-fresh per-client cost-per-purchase
+  // figure, never a stale one from yesterday's run.
+  cron.schedule('50 6 * * *', () => {
+    console.log('[scheduler] refreshing cost-per-purchase (recommendation gate)')
+    runAndRecord('cost_per_purchase_refresh', refreshCostPerPurchase)
   })
 
   // Same 7am slot as anomaly detection — both are "daily creative/campaign health

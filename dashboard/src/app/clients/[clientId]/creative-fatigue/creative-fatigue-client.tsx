@@ -16,6 +16,44 @@ const STATUS_OPTIONS: { value: FatigueStatus; label: string }[] = [
   { value: "dismissed", label: "Dismissed" },
 ];
 
+const CONFIDENCE_VARIANT: Record<"low" | "medium" | "high", "outline" | "secondary"> = {
+  high: "secondary",
+  medium: "outline",
+  low: "outline",
+};
+
+const METRIC_LABEL: Record<string, string> = {
+  roas: "ROAS",
+  ctr: "CTR",
+  cpa: "CPA",
+  cpm: "CPM",
+  frequency: "Frequency",
+};
+
+// Phase 1 guardrails (2026-07-27) — every signal now carries the full
+// roas/ctr/cpa/cpm/frequency breakdown (short-window and long-window, each
+// flagged whether it actually triggered), not just the original CTR-only
+// decline_pct. Only the metrics that actually triggered the sustained
+// day-and-week trend are called out here — the rest were checked but didn't
+// cross their threshold.
+function TriggeredMetrics({ signal }: { signal: CreativeFatigueSignal }) {
+  if (!signal.metrics_triggered) return null;
+  const triggered = Object.entries(signal.metrics_triggered).filter(([, m]) => m.triggered);
+  if (triggered.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      {triggered.map(([metric, m]) => (
+        <p key={metric} className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/90">{METRIC_LABEL[metric] ?? metric}</span>: {m.recentShort?.toFixed(2)} over the
+          last few days vs. {m.priorShort?.toFixed(2)} before that (also down over the last week: {m.recentLong?.toFixed(2)} vs.{" "}
+          {m.priorLong?.toFixed(2)}).
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function SignalCard({ signal, clientId }: { signal: CreativeFatigueSignal; clientId: string }) {
   const queryClient = useQueryClient();
   const dismiss = useMutation({
@@ -33,15 +71,34 @@ function SignalCard({ signal, clientId }: { signal: CreativeFatigueSignal; clien
               {signal.campaign_name ?? "No campaign"} &middot; {signal.platform}
             </p>
           </div>
-          <Badge variant="outline" className="text-[10px]">
-            {new Date(signal.created_at).toLocaleDateString()}
-          </Badge>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {signal.confidence && (
+              <Badge variant={CONFIDENCE_VARIANT[signal.confidence]} className="text-[10px]">
+                {signal.confidence} confidence
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-[10px]">
+              {new Date(signal.created_at).toLocaleDateString()}
+            </Badge>
+          </div>
         </div>
 
         <p className="text-sm text-foreground/90">
           CTR down {formatPercent(signal.decline_pct)}: {formatPercent(signal.recent_ctr)} over the last 3 days vs.{" "}
           {formatPercent(signal.prior_ctr)} the 7 days before that. Consider refreshing this creative.
         </p>
+
+        <TriggeredMetrics signal={signal} />
+
+        {signal.days_live !== null && (
+          <p className="text-[10px] text-muted-foreground">
+            {signal.days_live} days live &middot; passed the data-sufficiency gate on{" "}
+            {signal.gate_opened_by === "spend" ? "spend" : "days live"}
+            {signal.spend !== null && signal.spend_threshold !== null && (
+              <> (${signal.spend.toFixed(2)} spent vs. ${signal.spend_threshold.toFixed(2)} threshold)</>
+            )}
+          </p>
+        )}
 
         {signal.status === "active" && (
           <div>
@@ -70,8 +127,10 @@ export function CreativeFatigueClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Creative Fatigue</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Creatives whose CTR has declined 30%+ over the last 3 days vs. the 7 days before that. A trend signal,
-            distinct from Pause Candidates' ROAS-threshold alerts. Advisory only, nothing is paused.
+            Creatives with a sustained decline in ROAS, CTR, CPA, CPM, or frequency — confirmed over both the last
+            few days and the last couple weeks, not a one-day dip. Only shown once a creative has spent or run long
+            enough to earn a verdict. A trend signal, distinct from Pause Candidates&apos; ROAS-threshold alerts.
+            Advisory only, nothing is paused.
           </p>
         </div>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as FatigueStatus)} options={STATUS_OPTIONS} />

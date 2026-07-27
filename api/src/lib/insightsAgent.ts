@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db'
+import { getCostContext, evaluateGate, checkGate, getDaysLive, GateResult, EntityType } from './recommendationGate'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const MODEL = 'claude-opus-4-8'
@@ -8,6 +9,13 @@ export interface Insight {
   title: string
   detail: string
   priority: 'high' | 'medium' | 'low'
+  // Phase 1 guardrails (2026-07-27) — set server-side from the gate, never
+  // trusted from the model's own output. insufficientData=true means Claude was
+  // never called at all for this scope; the gate failed and this is the only
+  // "insight" returned, in place of a generated recommendation.
+  confidence?: 'low' | 'medium' | 'high' | null
+  daysLive?: number
+  insufficientData?: boolean
 }
 
 export type InsightScope =
@@ -15,6 +23,30 @@ export type InsightScope =
   | { type: 'platform'; platform: string }
   | { type: 'campaign'; platform: string; campaignName: string }
   | { type: 'creative'; platform: string; campaignName: string; creativeName: string }
+
+function daysLiveFromFirstDate(firstDate: string | null): number {
+  if (!firstDate) return 0
+  return Math.max(Math.floor((Date.now() - new Date(firstDate).getTime()) / 86400000), 0)
+}
+
+// Attaches the Phase 1 gate verdict to one row of a topCampaignsBySpend/
+// topCreativesBySpend list — used at 'client'/'platform' scope, where the
+// prompt covers many entities at once and must be told which ones have
+// actually earned a verdict rather than gating (or not gating) the whole
+// account-level summary as one unit. Takes an already-fetched CostContext
+// (see recommendationGate.ts) so annotating a whole list only costs one query,
+// not one gate check's worth of queries per row.
+function annotateGate(
+  ctx: Awaited<ReturnType<typeof getCostContext>>,
+  entityType: EntityType,
+  firstDate: string | null,
+  spend: number,
+  conversionCount: number | null
+): { daysLive: number; dataSufficient: boolean; confidence: GateResult['confidence']; gateReason: string } {
+  const daysLive = daysLiveFromFirstDate(firstDate)
+  const gate = evaluateGate(ctx, entityType, daysLive, spend, conversionCount)
+  return { daysLive, dataSufficient: gate.passed, confidence: gate.confidence, gateReason: gate.reason }
+}
 
 // Pulls the same shape of data the existing report endpoints already compute, but as
 // plain self-contained queries here rather than reusing reports.ts's route-local
@@ -48,11 +80,13 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
     cost: string
     revenue: string
     sales: string
+    first_date: string | null
   }>(
     `SELECT COALESCE(spend.campaign_name, rev.utm_campaign) AS campaign_name,
-            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales
+            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales,
+            spend.first_date
      FROM (
-       SELECT campaign_name, campaign_id, SUM(spend) AS cost FROM ad_costs
+       SELECT campaign_name, campaign_id, SUM(spend) AS cost, MIN(date) AS first_date FROM ad_costs
        WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY campaign_name, campaign_id
      ) spend
      FULL OUTER JOIN (
@@ -72,11 +106,13 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
     ad_name: string | null
     cost: string
     revenue: string
+    first_date: string | null
   }>(
     `SELECT COALESCE(spend.ad_name, rev.utm_content) AS ad_name,
-            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue
+            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue,
+            spend.first_date
      FROM (
-       SELECT ad_name, ad_id, SUM(spend) AS cost FROM ad_costs
+       SELECT ad_name, ad_id, SUM(spend) AS cost, MIN(date) AS first_date FROM ad_costs
        WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days' GROUP BY ad_name, ad_id
      ) spend
      FULL OUTER JOIN (
@@ -99,6 +135,8 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
     [clientId]
   )
 
+  const costCtx = await getCostContext(clientId)
+
   const result: Record<string, unknown> = {
     clientName: clientInfo?.name,
     niche: clientInfo?.niche,
@@ -110,15 +148,26 @@ async function gatherLast30DaysData(clientId: string): Promise<Record<string, un
       leads: parseInt(overview.leads, 10),
       sales: parseInt(overview.sales, 10),
     },
+    // dataSufficient/confidence/daysLive per row (Phase 1 guardrails) — the
+    // prompt below is instructed to only recommend action on rows marked
+    // dataSufficient: true, and to echo daysLive/confidence back verbatim
+    // rather than invent its own. Account-level totals above aren't gated;
+    // there's no "days live" for an entire account.
     topCampaignsBySpend: campaignRows.map((r) => ({
       name: r.campaign_name ?? '(untagged)',
       cost: parseFloat(r.cost),
       revenue: parseFloat(r.revenue),
       sales: parseInt(r.sales, 10),
+      ...annotateGate(costCtx, 'campaign', r.first_date, parseFloat(r.cost), parseInt(r.sales, 10)),
     })),
     topCreativesBySpend: creativeRows
       .filter((r) => r.ad_name)
-      .map((r) => ({ name: r.ad_name, cost: parseFloat(r.cost), revenue: parseFloat(r.revenue) })),
+      .map((r) => ({
+        name: r.ad_name,
+        cost: parseFloat(r.cost),
+        revenue: parseFloat(r.revenue),
+        ...annotateGate(costCtx, 'creative', r.first_date, parseFloat(r.cost), null),
+      })),
     refundRatePercent: bofRows[0]?.refund_rate !== null ? parseFloat(bofRows[0].refund_rate!) : null,
     avgDaysToConvert: bofRows[0]?.avg_days !== null ? parseFloat(bofRows[0].avg_days!) : null,
   }
@@ -176,11 +225,18 @@ async function gatherPlatformData(clientId: string, platform: string): Promise<R
        AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))`,
     [clientId, platform]
   )
-  const { rows: campaignRows } = await db.query<{ campaign_name: string | null; cost: string; revenue: string; sales: string }>(
+  const { rows: campaignRows } = await db.query<{
+    campaign_name: string | null
+    cost: string
+    revenue: string
+    sales: string
+    first_date: string | null
+  }>(
     `SELECT COALESCE(spend.campaign_name, rev.utm_campaign) AS campaign_name,
-            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales
+            COALESCE(spend.cost, 0) AS cost, COALESCE(rev.revenue, 0) AS revenue, COALESCE(rev.sales, 0) AS sales,
+            spend.first_date
      FROM (
-       SELECT campaign_name, campaign_id, SUM(spend) AS cost FROM ad_costs
+       SELECT campaign_name, campaign_id, SUM(spend) AS cost, MIN(date) AS first_date FROM ad_costs
        WHERE client_id = $1 AND date >= NOW() - INTERVAL '30 days'
          AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($2, '_ads$', ''))
        GROUP BY campaign_name, campaign_id
@@ -199,6 +255,7 @@ async function gatherPlatformData(clientId: string, platform: string): Promise<R
 
   const cost = parseFloat(kpiRows[0].cost)
   const revenue = parseFloat(revRows[0].revenue)
+  const platformCostCtx = await getCostContext(clientId)
 
   return {
     clientName: clientRows[0]?.name,
@@ -218,6 +275,7 @@ async function gatherPlatformData(clientId: string, platform: string): Promise<R
       cost: parseFloat(r.cost),
       revenue: parseFloat(r.revenue),
       sales: parseInt(r.sales, 10),
+      ...annotateGate(platformCostCtx, 'campaign', r.first_date, parseFloat(r.cost), parseInt(r.sales, 10)),
     })),
   }
 }
@@ -417,13 +475,25 @@ function promptForScope(scope: InsightScope): string {
         : scope.type === 'platform'
           ? 'one specific ad platform (do not compare it to other platforms not shown here)'
           : "a client's whole account"
+  // Phase 1 guardrails (2026-07-27): at client/platform scope, topCampaignsBySpend
+  // and topCreativesBySpend rows each carry dataSufficient/confidence/daysLive,
+  // computed server-side by the Phase 1 gate (recommendationGate.ts) — never
+  // trust the model to decide data-sufficiency itself. At campaign/creative
+  // scope the WHOLE call is gated before this prompt is even built (see
+  // generateInsights) — reaching this prompt means that single entity already
+  // cleared the gate, and its dataSufficient/confidence/daysLive fields are
+  // included in the data below for the model to cite, not to re-derive.
   return `You are an ad-attribution analyst reviewing ${subject}'s last 30 days of data. Based ONLY on the JSON data given below (never invent numbers not present here), produce 3-6 specific, actionable recommendations. Each should name a real number from the data, not generic advice.
+
+Some rows in the data below carry a "dataSufficient" flag. If dataSufficient is false for a campaign or creative, DO NOT produce a recommendation about it individually — it hasn't been live long enough or spent enough to earn a verdict yet. You may still comment on whole-account or whole-platform totals regardless. For every recommendation you DO produce about a specific campaign or creative, copy that row's own "confidence" and "daysLive" values into your output exactly as given — do not invent or recompute them.
 
 DATA:
 {{DATA}}
 
 Respond with ONLY a JSON array, no other text, in this exact shape:
-[{"title": "short headline", "detail": "1-2 sentence explanation citing the specific number, with the single most important number or phrase wrapped in **double asterisks**", "priority": "high" | "medium" | "low"}]`
+[{"title": "short headline", "detail": "1-2 sentence explanation citing the specific number, with the single most important number or phrase wrapped in **double asterisks**", "priority": "high" | "medium" | "low", "confidence": "high" | "medium" | "low" | null, "daysLive": number | null}]
+
+Set "confidence" and "daysLive" to null only for a whole-account/whole-platform recommendation that isn't about one specific campaign or creative.`
 }
 
 export async function generateInsights(clientId: string, scope: InsightScope = { type: 'client' }): Promise<Insight[]> {
@@ -435,6 +505,38 @@ export async function generateInsights(clientId: string, scope: InsightScope = {
         : scope.type === 'platform'
           ? await gatherPlatformData(clientId, scope.platform)
           : await gatherLast30DaysData(clientId)
+
+  // Every recommendation-generating call this file makes is gated exactly
+  // once, in exactly one place: here. Campaign/creative scope gates the single
+  // entity before Claude is ever called (skipping the call entirely on
+  // failure — no wasted API spend on an entity that hasn't earned a verdict).
+  // Client/platform scope can't gate "the whole account" the same way (there's
+  // no days-live for an account), so those two scopes instead annotate each
+  // individual campaign/creative row with its own gate verdict (see
+  // gatherLast30DaysData/gatherPlatformData) and rely on the prompt below to
+  // respect it.
+  if (scope.type === 'campaign' || scope.type === 'creative') {
+    const entityType: EntityType = scope.type === 'creative' ? 'creative' : 'campaign'
+    const daysLive =
+      scope.type === 'creative'
+        ? await getDaysLive(clientId, scope.platform, scope.campaignName, scope.creativeName)
+        : await getDaysLive(clientId, scope.platform, scope.campaignName)
+    const last30Days = data.last30Days as { cost: number; sales: number }
+    const gate = await checkGate(clientId, entityType, daysLive, last30Days.cost, last30Days.sales)
+    if (!gate.passed) {
+      return [
+        {
+          title: 'Insufficient data',
+          detail: gate.reason,
+          priority: 'low',
+          confidence: null,
+          daysLive: gate.daysLive,
+          insufficientData: true,
+        },
+      ]
+    }
+  }
+
   const prompt = promptForScope(scope).replace('{{DATA}}', JSON.stringify(data, null, 2))
 
   const response = await client.messages.create({

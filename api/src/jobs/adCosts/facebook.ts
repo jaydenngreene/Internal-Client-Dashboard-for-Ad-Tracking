@@ -17,6 +17,9 @@ interface FacebookInsightRow {
   spend?: string
   impressions?: string
   clicks?: string
+  // Meta computes this directly (impressions/reach) per requested row — Phase 1
+  // creative-fatigue guardrails (2026-07-27) watch it for audience over-exposure.
+  frequency?: string
   date_start: string
   // Video engagement (Step 42) — only present on rows for video creatives; each is
   // an array (usually one entry) rather than a scalar, same shape as Facebook's
@@ -228,7 +231,7 @@ export async function fetchFacebookAdCosts(
     `?level=ad&time_increment=1` +
     `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
     `&fields=${encodeURIComponent(
-      'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,clicks,' +
+      'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,clicks,frequency,' +
         'video_play_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions'
     )}` +
     `&limit=500` +
@@ -254,6 +257,7 @@ export async function fetchFacebookAdCosts(
         spend: parseFloat(r.spend ?? '0'),
         impressions: parseInt(r.impressions ?? '0', 10),
         clicks: parseInt(r.clicks ?? '0', 10),
+        frequency: r.frequency ? parseFloat(r.frequency) : null,
         video_plays: sumActionValues(r.video_play_actions),
         video_p25_watched: sumActionValues(r.video_p25_watched_actions),
         video_p50_watched: sumActionValues(r.video_p50_watched_actions),

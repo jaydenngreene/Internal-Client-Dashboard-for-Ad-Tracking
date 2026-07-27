@@ -574,6 +574,14 @@ export function getEmailSmsReport(clientId: string): Promise<EmailSmsReport> {
 // confirm-and-pause action like pause candidates have).
 export type FatigueStatus = "active" | "dismissed";
 
+export interface FatigueMetricTrend {
+  recentShort: number | null;
+  priorShort: number | null;
+  recentLong: number | null;
+  priorLong: number | null;
+  triggered: boolean;
+}
+
 export interface CreativeFatigueSignal {
   id: string;
   client_id: string;
@@ -587,6 +595,15 @@ export interface CreativeFatigueSignal {
   status: FatigueStatus;
   created_at: string;
   resolved_at: string | null;
+  // Phase 1 guardrails (2026-07-27) — the gate this signal cleared, and the
+  // full multi-metric/multi-window breakdown that triggered it.
+  days_live: number | null;
+  confidence: "low" | "medium" | "high" | null;
+  gate_opened_by: "days_live" | "spend" | null;
+  cost_per_purchase_basis: number | null;
+  spend_threshold: number | null;
+  spend: number | null;
+  metrics_triggered: Record<"roas" | "ctr" | "cpa" | "cpm" | "frequency", FatigueMetricTrend> | null;
 }
 
 export function getCreativeFatigueSignals(
@@ -1204,6 +1221,13 @@ export interface Insight {
   title: string;
   detail: string;
   priority: "high" | "medium" | "low";
+  // Phase 1 recommendation guardrails (2026-07-27) — set server-side by the
+  // gate (api/src/lib/recommendationGate.ts), never by the model itself.
+  confidence?: "low" | "medium" | "high" | null;
+  daysLive?: number;
+  // true means the gate failed and generation was skipped entirely — this is
+  // the only item in the array, standing in for a real recommendation.
+  insufficientData?: boolean;
 }
 
 export interface ClientInsights {

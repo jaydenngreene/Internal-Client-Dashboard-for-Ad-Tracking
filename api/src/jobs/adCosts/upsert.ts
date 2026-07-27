@@ -30,8 +30,8 @@ export async function upsertAdCosts(clientId: string, platform: string, rows: Ad
          (client_id, platform, campaign_id, campaign_name, adset_id, adset_name, ad_id, ad_name, date, spend, impressions, clicks,
           creative_thumbnail_url, creative_asset_url, creative_type,
           creative_headline, creative_primary_text, creative_description, creative_landing_page_url,
-          video_plays, video_p25_watched, video_p50_watched, video_p75_watched, video_p100_watched)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          video_plays, video_p25_watched, video_p50_watched, video_p75_watched, video_p100_watched, frequency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
        ON CONFLICT (client_id, platform, ad_id, date)
        DO UPDATE SET
          campaign_id               = EXCLUDED.campaign_id,
@@ -53,7 +53,8 @@ export async function upsertAdCosts(clientId: string, platform: string, rows: Ad
          video_p25_watched         = EXCLUDED.video_p25_watched,
          video_p50_watched         = EXCLUDED.video_p50_watched,
          video_p75_watched         = EXCLUDED.video_p75_watched,
-         video_p100_watched        = EXCLUDED.video_p100_watched`,
+         video_p100_watched        = EXCLUDED.video_p100_watched,
+         frequency                 = EXCLUDED.frequency`,
       [
         clientId,
         platform,
@@ -79,6 +80,7 @@ export async function upsertAdCosts(clientId: string, platform: string, rows: Ad
         row.video_p50_watched ?? null,
         row.video_p75_watched ?? null,
         row.video_p100_watched ?? null,
+        row.frequency ?? null,
       ]
     )
   }

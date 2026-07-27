@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-27 — Built: Phase 1 recommendation guardrails (Gojo gate + Kado creative-fatigue rebuild)
+
+**Ask:** the AI/native recommendation surfaces were making calls on campaigns/creatives too new or too under-spent to have earned one. Build a shared data-sufficiency gate, apply it to both Gojo (the LLM insights engine, `api/src/lib/insightsAgent.ts`) and Kado's native creative-fatigue detector (`api/src/jobs/creativeFatigue/run.ts`) — confirmed as two separate, explicitly-named targets, not the same thing.
+
+**The gate** (`api/src/lib/recommendationGate.ts` + `api/src/config/recommendationGuardrails.ts`): passes if `daysLive >= 7 (creative) / 14 (campaign)` **OR** `spend >= 3× that client's own trailing-30-day cost-per-purchase`. Either side alone opens it. Cost-per-purchase is never a flat number — computed per client, per Phase 1's explicit requirement — by a new daily job (`api/src/jobs/costPerPurchase/run.ts`, new `client_cost_per_purchase` table) that resolves "a purchase" per client rather than by a fixed niche switch: real purchases tried first for every niche, falling back to SaaS trial-conversions/qualified calls only when a client has zero purchases in the window, and to a global $50 default (config, flagged `TODO(user)` — placeholder pending the real number) below 5 conversions of any kind. "Days live" is a proxy (`MIN(date)` in `ad_costs` for that entity) — this app has never captured the platform's real ad-creation date.
+
+**Applied to Gojo:** single campaign/creative scope gates before Claude is ever called — a gate failure returns a canned `"insufficient data — X days live, $Y spent, needs $Z..."` object and skips the API call entirely (real cost savings, not just correctness). Whole-account/platform scope can't gate "the account" the same way, so instead every campaign/creative row fed into the prompt now carries `dataSufficient`/`confidence`/`daysLive`, and the prompt is instructed not to recommend action on any row marked insufficient, and to copy the given confidence/daysLive verbatim rather than invent them.
+
+**Applied to Kado (creative fatigue):** full rebuild, not just gated. Previously: CTR-only, one 3-day-vs-7-day comparison, gated only by a flat prior-impressions floor. Now: gate must pass first, then checks ROAS/CTR/CPA/CPM/frequency (frequency is new — added to the Facebook Insights API pull and a new `ad_costs.frequency` column; Facebook-only for now) across **two** window pairs (3d-vs-7d short, 7d-vs-14d long) — a metric only counts as fatigue if it crosses its threshold (30%+ decline for ROAS/CTR, 30%+ increase for CPA/CPM/frequency) in **both** pairs, not a single-day blip. No baseline history in the longer window → skipped, not flagged.
+
+**Verified against the real Supabase DB** (5 live clients — BlackB4U, Nothing But Buckets, Report Schedule Test Client, Starstruckofficiall, Universal Flooring Solutions; temp verification script deleted after): all 4 gate cases (new+low-spend/new+high-spend/old+low-spend/old+high-spend) behaved correctly; BlackB4U ($30.11 CPP → $90.33 gate) vs. Nothing But Buckets ($5.06 CPP → $15.18 gate) confirmed genuinely per-client, not shared; two near-zero-purchase clients fell back to the $50 default cleanly, no divide-by-zero; cost-per-purchase is structurally independent of the dashboard's date-range picker (the job takes no range argument). Both workspaces (`api`, `dashboard`) typecheck clean.
+
+**Not yet committed** — sitting as working-tree changes pending review; Phase 2 (Leads → Customer Buying Journey tab) is queued to follow in the same pass.
+
+---
+
 ## 2026-07-27 (follow-up) — Verified live: identify()/attribution is working post-deploy; found a real deploy-boundary gap
 
 Follow-up to the "(no utm_campaign)" entry below, same day. After shipping the `campaign_id`/`ad_id` fallback fix (commit `f37ee50`), dug into why the *daily* attributed-purchase rate for Nothing But Buckets had stayed flat around 30-37% for several days even across the 07-26 keepalive/Data-Sale fix — wanted to know if `/track/identify` itself was still broken.

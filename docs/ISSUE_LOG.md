@@ -6,6 +6,20 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-28 (later) — Item 8 wasn't actually fixed: creative_fatigue_signals still wrote CTR at the source
+
+**Reported:** the previous pass's item 8 fix only changed the UI headline (`creative-fatigue-client.tsx`) — `run.ts`'s INSERT still always wrote `recent_ctr`/`prior_ctr`/`decline_pct` from CTR regardless of which metric actually triggered. An ad flagged solely on ROAS could write a `decline_pct` reading as zero or negative — a false claim about why it was flagged at the data level, not just a display bug.
+
+**Confirmed** by re-reading `run.ts:284-286` — exactly as described.
+
+**Fix:** new `primary_metric` column (migration `056_fatigue_primary_metric.sql`). `choosePrimaryMetric()` picks whichever of ROAS/CPA/CTR actually triggered (priority order ROAS > CPA > CTR when more than one does), and `worsePercent()` computes a direction-aware "how much worse" percentage (handles both decline-type metrics like ROAS and increase-type metrics like CPA correctly) — verified against synthetic cases (ROAS 3.0→2.0 = 33.33%, CPA $50→$65 = 30.00%) since no live ad currently triggers a real flag to exercise the INSERT path end-to-end. The legacy `recent_ctr`/`prior_ctr`/`decline_pct` columns now hold that chosen metric's real values, with `primary_metric` recording which one they are — old rows (before this fix) have `primary_metric: null` and are genuinely CTR, so the frontend's fallback path was updated to check `primary_metric` before formatting rather than assuming CTR unconditionally.
+
+**Also cleaned up:** a stale, gitignored `api/dist/` build artifact (not tracked, not mine, safe to remove) was causing `npm test` to double-discover compiled test files and report spurious failures — removed, confirmed the 98 real tests were passing the whole time.
+
+**Verified:** both workspaces typecheck clean, migration applied, `npm test` 98/98 passing, `detectCreativeFatigue()` runs cleanly against real data (0 new flags currently — nothing live crosses the tightened thresholds from the previous pass).
+
+---
+
 ## 2026-07-28 — Review pass on Phase 1 guardrails: 10 fixes, 1 industry-benchmark build, 1 unrelated crash bug found
 
 A thorough review of the Phase 1 guardrail work (previous entry below) surfaced 10 concrete issues, all confirmed against the real code/DB before fixing, not taken on faith:

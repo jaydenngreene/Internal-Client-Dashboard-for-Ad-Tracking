@@ -136,6 +136,34 @@ function isSustainedTrend(m: MetricTrend): boolean {
   return isBadMove(m.recentShort, m.priorShort, m.direction, threshold) && isBadMove(m.recentLong, m.priorLong, m.direction, threshold)
 }
 
+// "How much worse" as a positive percentage regardless of the metric's own
+// direction convention (a decline-type metric like ROAS moving down, or an
+// increase-type metric like CPA moving up) — only called on a metric that
+// already passed isSustainedTrend, so recentShort/priorShort are guaranteed
+// non-null and priorShort > 0.
+function worsePercent(m: MetricTrend): number {
+  const recent = m.recentShort as number
+  const prior = m.priorShort as number
+  return m.direction === 'decline' ? ((prior - recent) / prior) * 100 : ((recent - prior) / prior) * 100
+}
+
+// Review fix (2026-07-28, item 8, corrected): picks ONE metric whose actual
+// values get written into the legacy recent_ctr/prior_ctr/decline_pct columns
+// (see primary_metric alongside them) — previously those columns were always
+// CTR regardless of what triggered the flag, so an ad flagged solely on ROAS
+// wrote a decline_pct that could read as zero or negative: a false claim
+// about why it was flagged, not just a UI display bug. Priority order matches
+// PRIMARY_TRIGGER_METRICS (ROAS > CPA > CTR) rather than trends' array order,
+// since ROAS is the most business-relevant of the three when more than one
+// triggers at once.
+function choosePrimaryMetric(triggeredPrimary: MetricTrend[]): MetricTrend {
+  for (const name of PRIMARY_TRIGGER_METRICS) {
+    const match = triggeredPrimary.find((t) => t.metric === name)
+    if (match) return match
+  }
+  throw new Error('choosePrimaryMetric called with no triggered primary metric') // triggeredPrimary.length === 0 is checked by the caller before this can run
+}
+
 function meetsConversionFloor(w: AdWindow): boolean {
   return w.sales >= MIN_SALES_FOR_CONVERSION_METRICS
 }
@@ -244,6 +272,7 @@ export async function detectCreativeFatigue(): Promise<number> {
     const triggeredPrimary = trends.filter((t) => PRIMARY_TRIGGER_METRICS.includes(t.metric) && isSustainedTrend(t))
     if (triggeredPrimary.length === 0) continue
     const allTriggered = trends.filter(isSustainedTrend)
+    const primaryMetric = choosePrimaryMetric(triggeredPrimary)
 
     const firstSeen = daysLiveMap.get(key) ?? 0
     const daysLive = firstSeen
@@ -271,9 +300,9 @@ export async function detectCreativeFatigue(): Promise<number> {
 
     const { rowCount } = await db.query(
       `INSERT INTO creative_fatigue_signals
-         (client_id, platform, ad_id, ad_name, campaign_name, recent_ctr, prior_ctr, decline_pct,
+         (client_id, platform, ad_id, ad_name, campaign_name, recent_ctr, prior_ctr, decline_pct, primary_metric,
           days_live, confidence, gate_opened_by, cost_per_purchase_basis, spend_threshold, spend, metrics_triggered)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        ON CONFLICT (client_id, platform, ad_id) WHERE status = 'active' DO NOTHING`,
       [
         rs.client_id,
@@ -281,9 +310,13 @@ export async function detectCreativeFatigue(): Promise<number> {
         rs.ad_id,
         rs.ad_name,
         rs.campaign_name,
-        dRS.ctr ?? 0,
-        dPS.ctr ?? 0,
-        dPS.ctr ? ((dPS.ctr - (dRS.ctr ?? 0)) / dPS.ctr) * 100 : 0,
+        // recent_ctr/prior_ctr/decline_pct are legacy column names (predate
+        // the multi-metric rebuild) but now hold whichever metric actually
+        // triggered the flag, not always CTR — primary_metric says which.
+        primaryMetric.recentShort,
+        primaryMetric.priorShort,
+        worsePercent(primaryMetric),
+        primaryMetric.metric,
         daysLive,
         gate.confidence,
         gate.openedBy,

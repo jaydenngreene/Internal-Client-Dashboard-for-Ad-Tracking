@@ -59,9 +59,15 @@ function headlineText(signal: CreativeFatigueSignal): string {
     : [];
   if (triggeredPrimary.length === 0) {
     // Old rows from before this column existed, or an edge case with no
-    // metrics_triggered payload — fall back to the legacy CTR-only fields
-    // rather than showing nothing.
-    return `CTR down ${formatPercent(signal.decline_pct)}: ${formatPercent(signal.recent_ctr)} over the last 3 days vs. ${formatPercent(signal.prior_ctr)} the 7 days before that.`;
+    // metrics_triggered payload — fall back to the legacy recent_ctr/prior_ctr/
+    // decline_pct fields, but formatted using primary_metric (added in the
+    // same review fix) rather than assuming they're CTR. Rows from before
+    // BOTH fixes landed have no primary_metric either — those genuinely were
+    // always CTR, so the "ctr" default is correct for them specifically.
+    const metric = signal.primary_metric ?? "ctr";
+    const label = METRIC_LABEL[metric] ?? "CTR";
+    const direction = metric === "cpa" ? "up" : "down";
+    return `${label} ${direction} ${formatPercent(signal.decline_pct)}: ${formatMetricValue(metric, signal.recent_ctr)} over the last 3 days vs. ${formatMetricValue(metric, signal.prior_ctr)} the 7 days before that.`;
   }
   const parts = triggeredPrimary.map(([metric, m]) => {
     const direction = metric === "cpa" ? "up" : "down";

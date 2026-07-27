@@ -589,9 +589,14 @@ export interface CreativeFatigueSignal {
   ad_id: string;
   ad_name: string | null;
   campaign_name: string | null;
+  // recent_ctr/prior_ctr/decline_pct are legacy column names (predate the
+  // multi-metric rebuild) — since the 2026-07-28 review fix they hold
+  // whichever metric actually triggered the flag, not always CTR.
+  // primary_metric says which; null on rows from before that fix.
   recent_ctr: number;
   prior_ctr: number;
   decline_pct: number;
+  primary_metric: "roas" | "cpa" | "ctr" | null;
   status: FatigueStatus;
   created_at: string;
   resolved_at: string | null;

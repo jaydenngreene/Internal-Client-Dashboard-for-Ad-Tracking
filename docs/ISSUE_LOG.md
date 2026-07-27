@@ -41,6 +41,8 @@ A thorough review of the Phase 1 guardrail work (previous entry below) surfaced 
 
 **Not yet live:** same as any `api/` change — needs a Railway redeploy (ironically, this next deploy will still cross the un-fixed gap once, since the old behavior is what's live until the new config takes effect).
 
+**Commit:** `6354a67`
+
 ---
 
 ## 2026-07-27 (later) — Nothing But Buckets: identify() still dropping most orders — sendBeacon fix
@@ -54,6 +56,8 @@ A thorough review of the Phase 1 guardrail work (previous entry below) surfaced 
 **Fix:** added `postBeacon()` using `browser.sendBeacon()` — the Shopify Web Pixels sandbox's dedicated primitive for exactly this "about to navigate away" case (queued by the browser itself, independent of the pixel context's lifetime), falling back to the old fetch+keepalive path only if `sendBeacon` is unavailable. Wired `checkout_completed`'s identify call to use it. Verified: dashboard workspace builds clean, extracted-and-stubbed the generated snippet through `node --check` for syntax validity.
 
 **Not yet fixed live:** same limitation as the 07-26 keepalive fix — editing the template here does **not** update Nothing But Buckets' already-pasted Shopify Customer Events code. The updated snippet needs to be re-copied from Kado Settings → this client and re-pasted into Shopify Admin → Customer Events by hand, and the dashboard needs a fresh Vercel deploy (this file lives in `dashboard/`, not `api/`) before it takes effect. Until that re-paste happens, expect this to keep failing at roughly the same rate.
+
+**Commit:** `6354a67`
 
 **Also worth checking, not yet done:** whether NBB has the *other*, already-more-reliable identify path (`shopifyCheckoutSnippet`, the order-status-page "Additional scripts" version using `sendBeacon` directly at the top level, not inside the Web Pixels sandbox) installed at all — that path isn't racing a navigation the same way and may be a faster/simpler fix than waiting on the Customer Events re-paste.
 

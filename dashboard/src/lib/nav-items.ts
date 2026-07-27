@@ -78,7 +78,23 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: UserSearch,
         enabled: true,
         group: "Reporting",
-        nicheLabels: { ecommerce: "Customer Buying Journey" },
+        // Phase 3 (2026-07-28) — every niche gets its own label here,
+        // matching lib/niche-vocabulary.ts's pageLabel exactly (the two must
+        // never disagree — a mismatch was a real Phase 2 bug, and this list
+        // caught itself making that exact mistake for 'other' during
+        // verification: the vocabulary's generic fallback is "Conversions",
+        // but without an explicit entry here this item would have fallen
+        // through to its own base `label` ("Leads") instead — listed
+        // explicitly rather than relying on the two fallbacks to agree by
+        // coincidence. 'lead_gen' is the one niche genuinely safe to omit:
+        // its vocabulary pageLabel ("Leads") IS this item's own base label.
+        nicheLabels: {
+          ecommerce: "Customer Buying Journey",
+          info_product: "Customers",
+          saas: "Subscribers",
+          call: "Booked Calls",
+          other: "Conversions",
+        },
       },
       {
         slug: "subscriptions",

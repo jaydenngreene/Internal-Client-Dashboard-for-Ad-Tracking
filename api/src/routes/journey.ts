@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { db } from '../db'
+import { conversionConfigForNiche, ConversionEventType } from '../config/nicheVocabulary'
 
 interface SessionRow {
   id: string
@@ -21,15 +22,23 @@ interface SessionRow {
   resolved_creative_name: string | null
 }
 
-interface PurchaseRow {
+// Phase 3 (2026-07-28) — generic conversion record replacing the previous
+// purchase-only shape. `label`/`value` are always present (null when not
+// applicable); the rest are populated only for the event type that actually
+// produced this row (purchase-only fields stay undefined for a subscription
+// or lead row, etc.) — same "flexible, not a forced lowest-common-shape"
+// approach buyingJourney.ts's ConvertedPerson already takes.
+interface ConversionRow {
   id: string
-  revenue: string
-  product: string | null
-  order_id: string | null
-  processor: string | null
-  refunded: boolean
-  refunded_at: string | null
-  purchased_at: string
+  occurred_at: string
+  value: string | null
+  label: string | null
+  refunded?: boolean
+  refunded_at?: string | null
+  processor?: string | null
+  order_id?: string | null
+  status?: string | null
+  page?: string | null
 }
 
 interface AttributionRow {
@@ -61,6 +70,48 @@ interface CallRow {
   ai_summary: string | null
 }
 
+// Fetches this email's conversion history from whichever table the client's
+// niche maps to (nicheVocabulary.ts) — purchases keep their existing rich
+// shape (refunded/processor/order_id); qualified_call returns nothing here
+// because the existing Calls card below already covers that niche
+// end-to-end (disposition workflow, AI summary) and duplicating it into a
+// second generic card would just be two views of the same data.
+async function getConversions(
+  clientId: string,
+  email: string,
+  eventType: ConversionEventType
+): Promise<{ rows: ConversionRow[]; supportsAttribution: boolean }> {
+  if (eventType === 'purchase') {
+    const { rows } = await db.query<ConversionRow>(
+      `SELECT id, purchased_at AS occurred_at, revenue AS value, product AS label,
+              refunded, refunded_at, processor, order_id
+       FROM purchases WHERE client_id = $1 AND email = $2 ORDER BY purchased_at ASC`,
+      [clientId, email]
+    )
+    return { rows, supportsAttribution: true }
+  }
+  if (eventType === 'subscription_conversion') {
+    const { rows } = await db.query<ConversionRow>(
+      `SELECT se.id, se.occurred_at, se.mrr_delta AS value, sub.plan_name AS label, sub.status
+       FROM subscription_events se
+       JOIN subscriptions sub ON sub.id = se.subscription_id
+       WHERE se.client_id = $1 AND sub.email = $2 AND se.event_type IN ('trial_converted', 'activated')
+       ORDER BY se.occurred_at ASC`,
+      [clientId, email]
+    )
+    return { rows, supportsAttribution: false }
+  }
+  if (eventType === 'lead') {
+    const { rows } = await db.query<ConversionRow>(
+      `SELECT id, created_at AS occurred_at, NULL AS value, lead_type AS label, page
+       FROM leads WHERE client_id = $1 AND email = $2 ORDER BY created_at ASC`,
+      [clientId, email]
+    )
+    return { rows, supportsAttribution: false }
+  }
+  return { rows: [], supportsAttribution: false } // qualified_call — see the Calls card instead
+}
+
 // One place to see everything this app knows about a single lead — every session/
 // touchpoint that led here, which one(s) got attribution credit for which purchase,
 // every tag applied, and every call. Previously this data only existed scattered
@@ -69,12 +120,19 @@ interface CallRow {
 // human. A purchase with no matching identity (e.g. a CRM-only lead, never
 // pixel-tracked) still shows up here as an unattributed purchase — flagged
 // explicitly — rather than silently vanishing the way it does in aggregate reports.
+//
+// Phase 3 (2026-07-28): generalized beyond purchases — which table backs the
+// "conversions" section is resolved from the client's niche, same mapping
+// buyingJourney.ts uses for the aggregate tab.
 export async function journeyRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string; email: string } }>(
     '/clients/:id/leads/:email/journey',
     async (req, reply) => {
       const clientId = req.params.id
       const email = req.params.email.toLowerCase().trim()
+
+      const { rows: clientRows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [clientId])
+      const eventType = conversionConfigForNiche(clientRows[0]?.niche ?? 'other').eventType
 
       const { rows: identityRows } = await db.query<{ visitor_id: string; identified_at: string; identified_on_page: string | null }>(
         `SELECT visitor_id, identified_at, identified_on_page FROM identities WHERE client_id = $1 AND email = $2`,
@@ -110,19 +168,19 @@ export async function journeyRoutes(app: FastifyInstance) {
           ).rows
         : []
 
-      const { rows: purchaseRows } = await db.query<PurchaseRow>(
-        `SELECT id, revenue, product, order_id, processor, refunded, refunded_at, purchased_at
-         FROM purchases WHERE client_id = $1 AND email = $2 ORDER BY purchased_at ASC`,
-        [clientId, email]
-      )
+      const { rows: conversionRows, supportsAttribution } = await getConversions(clientId, email, eventType)
 
-      const { rows: attributionRows } = await db.query<AttributionRow>(
-        `SELECT a.purchase_id, a.session_id, a.model, a.credit_fraction, a.attributed_revenue
-         FROM attributions a
-         JOIN purchases p ON p.id = a.purchase_id
-         WHERE a.client_id = $1 AND p.email = $2`,
-        [clientId, email]
-      )
+      const attributionRows = supportsAttribution
+        ? (
+            await db.query<AttributionRow>(
+              `SELECT a.purchase_id, a.session_id, a.model, a.credit_fraction, a.attributed_revenue
+               FROM attributions a
+               JOIN purchases p ON p.id = a.purchase_id
+               WHERE a.client_id = $1 AND p.email = $2`,
+              [clientId, email]
+            )
+          ).rows
+        : []
 
       const { rows: tagRows } = await db.query<TagRow>(
         `SELECT t.name, t.tag_type, lt.applied_at, lt.applied_by
@@ -145,18 +203,20 @@ export async function journeyRoutes(app: FastifyInstance) {
           : []
 
       const attributedPurchaseIds = new Set(attributionRows.map((a) => a.purchase_id))
-      const purchases = purchaseRows.map((p) => ({
-        ...p,
-        revenue: parseFloat(p.revenue),
-        attributed: attributedPurchaseIds.has(p.id),
-        attributions: attributionRows
-          .filter((a) => a.purchase_id === p.id)
-          .map((a) => ({
-            session_id: a.session_id,
-            model: a.model,
-            credit_fraction: parseFloat(a.credit_fraction),
-            attributed_revenue: parseFloat(a.attributed_revenue),
-          })),
+      const conversions = conversionRows.map((c) => ({
+        ...c,
+        value: c.value !== null ? parseFloat(c.value) : null,
+        attributed: supportsAttribution ? attributedPurchaseIds.has(c.id) : undefined,
+        attributions: supportsAttribution
+          ? attributionRows
+              .filter((a) => a.purchase_id === c.id)
+              .map((a) => ({
+                session_id: a.session_id,
+                model: a.model,
+                credit_fraction: parseFloat(a.credit_fraction),
+                attributed_revenue: parseFloat(a.attributed_revenue),
+              }))
+          : undefined,
       }))
 
       const callsOut = calls.map((c) => ({
@@ -166,11 +226,12 @@ export async function journeyRoutes(app: FastifyInstance) {
 
       return reply.send({
         email,
+        eventType,
         identified: identity !== null,
         identified_at: identity?.identified_at ?? null,
         identified_on_page: identity?.identified_on_page ?? null,
         sessions,
-        purchases,
+        conversions,
         tags: tagRows,
         calls: callsOut,
       })

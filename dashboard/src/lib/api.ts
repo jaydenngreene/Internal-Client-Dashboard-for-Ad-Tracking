@@ -1693,24 +1693,32 @@ export interface JourneySession {
   resolved_creative_name: string | null;
 }
 
-export interface JourneyPurchaseAttribution {
+export interface JourneyConversionAttribution {
   session_id: string;
   model: string;
   credit_fraction: number;
   attributed_revenue: number;
 }
 
-export interface JourneyPurchase {
+// Phase 3 (2026-07-28) — generalized from the previous purchase-only shape.
+// `label`/`value` always present (null when not applicable to this event
+// type); the rest are populated only for the event type that actually
+// produced the row (purchase-only fields are undefined for a subscription
+// or lead row). `occurred_at` replaces `purchased_at` as the universal
+// timestamp field name.
+export interface JourneyConversion {
   id: string;
-  revenue: number;
-  product: string | null;
-  order_id: string | null;
-  processor: string | null;
-  refunded: boolean;
-  refunded_at: string | null;
-  purchased_at: string;
-  attributed: boolean;
-  attributions: JourneyPurchaseAttribution[];
+  occurred_at: string;
+  value: number | null;
+  label: string | null;
+  refunded?: boolean;
+  refunded_at?: string | null;
+  processor?: string | null;
+  order_id?: string | null;
+  status?: string | null;
+  page?: string | null;
+  attributed?: boolean;
+  attributions?: JourneyConversionAttribution[];
 }
 
 export interface JourneyTag {
@@ -1738,11 +1746,12 @@ export interface JourneyCall {
 
 export interface Journey {
   email: string;
+  eventType: "purchase" | "subscription_conversion" | "qualified_call" | "lead";
   identified: boolean;
   identified_at: string | null;
   identified_on_page: string | null;
   sessions: JourneySession[];
-  purchases: JourneyPurchase[];
+  conversions: JourneyConversion[];
   tags: JourneyTag[];
   calls: JourneyCall[];
 }
@@ -1751,23 +1760,28 @@ export function getJourney(clientId: string, email: string): Promise<Journey> {
   return fetchJson<Journey>(`/clients/${clientId}/leads/${encodeURIComponent(email)}/journey`);
 }
 
-// Phase 2 (2026-07-28) — "Customer Buying Journey" tab, ecom clients only.
+// Phase 2 (2026-07-28), generalized to every niche in Phase 3.
 export interface TopConvertingCreative {
   name: string;
   customers: number;
 }
 
-export interface PurchasingCustomer {
-  email: string;
-  totalSpent: number;
+export interface ConvertedPerson {
+  // Email for every niche except a qualified call never linked to an
+  // identified visitor — falls back to the caller's phone number then.
+  identifier: string;
+  conversionCount: number;
+  totalValue: number | null;
   sessionsToConvert: number | null;
 }
 
 export interface BuyingJourneySummary {
+  eventType: "purchase" | "subscription_conversion" | "qualified_call" | "lead";
+  hasValue: boolean;
   avgDaysToConvert: number | null;
   avgSessionsToConvert: number | null;
   topConvertingCreatives: TopConvertingCreative[];
-  customers: PurchasingCustomer[];
+  people: ConvertedPerson[];
 }
 
 export function getBuyingJourney(clientId: string, range: DateRange): Promise<BuyingJourneySummary> {

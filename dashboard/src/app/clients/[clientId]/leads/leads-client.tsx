@@ -14,7 +14,7 @@ import {
   Journey,
   JourneySession,
   JourneyCall,
-  PurchasingCustomer,
+  ConvertedPerson,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,12 +28,17 @@ import { SegmentedToggle } from "@/components/segmented-toggle";
 import { StatTile } from "@/components/stat-tile";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatDuration } from "@/lib/format";
+import { vocabularyForNiche, showsBestPaths, NicheVocabulary } from "@/lib/niche-vocabulary";
 import { cn } from "@/lib/utils";
 
 // Rockerbox's Marketing Paths view names its top findings ("fastest path,"
 // "highest earning path") instead of leaving the reader to spot them in a raw
 // journey table - a cheap, honest upgrade since the underlying data already
 // exists (every purchase's attribution rows). See api/src/lib/bestPaths.ts.
+// Purchase-revenue-path-driven — only shown for the two 'purchase'-event
+// niches (see niche-vocabulary.ts's showsBestPaths); not generalized to
+// leads/calls/subscriptions in Phase 3 (bestPaths.ts's own SQL is
+// purchases-hardcoded, regeneralizing IT is a separate piece of work).
 function BestPathsCallouts({ clientId }: { clientId: string }) {
   const { range } = useDateRangeState("30d");
   const { data } = useQuery({
@@ -192,15 +197,65 @@ function CallRow({ call, clientId, email }: { call: JourneyCall; clientId: strin
   );
 }
 
-function JourneyView({ journey, clientId }: { journey: Journey; clientId: string }) {
+// Phase 3 (2026-07-28): generalized from a hardcoded "Purchases" card.
+// `journey.eventType` decides both the header (via vocab) and which fields
+// this row actually has — value/label are always present (null when not
+// applicable), the rest (refunded/processor/order_id/attributions) are only
+// ever populated for a 'purchase' event, status only for a subscription
+// conversion, page only for a lead. Qualified calls never reach this card at
+// all (journey.conversions is empty for that event type) — the existing
+// Calls card below already covers that niche with its own richer
+// disposition/AI-summary workflow.
+function ConversionRow({ conversion, sessionById }: { conversion: Journey["conversions"][number]; sessionById: Map<string, JourneySession & { index: number }> }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {conversion.value !== null && <span className="text-sm font-medium">{formatCurrency(conversion.value)}</span>}
+        {conversion.label && <span className="text-xs text-muted-foreground">{conversion.label}</span>}
+        <span className="text-xs text-muted-foreground">{formatDateTime(conversion.occurred_at)}</span>
+        {conversion.status && <Badge variant="outline" className="text-[10px]">{conversion.status}</Badge>}
+        {conversion.processor && <Badge variant="outline" className="text-[10px]">{conversion.processor}</Badge>}
+        {conversion.refunded && (
+          <Badge variant="destructive" className="text-[10px]">
+            refunded
+          </Badge>
+        )}
+        {conversion.attributed !== undefined && (
+          <Badge
+            variant={conversion.attributed ? "secondary" : "outline"}
+            className={cn("text-[10px]", !conversion.attributed && "text-status-warning border-status-warning/40")}
+          >
+            {conversion.attributed ? "attributed" : "unattributed"}
+          </Badge>
+        )}
+      </div>
+      {conversion.attributions && conversion.attributions.length > 0 && (
+        <div className="flex flex-col gap-1 pl-1 text-xs text-muted-foreground">
+          {conversion.attributions.map((a, i) => {
+            const session = sessionById.get(a.session_id);
+            return (
+              <p key={i}>
+                {formatCurrency(a.attributed_revenue)} ({(a.credit_fraction * 100).toFixed(0)}%, {a.model}) credited to
+                touchpoint {session ? `#${session.index + 1} · ${sessionLabel(session)}` : "an untracked session"}
+              </p>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JourneyView({ journey, clientId, vocab }: { journey: Journey; clientId: string; vocab: NicheVocabulary }) {
   const sessionById = new Map(journey.sessions.map((s, i) => [s.id, { ...s, index: i }]));
 
   return (
     <div className="flex flex-col gap-4">
       {!journey.identified && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">
-          This lead has never been tracked by the pixel. No ad session history exists for them. Any purchases below
-          have no attribution, no LTV contribution, and never fired a conversion signal or outbound webhook.
+          This {vocab.personNoun.toLowerCase()} has never been tracked by the pixel. No ad session history exists for
+          them. Anything below has no attribution, no LTV contribution, and never fired a conversion signal or
+          outbound webhook.
         </div>
       )}
 
@@ -210,7 +265,7 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
         </CardHeader>
         <CardContent className="flex flex-col gap-2 px-0">
           {journey.sessions.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">No tracked sessions for this lead.</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">No tracked sessions for this {vocab.personNoun.toLowerCase()}.</p>
           )}
           {journey.sessions.map((s, i) => (
             <SessionRow key={s.id} session={s} index={i} />
@@ -218,50 +273,25 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
         </CardContent>
       </Card>
 
-      <Card className="px-4">
-        <CardHeader className="px-0">
-          <CardTitle>Purchases ({journey.purchases.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 px-0">
-          {journey.purchases.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">No purchases for this lead.</p>
-          )}
-          {journey.purchases.map((p) => (
-            <div key={p.id} className="flex flex-col gap-1.5 rounded-lg border border-border p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{formatCurrency(p.revenue)}</span>
-                {p.product && <span className="text-xs text-muted-foreground">{p.product}</span>}
-                <span className="text-xs text-muted-foreground">{formatDateTime(p.purchased_at)}</span>
-                {p.processor && <Badge variant="outline" className="text-[10px]">{p.processor}</Badge>}
-                {p.refunded && (
-                  <Badge variant="destructive" className="text-[10px]">
-                    refunded
-                  </Badge>
-                )}
-                <Badge
-                  variant={p.attributed ? "secondary" : "outline"}
-                  className={cn("text-[10px]", !p.attributed && "text-status-warning border-status-warning/40")}
-                >
-                  {p.attributed ? "attributed" : "unattributed"}
-                </Badge>
-              </div>
-              {p.attributions.length > 0 && (
-                <div className="flex flex-col gap-1 pl-1 text-xs text-muted-foreground">
-                  {p.attributions.map((a, i) => {
-                    const session = sessionById.get(a.session_id);
-                    return (
-                      <p key={i}>
-                        {formatCurrency(a.attributed_revenue)} ({(a.credit_fraction * 100).toFixed(0)}%, {a.model}) credited to
-                        touchpoint {session ? `#${session.index + 1} · ${sessionLabel(session)}` : "an untracked session"}
-                      </p>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {journey.eventType !== "qualified_call" && (
+        <Card className="px-4">
+          <CardHeader className="px-0">
+            <CardTitle>
+              {vocab.conversionsSectionHeader} ({journey.conversions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 px-0">
+            {journey.conversions.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No {vocab.conversionsSectionHeader.toLowerCase()} for this {vocab.personNoun.toLowerCase()}.
+              </p>
+            )}
+            {journey.conversions.map((c) => (
+              <ConversionRow key={c.id} conversion={c} sessionById={sessionById} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="px-4">
         <CardHeader className="px-0">
@@ -299,25 +329,27 @@ function JourneyView({ journey, clientId }: { journey: Journey; clientId: string
   );
 }
 
-// Phase 2 (2026-07-28) — "Customers Who Purchased" tab, ecom clients only.
-// Top 3 converting creatives, then one row per purchasing customer in the
-// selected date range; clicking an email hands off to the single-customer
-// lookup view instead of duplicating that view's own detail rendering here.
-function CustomersWhoPurchasedTab({
+// Phase 2 (2026-07-28), generalized to every niche in Phase 3. Top 3
+// converting creatives, then one row per converted person in the selected
+// date range; clicking the identifier hands off to the single-person lookup
+// view instead of duplicating that view's own detail rendering here.
+function ConvertedPeopleTab({
   data,
   isLoading,
-  onSelectEmail,
+  vocab,
+  onSelectIdentifier,
 }: {
-  data: { topConvertingCreatives: { name: string; customers: number }[]; customers: PurchasingCustomer[] } | undefined;
+  data: { topConvertingCreatives: { name: string; customers: number }[]; people: ConvertedPerson[]; hasValue: boolean } | undefined;
   isLoading: boolean;
-  onSelectEmail: (email: string) => void;
+  vocab: NicheVocabulary;
+  onSelectIdentifier: (identifier: string) => void;
 }) {
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!data || data.customers.length === 0) {
+  if (!data || data.people.length === 0) {
     return (
       <Card className="px-4 py-8">
         <CardContent className="px-0 text-center text-sm text-muted-foreground">
-          No customers purchased in this range.
+          No {vocab.personNoun.toLowerCase()}s converted in this range.
         </CardContent>
       </Card>
     );
@@ -333,7 +365,8 @@ function CustomersWhoPurchasedTab({
               <Card key={c.name} className="px-4 py-3">
                 <p className="truncate text-sm font-medium">{c.name}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {formatNumber(c.customers)} customer{c.customers === 1 ? "" : "s"} converted
+                  {formatNumber(c.customers)} {vocab.personNoun.toLowerCase()}
+                  {c.customers === 1 ? "" : "s"} converted
                 </p>
               </Card>
             ))}
@@ -347,20 +380,33 @@ function CustomersWhoPurchasedTab({
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium">Total spent</th>
+                <th className="px-4 py-2 font-medium">Conversions</th>
+                {vocab.valueColumnLabel && <th className="px-4 py-2 font-medium">{vocab.valueColumnLabel}</th>}
                 <th className="px-4 py-2 font-medium">Sessions to convert</th>
               </tr>
             </thead>
             <tbody>
-              {data.customers.map((c) => (
-                <tr key={c.email} className="border-b border-border last:border-0 hover:bg-muted/40">
+              {data.people.map((p) => (
+                <tr key={p.identifier} className="border-b border-border last:border-0 hover:bg-muted/40">
                   <td className="px-4 py-2">
-                    <button className="text-primary hover:underline" onClick={() => onSelectEmail(c.email)}>
-                      {c.email}
-                    </button>
+                    {/* A qualified call with no linked identity falls back to a
+                        phone number here (see buyingJourney.ts) — the lookup
+                        view is keyed by email, so there's nothing to look up
+                        for a bare phone number; render it as plain text
+                        instead of a dead-end button. */}
+                    {p.identifier.includes("@") ? (
+                      <button className="text-primary hover:underline" onClick={() => onSelectIdentifier(p.identifier)}>
+                        {p.identifier}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">{p.identifier}</span>
+                    )}
                   </td>
-                  <td className="px-4 py-2">{formatCurrency(c.totalSpent)}</td>
-                  <td className="px-4 py-2">{c.sessionsToConvert ?? "—"}</td>
+                  <td className="px-4 py-2">{formatNumber(p.conversionCount)}</td>
+                  {vocab.valueColumnLabel && (
+                    <td className="px-4 py-2">{p.totalValue !== null ? formatCurrency(p.totalValue) : "—"}</td>
+                  )}
+                  <td className="px-4 py-2">{p.sessionsToConvert ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -371,7 +417,7 @@ function CustomersWhoPurchasedTab({
   );
 }
 
-type BuyingJourneyTab = "lookup" | "customers";
+type BuyingJourneyTab = "lookup" | "converted";
 
 export function LeadsClient({ clientId }: { clientId: string }) {
   const searchParams = useSearchParams();
@@ -386,12 +432,12 @@ export function LeadsClient({ clientId }: { clientId: string }) {
   const [searchedEmail, setSearchedEmail] = useState(emailFromUrl?.trim().toLowerCase() ?? "");
   const [tab, setTab] = useState<BuyingJourneyTab>("lookup");
 
-  // Phase 2: "Customer Buying Journey" (renamed tab, summary metrics, the
-  // Customers Who Purchased tab) is ecom-only — every other niche keeps this
-  // page exactly as it was ("Leads", single lookup, Best Paths callouts).
+  // Phase 3 (2026-07-28): every niche gets the full experience now (summary
+  // metrics, the second tab) — vocab is the ONLY thing that varies per
+  // niche, never a conditional fork of the page itself.
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
   const niche = clients?.find((c) => c.id === clientId)?.niche;
-  const isEcom = niche === "ecommerce";
+  const vocab = vocabularyForNiche(niche);
 
   const { range } = useDateRangeState("30d");
 
@@ -404,12 +450,11 @@ export function LeadsClient({ clientId }: { clientId: string }) {
   const { data: buyingJourney, isLoading: buyingJourneyLoading } = useQuery({
     queryKey: ["buying-journey", clientId, range.from, range.to],
     queryFn: () => getBuyingJourney(clientId, range),
-    enabled: isEcom,
   });
 
-  function selectCustomer(customerEmail: string) {
-    setEmail(customerEmail);
-    setSearchedEmail(customerEmail.trim().toLowerCase());
+  function selectPerson(identifier: string) {
+    setEmail(identifier);
+    setSearchedEmail(identifier.trim().toLowerCase());
     setTab("lookup");
   }
 
@@ -417,45 +462,40 @@ export function LeadsClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-6 p-6">
       <div>
         <ClientKicker clientId={clientId} />
-        <h1 className="text-lg font-semibold">{isEcom ? "Customer Buying Journey" : "Leads"}</h1>
+        <h1 className="text-lg font-semibold">{vocab.pageLabel}</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {isEcom
-            ? "Look up one customer to see their full journey, or browse everyone who purchased in the selected date range."
-            : "Look up one lead by email to see their full journey: every session that led here, which one got credit for which sale, every tag, every call."}
+          Look up one {vocab.personNoun.toLowerCase()} to see their full journey, or browse everyone who converted in
+          the selected date range.
         </p>
       </div>
 
-      {!isEcom && <BestPathsCallouts clientId={clientId} />}
+      {showsBestPaths(niche) && <BestPathsCallouts clientId={clientId} />}
 
-      {isEcom && (
-        <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <StatTile
-              label="Avg days to convert"
-              value={buyingJourney?.avgDaysToConvert != null ? buyingJourney.avgDaysToConvert.toFixed(1) : "—"}
-            />
-            <StatTile
-              label="Avg sessions to convert"
-              value={buyingJourney?.avgSessionsToConvert != null ? buyingJourney.avgSessionsToConvert.toFixed(1) : "—"}
-            />
-          </div>
-          <SegmentedToggle
-            value={tab}
-            onChange={(v) => setTab(v as BuyingJourneyTab)}
-            options={[
-              { value: "lookup", label: "Look up one customer" },
-              { value: "customers", label: "Customers Who Purchased" },
-            ]}
-          />
-        </>
-      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <StatTile
+          label="Avg days to convert"
+          value={buyingJourney?.avgDaysToConvert != null ? buyingJourney.avgDaysToConvert.toFixed(1) : "—"}
+        />
+        <StatTile
+          label="Avg sessions to convert"
+          value={buyingJourney?.avgSessionsToConvert != null ? buyingJourney.avgSessionsToConvert.toFixed(1) : "—"}
+        />
+      </div>
+      <SegmentedToggle
+        value={tab}
+        onChange={(v) => setTab(v as BuyingJourneyTab)}
+        options={[
+          { value: "lookup", label: `Look up one ${vocab.personNoun.toLowerCase()}` },
+          { value: "converted", label: vocab.convertedPeopleTabLabel },
+        ]}
+      />
 
-      {(!isEcom || tab === "lookup") && (
+      {tab === "lookup" && (
         <>
           <Card className="px-4">
             <CardContent className="flex flex-wrap items-end gap-2 px-0">
               <div className="flex flex-col gap-1">
-                <FieldLabel>{isEcom ? "Customer email" : "Lead email"}</FieldLabel>
+                <FieldLabel>{vocab.emailFieldLabel}</FieldLabel>
                 <Input
                   className="w-72"
                   value={email}
@@ -463,7 +503,7 @@ export function LeadsClient({ clientId }: { clientId: string }) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") setSearchedEmail(email.trim().toLowerCase());
                   }}
-                  placeholder={isEcom ? "customer@example.com" : "lead@example.com"}
+                  placeholder={vocab.emailPlaceholder}
                 />
               </div>
               <Button size="sm" disabled={!email.trim()} onClick={() => setSearchedEmail(email.trim().toLowerCase())}>
@@ -474,12 +514,12 @@ export function LeadsClient({ clientId }: { clientId: string }) {
 
           {isLoading && <Skeleton className="h-64 w-full" />}
           {isError && <p className="text-sm text-status-critical">Failed to load. Is the API running?</p>}
-          {journey && <JourneyView journey={journey} clientId={clientId} />}
+          {journey && <JourneyView journey={journey} clientId={clientId} vocab={vocab} />}
         </>
       )}
 
-      {isEcom && tab === "customers" && (
-        <CustomersWhoPurchasedTab data={buyingJourney} isLoading={buyingJourneyLoading} onSelectEmail={selectCustomer} />
+      {tab === "converted" && (
+        <ConvertedPeopleTab data={buyingJourney} isLoading={buyingJourneyLoading} vocab={vocab} onSelectIdentifier={selectPerson} />
       )}
     </div>
   );

@@ -1017,15 +1017,19 @@ export async function reportRoutes(app: FastifyInstance) {
     }
   )
 
-  // Phase 2 (2026-07-28) — Customer Buying Journey tab (ecom clients only):
-  // avg days/sessions to convert, top converting creatives, and the
-  // per-customer table backing "Customers Who Purchased". See
-  // lib/buyingJourney.ts for the full methodology.
+  // Phase 2 (2026-07-28), generalized to every niche in Phase 3: the
+  // "Customer Buying Journey" tab and its per-niche equivalents (Leads,
+  // Subscribers, Booked Calls, Customers). Avg days/sessions to convert, top
+  // converting creatives, and the per-person table. See lib/buyingJourney.ts
+  // for the full methodology — which event type counts as "a conversion" is
+  // driven entirely by the client's niche, not hardcoded to purchases.
   app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
     '/clients/:id/reports/buying-journey',
     async (req, reply) => {
       const { from, to } = defaultRange(req.query.from, req.query.to)
-      return reply.send(await computeBuyingJourneySummary(req.params.id, from, to))
+      const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
+      const niche = rows[0]?.niche ?? 'other'
+      return reply.send(await computeBuyingJourneySummary(req.params.id, niche, from, to))
     }
   )
 

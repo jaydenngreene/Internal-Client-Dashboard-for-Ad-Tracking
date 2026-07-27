@@ -56,6 +56,14 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## Proposed enhancements (validated technically sound, not yet built — pick up in a separate session)
+
+- **Fall back to a direct ad-object lookup when a creative has no `ad_costs` row.** User's idea (2026-07-26), validated before logging: Meta has two separate APIs — the **Insights API** (`fetchFacebookAdCosts` in `api/src/jobs/adCosts/facebook.ts`, only returns a row for an ad+date with actual measurable delivery) vs. the **Ad object endpoint** (`GET /{ad_id}?fields=name,creative{...}` — already used elsewhere in the same file as `fetchCreativeInfo`, just for creative asset enrichment on ads Insights *did* return, not as a fallback). When a purchase's `utm_content`/ad_id has no matching row in `ad_costs` (see `campaignDetail.ts`'s `resolveAdId`/creative-matching, and the equivalent in `reports.ts`), a live (or cached) call to the ad object endpoint could recover the real name/thumbnail even with zero Insights data — genuinely useful for a **new ad that hasn't synced yet** or a **paused ad Insights stopped reporting on**, which is a real, recurring pattern (see the `Abandoned_Cart_Retargeting_2` case above, which was in exactly this state before being manually synced).
+  - **Confirmed limit, tested live, not just theorized:** this will NOT help an ad that's been fully deleted from the account — tested directly against `120249034033030253` (the ad_id with zero Insights data from the entry above), and the object endpoint 400s with "does not exist" too (`error_subcode: 33`). Nothing recovers a truly deleted ad's creative info from any API. Don't re-promise this will fix 100% of unresolved creatives — it recovers the "not yet synced" case specifically, not the "gone" case.
+  - **Implementation notes for whoever builds this:** needs graceful handling of the 400/"does not exist" response (fall back to showing the raw ad_id, current behavior, don't throw). Worth caching the result (e.g. writing a `$0`-spend row into `ad_costs` with just the name/creative fields populated) so it's a one-time lookup per ad_id, not a live API call on every report page load.
+
+---
+
 ## Operational gotchas (not code bugs — Kado-specific environment/process facts worth knowing)
 
 - **Local API dev server (`tsx watch`) sometimes doesn't restart on file save** — a stale process can keep serving old code indefinitely with no visible error. If a fix "doesn't seem to work" locally, check `netstat -ano | grep :3001`'s PID start time against when the file was last saved; if the process predates the edit, kill it and restart `npm run dev:api`.

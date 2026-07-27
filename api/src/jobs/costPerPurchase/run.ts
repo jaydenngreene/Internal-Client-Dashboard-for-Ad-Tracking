@@ -1,5 +1,6 @@
 import { db } from '../../db'
 import { GUARDRAIL_CONFIG, ConversionEvent } from '../../config/recommendationGuardrails'
+import { benchmarkForNiche } from '../../config/industryBenchmarks'
 
 interface ClientRow {
   id: string
@@ -21,8 +22,8 @@ interface ConversionResult {
 // trial_started - a trial isn't revenue yet), call funnels -> qualified calls
 // (the thing a call-tracking client is actually optimizing for). Everything
 // else (lead_gen/info_product/other with no purchases and no subscription/call
-// data) falls through to raw lead count, and finally to the global $ fallback
-// in recommendationGate.ts if even that's zero.
+// data) falls through to raw lead count, and finally to this niche's industry-
+// benchmark figure (config/industryBenchmarks.ts) if even that's too thin.
 async function resolveConversionCount(clientId: string, niche: string, lookbackDays: number): Promise<ConversionResult> {
   const { rows: purchaseRows } = await db.query<{ count: string }>(
     `SELECT COUNT(*) AS count FROM purchases
@@ -83,7 +84,11 @@ export async function refreshCostPerPurchase(): Promise<number> {
     const conversion = await resolveConversionCount(client.id, client.niche, lookbackDays)
 
     const isFallback = conversion.count < fallback.minConversionsToTrust
-    const costPerPurchase = isFallback ? fallback.costPerPurchase : spend / conversion.count
+    // Review fix (2026-07-28): a flat dollar figure across every business type
+    // was wrong — a new SaaS client and a new lead-gen client have nothing in
+    // common economically. Falls back to this niche's industry-benchmark
+    // typical cost-per-conversion (config/industryBenchmarks.ts) instead.
+    const costPerPurchase = isFallback ? benchmarkForNiche(client.niche).typicalCostPerConversion : spend / conversion.count
 
     await db.query(
       `INSERT INTO client_cost_per_purchase (client_id, cost_per_purchase, conversion_event, conversion_count, spend, is_fallback, computed_at)

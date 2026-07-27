@@ -1,14 +1,13 @@
 import { db } from '../../db'
-import { checkGate } from '../../lib/recommendationGate'
+import { getCostContext, evaluateGate, CostContext } from '../../lib/recommendationGate'
 import { GUARDRAIL_CONFIG } from '../../config/recommendationGuardrails'
 
-// Phase 1 rebuild (2026-07-27) of Step 47's original CTR-only fatigue detector.
-// Two upgrades over the original: (1) a day-scale trend (recent 3d vs prior 7d,
-// same as before) must ALSO be echoed at a week-scale (recent 7d vs prior 14d)
-// before this calls it "fatigue" — a dip that only shows up on the short window
-// is noise, not a trend; (2) every flagged ad must first clear the Phase 1 data-
-// sufficiency gate (recommendationGate.ts) — a creative too new/under-spent to
-// have earned a verdict never gets flagged, no matter how it's trending.
+// Phase 1 rebuild (2026-07-27) of Step 47's original CTR-only fatigue detector,
+// then hardened in review (2026-07-28 — see docs/ISSUE_LOG.md): a day-scale
+// trend (recent 3d vs prior 7d) must ALSO be echoed at a week-scale (recent 7d
+// vs prior 14d) before this calls it "fatigue" — a dip that only shows up on
+// the short window is noise, not a trend. Every flagged ad must first clear
+// the Phase 1 data-sufficiency gate (recommendationGate.ts).
 const RECENT_SHORT_DAYS = 3
 const PRIOR_SHORT_DAYS = 7
 const RECENT_LONG_DAYS = 7
@@ -16,7 +15,12 @@ const PRIOR_LONG_DAYS = 14
 
 const DECLINE_THRESHOLD = 0.7 // ROAS/CTR must fall below 70% of baseline to count as decline
 const INCREASE_THRESHOLD = 1.3 // CPA/CPM/frequency must rise above 130% of baseline to count as decline
-const MIN_PRIOR_IMPRESSIONS = 1000 // don't call a trend on a low-volume window either side
+const MIN_WINDOW_IMPRESSIONS = 1000 // don't call a trend on a low-volume window, recent OR prior
+// ROAS/CPA swing wildly on a window with plenty of impressions but 0-1 sales —
+// impressions don't stabilize a conversion-driven metric, sales count does.
+// Below this, that window's ROAS/CPA value is treated as unknown (null), not
+// as a real 0-vs-1-sale swing worth calling a trend.
+const MIN_SALES_FOR_CONVERSION_METRICS = 3
 
 interface AdWindow {
   client_id: string
@@ -98,14 +102,25 @@ async function getAdWindow(fromDate: string, toDate: string): Promise<Map<string
   return map
 }
 
+type MetricName = 'roas' | 'ctr' | 'cpa' | 'cpm' | 'frequency'
+
 interface MetricTrend {
-  metric: 'roas' | 'ctr' | 'cpa' | 'cpm' | 'frequency'
+  metric: MetricName
   direction: 'decline' | 'increase' // which direction counts as "worse" for this metric
   recentShort: number | null
   priorShort: number | null
   recentLong: number | null
   priorLong: number | null
 }
+
+// Only these three can raise a fatigue flag on their own. CPM is driven by
+// auction competition/seasonality (a Q4 cost spike would flag every ad in the
+// account with no creative having changed) and rising frequency is the
+// expected behavior of any ad left running (a fatigue *precursor*, not
+// fatigue itself) — both are demoted to corroborating signals below: they can
+// still show up in metrics_triggered and strengthen the picture, but never
+// raise a flag alone.
+const PRIMARY_TRIGGER_METRICS: MetricName[] = ['roas', 'cpa', 'ctr']
 
 function isBadMove(recent: number | null, prior: number | null, direction: 'decline' | 'increase', threshold: number): boolean {
   if (recent === null || prior === null || prior <= 0) return false
@@ -121,11 +136,16 @@ function isSustainedTrend(m: MetricTrend): boolean {
   return isBadMove(m.recentShort, m.priorShort, m.direction, threshold) && isBadMove(m.recentLong, m.priorLong, m.direction, threshold)
 }
 
+function meetsConversionFloor(w: AdWindow): boolean {
+  return w.sales >= MIN_SALES_FOR_CONVERSION_METRICS
+}
+
 function deriveMetrics(w: AdWindow): { ctr: number | null; roas: number | null; cpa: number | null; cpm: number | null } {
+  const conversionMetricsValid = meetsConversionFloor(w)
   return {
     ctr: w.impressions > 0 ? (w.clicks / w.impressions) * 100 : null,
-    roas: w.spend > 0 ? w.revenue / w.spend : null,
-    cpa: w.sales > 0 ? w.spend / w.sales : null,
+    roas: w.spend > 0 && conversionMetricsValid ? w.revenue / w.spend : null,
+    cpa: conversionMetricsValid ? w.spend / w.sales : null,
     cpm: w.impressions > 0 ? (w.spend / w.impressions) * 1000 : null,
   }
 }
@@ -160,30 +180,44 @@ export async function detectCreativeFatigue(): Promise<number> {
     getAdWindow(isoDate(priorLongStart), isoDate(priorLongEnd)),
   ])
 
-  // Bulk, system-wide (not per-ad) lookups so this stays one query each instead
-  // of an N+1 across however many ads showed spend yesterday.
-  const { rows: firstSeenRows } = await db.query<{ client_id: string; platform: string; ad_id: string; first_date: string }>(
-    `SELECT client_id, platform, ad_id, MIN(date) AS first_date FROM ad_costs GROUP BY client_id, platform, ad_id`
+  // Bulk, system-wide (not per-ad) lookup so this stays one query instead of
+  // an N+1 across however many ads showed spend yesterday. Review fix
+  // (2026-07-28, item 5): COUNT(DISTINCT date) WHERE spend > 0, not MIN(date)
+  // subtracted from today — the old calendar-elapsed version let a creative
+  // that ran 5 days in March, paused, and resumed yesterday read as ~4 months
+  // live, sailing through the days-live side of the gate on 6 days of real
+  // data.
+  const { rows: daysLiveRows } = await db.query<{ client_id: string; platform: string; ad_id: string; days_live: string }>(
+    `SELECT client_id, platform, ad_id, COUNT(DISTINCT date) FILTER (WHERE spend > 0) AS days_live
+     FROM ad_costs GROUP BY client_id, platform, ad_id`
   )
-  const firstSeenMap = new Map(firstSeenRows.map((r) => [windowKey(r.client_id, r.platform, r.ad_id), r.first_date]))
+  const daysLiveMap = new Map(daysLiveRows.map((r) => [windowKey(r.client_id, r.platform, r.ad_id), parseInt(r.days_live, 10)]))
 
   const lookbackEnd = isoDate(yesterday)
   const lookbackStartDate = new Date(yesterday)
   lookbackStartDate.setUTCDate(lookbackStartDate.getUTCDate() - (GUARDRAIL_CONFIG.lookbackDays - 1))
   const lookback = await getAdWindow(isoDate(lookbackStartDate), lookbackEnd)
 
+  // Review fix (2026-07-28, item 6): fetch each distinct client's cost context
+  // ONCE before the loop, not once per ad inside it — evaluateGate (pure, no
+  // DB access) was split out from checkGate specifically so a caller looping
+  // over many entities could do this, and this loop wasn't actually doing it.
+  const distinctClientIds = new Set([...recentShort.values()].map((w) => w.client_id))
+  const costCtxByClient = new Map<string, CostContext>()
+  await Promise.all(
+    [...distinctClientIds].map(async (id) => costCtxByClient.set(id, await getCostContext(id)))
+  )
+
   let flagged = 0
   for (const [key, rs] of recentShort) {
     const ps = priorShort.get(key)
     const rl = recentLong.get(key)
     const pl = priorLong.get(key)
-    // No prior window at all, or too little volume in it to trust a comparison —
-    // matches the spec's explicit "if there's no earlier window to decay from,
-    // don't call fatigue, return insufficient history instead" (we simply don't
-    // flag; there's no confirm-first review queue entry expecting a row here the
-    // way pause_candidates does, so "insufficient history" here means "skipped").
-    if (!ps || ps.impressions < MIN_PRIOR_IMPRESSIONS) continue
-    if (!rl || !pl || pl.impressions < MIN_PRIOR_IMPRESSIONS) continue
+    // No prior window at all, or too little volume on EITHER side of either
+    // comparison to trust it — review fix (item 4): the recent windows
+    // (rs/rl) previously had no floor at all, only the prior windows did.
+    if (!ps || rs.impressions < MIN_WINDOW_IMPRESSIONS || ps.impressions < MIN_WINDOW_IMPRESSIONS) continue
+    if (!rl || !pl || rl.impressions < MIN_WINDOW_IMPRESSIONS || pl.impressions < MIN_WINDOW_IMPRESSIONS) continue
 
     const dRS = deriveMetrics(rs)
     const dPS = deriveMetrics(ps)
@@ -204,13 +238,19 @@ export async function detectCreativeFatigue(): Promise<number> {
         priorLong: pl.avgFrequency,
       },
     ]
-    const triggered = trends.filter(isSustainedTrend)
-    if (triggered.length === 0) continue
+    // Review fix (item 3): only roas/cpa/ctr can raise a flag by themselves.
+    // cpm/frequency are computed and reported the same as any other metric
+    // (see metricsTriggered below) but never gate the decision on their own.
+    const triggeredPrimary = trends.filter((t) => PRIMARY_TRIGGER_METRICS.includes(t.metric) && isSustainedTrend(t))
+    if (triggeredPrimary.length === 0) continue
+    const allTriggered = trends.filter(isSustainedTrend)
 
-    const firstSeen = firstSeenMap.get(key)
-    const daysLive = firstSeen ? Math.max(Math.floor((now.getTime() - new Date(firstSeen).getTime()) / 86400000), 0) : 0
+    const firstSeen = daysLiveMap.get(key) ?? 0
+    const daysLive = firstSeen
     const lookbackWindow = lookback.get(key)
-    const gate = await checkGate(rs.client_id, 'creative', daysLive, lookbackWindow?.spend ?? 0, lookbackWindow?.sales ?? 0)
+    const costCtx = costCtxByClient.get(rs.client_id)
+    if (!costCtx) continue // shouldn't happen — every ad's client_id came from recentShort, which seeded distinctClientIds
+    const gate = evaluateGate(costCtx, 'creative', daysLive, lookbackWindow?.spend ?? 0, lookbackWindow?.sales ?? 0)
     // The whole point of the gate: a creative that's declining but hasn't earned
     // a verdict yet (too new, too little spend) never gets flagged — no matter
     // how sharp the trend looks on paper.
@@ -224,7 +264,7 @@ export async function detectCreativeFatigue(): Promise<number> {
           priorShort: t.priorShort,
           recentLong: t.recentLong,
           priorLong: t.priorLong,
-          triggered: triggered.includes(t),
+          triggered: allTriggered.includes(t),
         },
       ])
     )

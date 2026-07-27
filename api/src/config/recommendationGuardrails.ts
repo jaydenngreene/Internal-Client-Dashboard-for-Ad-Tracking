@@ -16,14 +16,24 @@ export const GUARDRAIL_CONFIG = {
   spendMultiplier: 3,
   lookbackDays: 30,
 
-  // Cost-per-purchase fallback: used when a client has too few conversions in
-  // the trailing window for spend/conversions to mean anything (new account,
-  // zero purchases, or a sample too thin to trust). Both numbers are
-  // placeholders pending the user's real figures - see docs/ISSUE_LOG.md or ask
-  // before relying on them for a live client.
+  // Fallback threshold: below this many conversions in the trailing window,
+  // a client's own spend/conversions figure is too thin to trust (new
+  // account, zero purchases, or a sample size where one unusually large/small
+  // sale swings the average heavily) and costPerPurchase/run.ts substitutes
+  // this niche's industry-benchmark figure instead (see
+  // config/industryBenchmarks.ts) — NOT a flat dollar number across every
+  // business type. Raised 5 -> 10 (2026-07-27): 5 conversions is thin for a
+  // spend/conversions average; 10 trades a slightly longer fallback period for
+  // a materially more stable per-client figure once real data kicks in. Still
+  // a judgment call — raise further if a client's early "real" cost-per-
+  // purchase still looks noisy at n=10.
+  //
+  // Confirmed 2026-07-28: this never touched BlackB4U or Nothing But Buckets —
+  // both clear this threshold comfortably (145 and 586 purchases), so their
+  // gates were always their own true 3x ($90.33 and $15.18 respectively). The
+  // fallback only ever applies to clients below the threshold.
   fallback: {
-    costPerPurchase: 50, // TODO(user): set the real fallback $ figure
-    minConversionsToTrust: 5, // below this many conversions in the window, use the fallback instead
+    minConversionsToTrust: 10,
   },
 
   // Optional secondary check (1.1's "statistical confidence" note) - off by

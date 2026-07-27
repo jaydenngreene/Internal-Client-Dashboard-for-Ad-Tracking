@@ -30,12 +30,50 @@ const METRIC_LABEL: Record<string, string> = {
   frequency: "Frequency",
 };
 
-// Phase 1 guardrails (2026-07-27) — every signal now carries the full
-// roas/ctr/cpa/cpm/frequency breakdown (short-window and long-window, each
-// flagged whether it actually triggered), not just the original CTR-only
-// decline_pct. Only the metrics that actually triggered the sustained
-// day-and-week trend are called out here — the rest were checked but didn't
-// cross their threshold.
+// Review fix (2026-07-28, item 3/8): only roas/cpa/ctr can raise a fatigue
+// flag on their own (matches creativeFatigue/run.ts's PRIMARY_TRIGGER_METRICS)
+// — cpm and frequency are corroborating signals only (CPM is driven by
+// auction competition/seasonality, not creative wear; rising frequency is the
+// expected behavior of any ad left running, a fatigue precursor rather than
+// fatigue itself). The UI distinguishes them so a signal never reads as
+// "flagged because CPM rose" when CPM alone can't flag anything.
+const PRIMARY_METRICS = new Set(["roas", "cpa", "ctr"]);
+
+function formatMetricValue(metric: string, value: number | null): string {
+  if (value === null) return "—";
+  if (metric === "roas") return `${value.toFixed(2)}x`;
+  if (metric === "ctr") return `${value.toFixed(2)}%`;
+  if (metric === "cpa" || metric === "cpm") return `$${value.toFixed(2)}`;
+  return value.toFixed(2);
+}
+
+// Review fix (2026-07-28, item 8): recent_ctr/prior_ctr/decline_pct are always
+// populated with real CTR numbers regardless of which metric actually
+// triggered — writing them into the headline unconditionally used to make an
+// ad flagged solely on CPM or CPA display a CTR-derived percentage as if CTR
+// were the reason, which is a false claim about why it was flagged. The
+// headline is now built from whichever metric(s) actually triggered.
+function headlineText(signal: CreativeFatigueSignal): string {
+  const triggeredPrimary = signal.metrics_triggered
+    ? Object.entries(signal.metrics_triggered).filter(([metric, m]) => PRIMARY_METRICS.has(metric) && m.triggered)
+    : [];
+  if (triggeredPrimary.length === 0) {
+    // Old rows from before this column existed, or an edge case with no
+    // metrics_triggered payload — fall back to the legacy CTR-only fields
+    // rather than showing nothing.
+    return `CTR down ${formatPercent(signal.decline_pct)}: ${formatPercent(signal.recent_ctr)} over the last 3 days vs. ${formatPercent(signal.prior_ctr)} the 7 days before that.`;
+  }
+  const parts = triggeredPrimary.map(([metric, m]) => {
+    const direction = metric === "cpa" ? "up" : "down";
+    return `${METRIC_LABEL[metric]} ${direction} (${formatMetricValue(metric, m.recentShort)} vs. ${formatMetricValue(metric, m.priorShort)})`;
+  });
+  return `${parts.join(", ")} over the last 3 days vs. the 7 days before that.`;
+}
+
+// Only the metrics that actually triggered the sustained day-and-week trend
+// are called out here — the rest were checked but didn't cross their
+// threshold. Corroborating (non-primary) metrics are labeled as such so it's
+// clear they strengthened the picture without being the reason it flagged.
 function TriggeredMetrics({ signal }: { signal: CreativeFatigueSignal }) {
   if (!signal.metrics_triggered) return null;
   const triggered = Object.entries(signal.metrics_triggered).filter(([, m]) => m.triggered);
@@ -45,9 +83,10 @@ function TriggeredMetrics({ signal }: { signal: CreativeFatigueSignal }) {
     <div className="flex flex-col gap-1">
       {triggered.map(([metric, m]) => (
         <p key={metric} className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground/90">{METRIC_LABEL[metric] ?? metric}</span>: {m.recentShort?.toFixed(2)} over the
-          last few days vs. {m.priorShort?.toFixed(2)} before that (also down over the last week: {m.recentLong?.toFixed(2)} vs.{" "}
-          {m.priorLong?.toFixed(2)}).
+          <span className="font-medium text-foreground/90">{METRIC_LABEL[metric] ?? metric}</span>
+          {!PRIMARY_METRICS.has(metric) && <span className="italic"> (corroborating)</span>}: {formatMetricValue(metric, m.recentShort)}{" "}
+          over the last few days vs. {formatMetricValue(metric, m.priorShort)} before that (also crossed over the last week:{" "}
+          {formatMetricValue(metric, m.recentLong)} vs. {formatMetricValue(metric, m.priorLong)}).
         </p>
       ))}
     </div>
@@ -84,8 +123,7 @@ function SignalCard({ signal, clientId }: { signal: CreativeFatigueSignal; clien
         </div>
 
         <p className="text-sm text-foreground/90">
-          CTR down {formatPercent(signal.decline_pct)}: {formatPercent(signal.recent_ctr)} over the last 3 days vs.{" "}
-          {formatPercent(signal.prior_ctr)} the 7 days before that. Consider refreshing this creative.
+          {headlineText(signal)} Consider refreshing this creative.
         </p>
 
         <TriggeredMetrics signal={signal} />

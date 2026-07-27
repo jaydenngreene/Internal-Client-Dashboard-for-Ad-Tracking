@@ -80,6 +80,24 @@ Built the enhancement proposed in the previous session (see the git history of t
 
 ---
 
+## 2026-07-27 — Nothing But Buckets: real ad clicks landing in "(no utm_campaign)" Direct/Organic
+
+**Reported:** sales still showing up under "(no utm_campaign)" Direct/Organic for Nothing But Buckets specifically — user noted BlackB4U wasn't showing the same symptom, and UTMs were confirmed present in the ad setup.
+
+**Investigated directly against the real Supabase DB** (not assumed): pulled Nothing But Buckets' most recent purchases joined through `attributions`→`sessions`. Found the exact mechanism, not just a plausible theory:
+- Some of the client's Facebook ad URLs carry `utm_source`/`utm_medium` **plus Meta's raw dynamic URL params `campaign_id`/`ad_id`**, but no `utm_campaign`/`utm_content` at all — e.g. `?utm_source=facebook&utm_medium=paid&campaign_id=120245194137140253&ad_id=120248578723770253`. Other ads in the same account *do* tag `utm_campaign`/`utm_content` (redundantly, alongside `campaign_id`/`ad_id`) — the account's ad templates are simply inconsistent.
+- Both places that parse ad params out of a URL — `pixel.js`'s `extractAdParams()` (live pageviews) and `session.ts`'s `parseAdParamsFromLandingSite()` (the Shopify `landing_site` server-side fallback, see the 2026-07-25 entry below) — only ever read `utm_campaign`/`utm_content`. Neither had a fallback to the raw `campaign_id`/`ad_id` params, so a session from one of these ads permanently had `utm_campaign: null` even though `utm_source`/`fbclid` proved it was a real, identifiable ad click. Confirmed a live example of exactly this via the fallback path (a session whose `started_at` == the purchase's `purchased_at`, `campaign_id`/`ad_id` present, `utm_campaign` null).
+- Compared against BlackB4U's same-shape query: every session that existed there already had a `utm_campaign` — consistent with the user's report that this symptom is Nothing But Buckets-specific (their ad account's URL tagging, not a Kado-wide bug).
+- The reports layer (`reports.ts`'s `idIndex`) already knows how to match a *raw numeric id* sitting in `utm_campaign`/`utm_content` against `ad_costs.campaign_id`/`ad_id` — that logic just never got a value to match on for these sessions.
+
+**Fix:** both `extractAdParams()` (pixel.js) and `parseAdParamsFromLandingSite()` (session.ts) now fall back to `campaign_id`/`ad_id` when `utm_campaign`/`utm_content` are absent from the URL. Verified the fallback resolves both real NBB URL shapes correctly (campaign_id-only, and utm_campaign+campaign_id together) via a standalone check before shipping. `npm run test` (98 tests) and `tsc --noEmit` stayed clean.
+
+**Separate, larger issue found while investigating, not yet fixed:** roughly half of both clients' recent purchases have **zero session or identity record at all** (not even landing in "(no utm_campaign)" — excluded from every campaign/source report entirely, since `getRevenueByCampaign` inner-joins `attributions`). Spot-checked several such emails against `identities` — zero rows, meaning `/track/identify` never successfully linked them. This affects BlackB4U equally, so it's not what the user reported this session, but it's the bigger revenue-visibility gap of the two. Matches the shape of the 2026-07-26 "most real orders never getting attributed" entry above (keepalive + Shopify Data Sale gating) — but fresh 2026-07-27 data still shows it at the same ~50% rate one day after that was marked fixed, which means either the keepalive code fix was never actually redeployed on Railway, or the Shopify Customer Events custom-pixel snippet re-paste / Data Sale setting change didn't actually take for one or both clients (or reverted). Needs checking directly in Shopify Admin (Settings → Customer events) and confirming Railway shows a deploy after commit `8ace08e`, not just re-diagnosing from scratch — not something fixable from this repo alone.
+
+**Commit:** (see git log for the commit hash following this entry)
+
+---
+
 ## Operational gotchas (not code bugs — Kado-specific environment/process facts worth knowing)
 
 - **Local API dev server (`tsx watch`) sometimes doesn't restart on file save** — a stale process can keep serving old code indefinitely with no visible error. If a fix "doesn't seem to work" locally, check `netstat -ano | grep :3001`'s PID start time against when the file was last saved; if the process predates the edit, kill it and restart `npm run dev:api`.

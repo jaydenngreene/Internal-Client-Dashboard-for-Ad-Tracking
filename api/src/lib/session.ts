@@ -31,6 +31,14 @@ export function parseAdParamsFromLandingSite(landingSite: string | null | undefi
   if (queryIndex === -1) return null
 
   const params = new URLSearchParams(landingSite.slice(queryIndex + 1))
+  // Same fallback as pixel.js's extractAdParams: some clients' ad templates tag
+  // links with Meta's raw dynamic URL params (campaign_id/ad_id) instead of
+  // utm_campaign/utm_content - confirmed live on Nothing But Buckets
+  // (2026-07-27) via this exact landing_site fallback path. Without this, a
+  // real ad click still lands as "(no utm_campaign)" even though this
+  // fallback's whole purpose is recovering real ad attribution.
+  const utmCampaign = params.get('utm_campaign') ?? params.get('campaign_id')
+  const utmContent = params.get('utm_content') ?? params.get('ad_id')
   const adParams: AdParams = {
     fbclid: params.get('fbclid') ?? undefined,
     gclid: params.get('gclid') ?? undefined,
@@ -38,8 +46,8 @@ export function parseAdParamsFromLandingSite(landingSite: string | null | undefi
     msclkid: params.get('msclkid') ?? undefined,
     utm_source: params.get('utm_source') ?? undefined,
     utm_medium: params.get('utm_medium') ?? undefined,
-    utm_campaign: params.get('utm_campaign') ?? undefined,
-    utm_content: params.get('utm_content') ?? undefined,
+    utm_campaign: utmCampaign ?? undefined,
+    utm_content: utmContent ?? undefined,
     utm_term: params.get('utm_term') ?? undefined,
     landing_page: landingSite,
   }

@@ -182,6 +182,16 @@
 
   function extractAdParams(search) {
     var params = new URLSearchParams(search)
+    // Some clients' ad templates tag links with Meta's raw dynamic URL params
+    // (campaign_id={{campaign.id}}, ad_id={{ad.id}}) instead of, or alongside,
+    // utm_campaign/utm_content - confirmed live on Nothing But Buckets
+    // (2026-07-27): utm_source/fbclid present, utm_campaign/utm_content simply
+    // absent from the URL, so those sessions permanently show "(no
+    // utm_campaign)" even though the click is a real, identifiable ad click.
+    // The reports layer already knows how to match a raw numeric id in
+    // utm_campaign/utm_content against ad_costs (see reports.ts's idIndex) -
+    // it just never gets one if the URL never had utm_campaign to begin with.
+    // Fall back to the raw id so that matching can happen.
     return {
       fbclid: params.get('fbclid'),
       gclid: params.get('gclid'),
@@ -189,8 +199,8 @@
       msclkid: params.get('msclkid'),
       utm_source: params.get('utm_source'),
       utm_medium: params.get('utm_medium'),
-      utm_campaign: params.get('utm_campaign'),
-      utm_content: params.get('utm_content'),
+      utm_campaign: params.get('utm_campaign') || params.get('campaign_id'),
+      utm_content: params.get('utm_content') || params.get('ad_id'),
       utm_term: params.get('utm_term'),
     }
   }

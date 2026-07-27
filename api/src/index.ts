@@ -253,3 +253,29 @@ const start = async () => {
 }
 
 start()
+
+// Without this, Railway's SIGTERM during a redeploy kills the process
+// immediately — any webhook/pixel request already accepted (e.g. mid-DB-write
+// on a Shopify order) is severed rather than allowed to finish. app.close()
+// stops accepting new connections and waits for in-flight ones to complete;
+// railway.json's drainingSeconds (15s) is the window Railway waits before
+// escalating to SIGKILL if this hangs. Pairs with railway.json's
+// healthcheckPath/overlapSeconds, which keep the *previous* deploy serving
+// traffic until the new one is confirmed listening — together these close the
+// "container not actually up yet" gap that plausibly dropped requests before.
+let shuttingDown = false
+async function gracefulShutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+  app.log.info(`${signal} received, draining in-flight requests before exit`)
+  try {
+    await app.close()
+    app.log.info('drained cleanly, exiting')
+    process.exit(0)
+  } catch (err) {
+    app.log.error(err)
+    process.exit(1)
+  }
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

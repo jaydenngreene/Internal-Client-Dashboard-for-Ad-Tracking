@@ -4,6 +4,10 @@
     "buildCommand": "npm install && npm run build --workspace=pixel && npm run build --workspace=api"
   },
   "deploy": {
-    "startCommand": "npm run start --workspace=api"
+    "startCommand": "npm run start --workspace=api",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "overlapSeconds": 30,
+    "drainingSeconds": 15
   }
 }

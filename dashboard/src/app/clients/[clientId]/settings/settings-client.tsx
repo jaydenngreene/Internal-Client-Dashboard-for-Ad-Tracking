@@ -219,13 +219,42 @@ async function post(endpoint, body) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body)),
-      // checkout_completed fires right before Shopify redirects to the thank-you
-      // page - without keepalive the browser can cancel this request mid-flight
-      // during that navigation. Shopify's own Web Pixels docs call this out
-      // specifically for this event (a documented 3-7% loss without it).
       keepalive: true,
     });
     console.log('[Kado pixel]', endpoint, 'sent, status', res.status);
+  } catch (err) {
+    console.error('[Kado pixel]', endpoint, 'failed', err);
+  }
+}
+
+// checkout_completed fires right before Shopify redirects to the thank-you page.
+// fetch+keepalive is still subject to the sandboxed pixel worker's own context
+// being torn down mid-flight during that navigation - live data (2026-07-27,
+// Nothing But Buckets) showed most identify() calls around checkout_completed
+// never arriving despite keepalive being set. browser.sendBeacon is the sandbox's
+// dedicated primitive for exactly this "about to navigate away" case (queued by
+// the browser itself, not tied to the pixel context's lifetime), so use it here
+// instead. Falls back to the fetch+keepalive path if sendBeacon is unavailable.
+async function postBeacon(endpoint, body) {
+  const anonymous_id = await getVisitorId();
+  const payload = JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body));
+  try {
+    if (browser.sendBeacon) {
+      browser.sendBeacon(API_URL + endpoint, payload);
+      console.log('[Kado pixel]', endpoint, 'sent via sendBeacon');
+      return;
+    }
+  } catch (err) {
+    console.error('[Kado pixel]', endpoint, 'sendBeacon failed, falling back', err);
+  }
+  try {
+    const res = await fetch(API_URL + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: true,
+    });
+    console.log('[Kado pixel]', endpoint, 'sent via fetch, status', res.status);
   } catch (err) {
     console.error('[Kado pixel]', endpoint, 'failed', err);
   }
@@ -278,7 +307,7 @@ analytics.subscribe('checkout_started', (event) => {
 analytics.subscribe('checkout_completed', (event) => {
   const checkout = event.data.checkout;
   if (!checkout || !checkout.email) return;
-  post('/track/identify', {
+  postBeacon('/track/identify', {
     email: checkout.email,
     lead_type: 'checkout',
     page: window.location.href,

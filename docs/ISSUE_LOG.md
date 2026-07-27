@@ -24,6 +24,25 @@ A thorough review of the Phase 1 guardrail work (previous entry below) surfaced 
 
 ---
 
+## 2026-07-28 — Built: zero-downtime Railway deploys (healthcheck + overlap + graceful shutdown)
+
+**Ask:** user recalled the earlier-documented risk (see the 07-27 follow-up entry below, "found a real deploy-boundary gap") — a redeploy could plausibly drop a sale — and asked to close it so redeployments can't cost real orders.
+
+**What was actually missing, confirmed by reading the live config/code, not assumed:** `railway.json`'s `deploy` block had no `healthcheckPath` — Railway had no way to know when the new container was actually ready, so (per the 07-27 entry) it could mark a deploy "Active" ~3.5 minutes before the container was really listening. Separately, `api/src/index.ts` had zero `SIGTERM`/`SIGINT` handling — the process would die immediately on Railway's termination signal, severing any in-flight request (e.g. mid-DB-write on a Shopify order) rather than finishing it.
+
+**Important context, not a new problem:** the Shopify order webhook itself was already reasonably safe even before this — `shopify.ts`'s handler awaits `recordPurchase` before ever responding 200, and `purchases` has a `(client_id, order_id)` unique constraint with `ON CONFLICT DO NOTHING` (migration 003), so a request that fails/times out during a deploy gap gets safely retried by Shopify's own automatic webhook-retry mechanism without risk of a duplicate. The real gap was the *window itself* being unnecessarily large and unmanaged, not unsafe request handling.
+
+**Fix:**
+- `railway.json`: added `healthcheckPath: "/health"` + `healthcheckTimeout: 30` (Railway won't cut traffic to a new deploy until it actually answers healthy) and `overlapSeconds: 30` (the previous deploy keeps serving until the new one passes that check — true zero-downtime instead of a gap) + `drainingSeconds: 15` (grace window before the old container is SIGKILLed).
+- `api/src/index.ts`: added a `SIGTERM`/`SIGINT` handler calling `app.close()` (stops accepting new connections, waits for in-flight ones to finish) before exiting, so the `drainingSeconds` window is actually used instead of the process dying on the spot.
+- Confirmed exact Railway schema field names/semantics against `railway.schema.json` before writing the config, rather than guessing.
+
+**Verified:** `railway.json` is valid JSON; `api` workspace (`tsc`) builds clean with the new shutdown handler.
+
+**Not yet live:** same as any `api/` change — needs a Railway redeploy (ironically, this next deploy will still cross the un-fixed gap once, since the old behavior is what's live until the new config takes effect).
+
+---
+
 ## 2026-07-27 (later) — Nothing But Buckets: identify() still dropping most orders — sendBeacon fix
 
 **Reported:** user flagged two new NBB orders with no attribution (`realisjones9@gmail.com`, `robincaldwell3100@comcast.net`) while the order right before them (`rharris@towerhill.org`) landed fine.

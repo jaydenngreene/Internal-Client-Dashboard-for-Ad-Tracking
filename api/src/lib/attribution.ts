@@ -87,6 +87,7 @@ async function attributePurchase(
   revenue: number,
   purchaseTime: Date,
   landingSite: string | null | undefined,
+  referringSite: string | null | undefined,
   signal: { originalValue: number; currency: string; orderId: string | null; product: string | null; processor: string }
 ): Promise<boolean> {
   const { rows: identityRows } = await db.query(
@@ -118,8 +119,17 @@ async function attributePurchase(
   // first landing page itself, independent of any pixel — parsing UTM/click-ids
   // out of that gives a real single-touch attribution when our own tracking
   // came up empty, without depending on the broken cookie hop at all.
-  if (sessionRows.length === 0 && landingSite) {
-    const adParams = parseAdParamsFromLandingSite(landingSite)
+  //
+  // referring_site fallback (2026-07-28): confirmed live on Nothing But
+  // Buckets — a real order (`rusmed6@gmail.com`) had a completely empty
+  // landing_site but a full ad-click URL (utm_campaign + fbclid intact)
+  // sitting in referring_site instead. Same root shape as the pixel.js
+  // document.referrer fix from 07-26 (c709624), one layer over: Shopify
+  // itself sometimes puts the ad-click URL in the "referring page" field
+  // instead of "landing page." Tried second, only when landing_site has no
+  // usable ad signal.
+  if (sessionRows.length === 0) {
+    const adParams = parseAdParamsFromLandingSite(landingSite) ?? parseAdParamsFromLandingSite(referringSite)
     if (adParams) {
       const fallbackVisitorId = await resolveVisitor({
         clientId,
@@ -296,7 +306,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   // Sent in the ORIGINAL transaction currency, not the base-currency-converted
   // `revenue` above — the ad platform's own optimization/reporting needs the real
   // amount that changed hands, not this app's internal reporting conversion.
-  await attributePurchase(clientId, purchaseId, email, revenue, purchaseTime, conv.landing_site, {
+  await attributePurchase(clientId, purchaseId, email, revenue, purchaseTime, conv.landing_site, conv.referring_site, {
     originalValue: conv.revenue,
     currency: conv.currency ?? baseCurrency,
     orderId: conv.order_id ?? null,
@@ -349,7 +359,7 @@ export async function attemptRetroactiveAttribution(clientId: string, email: str
     // (only the already-converted revenue is) - a disclosed simplification for
     // this retroactive path only, same "can't perfectly reconstruct" trade-off
     // recordRefund already accepts for its own currency conversion.
-    await attributePurchase(clientId, p.id, normalizedEmail, revenue, new Date(p.purchased_at), null, {
+    await attributePurchase(clientId, p.id, normalizedEmail, revenue, new Date(p.purchased_at), null, null, {
       originalValue: revenue,
       currency: baseCurrency,
       orderId: p.order_id,

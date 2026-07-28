@@ -240,7 +240,15 @@ async function postBeacon(endpoint, body) {
   const payload = JSON.stringify(Object.assign({ pixel_key: PIXEL_KEY, anonymous_id }, body));
   try {
     if (browser.sendBeacon) {
-      browser.sendBeacon(API_URL + endpoint, payload);
+      // Confirmed live (2026-07-28): sendBeacon called with a raw string (not
+      // a Blob) sends Content-Type: text/plain, not application/json - the
+      // server never parsed the body as JSON, so pixel_key/anonymous_id/email
+      // all read as missing and every real checkout identify() call 400'd
+      // instantly. This was the actual cause of the "identify() never
+      // succeeds" gap, not the navigation-race the sendBeacon switch itself
+      // was meant to fix - wrapping in a Blob with the right type is what
+      // shopifyCheckoutSnippet's own send() below already does correctly.
+      browser.sendBeacon(API_URL + endpoint, new Blob([payload], { type: 'application/json' }));
       console.log('[Kado pixel]', endpoint, 'sent via sendBeacon');
       return;
     }

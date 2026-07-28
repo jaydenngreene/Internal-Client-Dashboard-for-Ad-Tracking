@@ -63,6 +63,24 @@ Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 })
 
 const app = Fastify({ logger: true, trustProxy: true })
 
+// Confirmed live (2026-07-28): navigator.sendBeacon()/browser.sendBeacon() sent
+// with a raw string (not a Blob) defaults to Content-Type: text/plain, not
+// application/json - a well-known Beacon API gotcha. Fastify has no default
+// JSON parser for text/plain, so req.body came through as the raw string
+// itself, and every /track/* route's required-field destructuring silently
+// read undefined for everything - a real Nothing But Buckets checkout pixel
+// call was doing exactly this (fixed at the source in the pixel snippet too,
+// see docs/ISSUE_LOG.md), but this parser makes the server tolerant of the
+// same mistake anywhere else a future sendBeacon call makes it, rather than
+// each one silently 400ing with no visible cause.
+app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
+  try {
+    done(null, JSON.parse(body as string))
+  } catch {
+    done(null, {})
+  }
+})
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim())
 
 // @fastify/cors is wrapped with fastify-plugin (breaks encapsulation on

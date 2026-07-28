@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-28 (later still) — The real identify() bug, finally found: sendBeacon sent text/plain, not JSON
+
+**How this was found:** every prior pass at "why doesn't identify() ever succeed" reasoned from DB aggregates (attributed-rate, identity counts) and from Railway's *history* view, which turned out to have unreliable deployment boundaries and a search filter that returns "No logs found" even for `/track/pageview`, which fires constantly - don't trust that filter. What actually worked: the user watched two real orders land live (6:36pm and 7:13pm) and gave exact timestamps, and Railway's raw unfiltered log stream (scrolled to, not searched to) showed the ground truth directly.
+
+**What the logs showed, both times:** `POST /track/identify` arrived at the server within 1 second of the purchase, every time - `sendBeacon` reaching the server reliably was never in question. Both got **`400`** in ~1.4ms - before any DB query, the earliest possible failure (the route's `if (!pixel_key || !anonymous_id || !email) return 400` check).
+
+**Root cause:** `postBeacon()` in the Customer Events checkout pixel (`shopifyCustomPixelSnippet`, `settings-client.tsx`) called `browser.sendBeacon(url, payload)` with `payload` as a raw `JSON.stringify(...)` string, not a `Blob`. Per the Beacon API, a string payload defaults to `Content-Type: text/plain`, not `application/json` - Fastify never parses that as JSON, so every field the route destructures off `req.body` read as `undefined`. **This bug was introduced by yesterday's own `sendBeacon` fix** (`6354a67`), which correctly solved the fetch+keepalive navigation-race problem - but the old fetch path explicitly set `Content-Type: application/json`, so on the rare occasion it *did* arrive intact, it worked; `sendBeacon` fires every single time but was arriving broken every single time. Net effect looked identical from the DB side (near-zero real identities) but for a completely different reason than diagnosed.
+
+**Fix:** wrap the beacon payload in `new Blob([payload], { type: 'application/json' })`, matching the pattern `pixel.js` and this same file's `shopifyCheckoutSnippet` already used correctly (only `postBeacon` had the bug - `pixel.js`'s own `send()` was never affected, confirmed by reading it directly rather than assuming). Also added a `text/plain` content-type parser in `api/src/index.ts` that attempts `JSON.parse` server-side - defense in depth, so the same class of mistake anywhere else in this app (or a future one) degrades gracefully instead of silently 400ing with zero visible symptom in the DB.
+
+**Verified:** both workspaces typecheck clean, `npm test` (98 tests) passing, the text/plain parser logic checked standalone against both a real payload shape and garbage input. **Not yet verified against a real live order** - needs the next real checkout after this deploys to confirm an actual `identities` row gets created, the same way the bug itself was confirmed: watch it happen, don't infer it from an aggregate.
+
+**Commit:** `e2ec1b4`
+
+---
+
 ## 2026-07-28 (later) — Stopped aggregate monitoring, found a real fix by reading individual rows instead
 
 **Context:** a session-local recurring check (every 2h) had been reporting the NBB attributed-rate for over a day without landing on anything new — user correctly pushed back that repeating the same "still ~50%, still investigating" number had no value. Stopped the cron job and did a one-time deep read of every individual `source_name: web` order instead of re-running the same aggregate query.

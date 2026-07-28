@@ -6,6 +6,20 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-28 — Nothing But Buckets identify() gap, continued: never checked which sales channel the order came through
+
+**Context:** the `sendBeacon` fix (`6354a67`) was confirmed deployed on both Railway and Vercel (checked live via each dashboard — both serving the current `main` tip). User confirmed, and double-checked, that the updated Customer Events snippet was re-pasted into Shopify Admin. Despite all of that, the attributed rate hadn't moved (still ~10/16, and 4 of the last 6 orders landed with zero session/identity) — meaning the standing "it just needs a redeploy/re-paste" theory was wrong, or at least incomplete.
+
+**What hadn't been checked:** every investigation so far assumed these orders went through Shopify's normal storefront/checkout, where *some* Kado pixel (theme snippet or Customer Events) should have a chance to run. Nobody had verified that assumption. Shopify's order webhook payload already carries `source_name` (which sales channel placed the order — `"web"` is the real storefront; other values are POS, the Facebook/Instagram Shop channel, etc.) and `referring_site`, but this app never captured either field — `ShopifyOrder` parsed them and then discarded them. An order placed through Meta's native in-app checkout (Instagram/Facebook Shop's own "Buy Now" flow) never loads a single Shopify storefront or checkout page — so no pixel of any kind, ours or Shopify's own, ever gets a chance to fire, completely independent of what code is deployed or pasted where.
+
+**Change:** migration `057_purchase_source_channel.sql` adds `purchases.source_name`/`referring_site`; threaded through `NormalizedConversion` → `recordPurchase` → the Shopify order webhook handler. Purely additive/diagnostic for now — no behavior change, just capturing a signal that already existed in every webhook payload and was being thrown away.
+
+**Not yet confirmed** — needs a batch of new orders to land with this column populated before it can actually be checked. Next step: once there's a real sample, compare `source_name` against attribution status for the currently-unattributed customers (`realisjones9@gmail.com`, `robincaldwell3100@comcast.net`, `ashleydopson83@gmail.com`, `rastalg54@gmail.com`, and any new ones) — if they cluster on a non-`web` source_name, this whole "identify() is broken" line of investigation has been chasing the wrong layer, and the real conversation becomes whether/how to track that channel at all (may not even be feasible — Meta's native checkout may not expose a pixel hook the way Shopify's own checkout does).
+
+**Commit:** `9a98c39`
+
+---
+
 ## 2026-07-28 (later still) — Built: Phase 3, generalize the Buying Journey tab to every niche
 
 **Ask:** Phase 2 (`603dd46`) only built the "Customer Buying Journey" tab for ecom. Generalize it to lead-gen, call funnels, SaaS, and info products — one shared component driven by a per-niche config, not four forked pages.

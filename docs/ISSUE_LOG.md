@@ -6,6 +6,20 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-28 (later) — Stopped aggregate monitoring, found a real fix by reading individual rows instead
+
+**Context:** a session-local recurring check (every 2h) had been reporting the NBB attributed-rate for over a day without landing on anything new — user correctly pushed back that repeating the same "still ~50%, still investigating" number had no value. Stopped the cron job and did a one-time deep read of every individual `source_name: web` order instead of re-running the same aggregate query.
+
+**Found two real things by actually reading the rows:**
+1. **`identity_id` is null on every single `source_name: web` order in the sample (0/8).** Every order that did attribute got there entirely through the landing_site/referring_site fallback (session `started_at` == `purchased_at`, the fallback's signature) — not through a real `/track/identify` call ever succeeding, even on the legitimate storefront channel. This means the `sendBeacon` fix's real-world effectiveness still hasn't been confirmed working even once, despite being deployed and re-pasted. **Not yet root-caused** — worth a live network-tab capture of a real checkout next, not more DB polling.
+2. **A second, fixable fallback gap**, confirmed with real data: `rusmed6@gmail.com`'s order had an empty `landing_site` but a full ad-click URL (`utm_campaign` + `fbclid` intact) sitting in Shopify's `referring_site` field instead — `parseAdParamsFromLandingSite`'s caller in `attribution.ts` never checked it. Same shape as the pixel.js `document.referrer` fix from 07-26 (`c709624`), one layer over. Fixed: tries `referring_site` second, only when `landing_site` has no usable ad signal. Verified the exact real string parses correctly, and that a bare no-query referrer (the genuinely-organic case) still correctly returns nothing.
+
+**Commit:** `6018372`
+
+**Still open, honestly:** item 1 above is the real remaining mystery and is not fixed by this commit — this only recovers cases where Shopify's own fields *have* the data somewhere. Next step if this comes up again: capture one live checkout's network traffic directly rather than inferring from aggregate DB stats after the fact.
+
+---
+
 ## 2026-07-28 — Nothing But Buckets identify() gap, continued: never checked which sales channel the order came through
 
 **Context:** the `sendBeacon` fix (`6354a67`) was confirmed deployed on both Railway and Vercel (checked live via each dashboard — both serving the current `main` tip). User confirmed, and double-checked, that the updated Customer Events snippet was re-pasted into Shopify Admin. Despite all of that, the attributed rate hadn't moved (still ~10/16, and 4 of the last 6 orders landed with zero session/identity) — meaning the standing "it just needs a redeploy/re-paste" theory was wrong, or at least incomplete.

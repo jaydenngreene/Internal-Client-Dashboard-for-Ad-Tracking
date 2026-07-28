@@ -24,6 +24,15 @@ export interface NormalizedConversion {
   // Shopify order's `landing_site` — attribution fallback when our own session
   // tracking finds nothing for this email (see recordPurchase below).
   landing_site?: string | null
+  // Shopify order's `source_name`/`referring_site` - which sales channel the
+  // order actually came through ("web" = the real storefront/checkout; other
+  // values mean POS, Facebook/Instagram Shop, etc). Purely diagnostic/stored
+  // for now (2026-07-28) - an order placed through a non-web channel never
+  // loads Shopify's storefront or checkout pages, so no pixel of any kind
+  // (ours or Shopify's own Customer Events) ever gets a chance to fire for it,
+  // independent of whether that pixel's code is correct or freshly deployed.
+  source_name?: string | null
+  referring_site?: string | null
 }
 
 type AttributionModel = 'first_click' | 'last_click' | 'linear' | 'time_decay' | 'u_shaped'
@@ -263,11 +272,21 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
 
   const { rows: purchaseRows } = await db.query(
-    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at)
-     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
+    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at, source_name, referring_site)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8, $9)
      ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
      RETURNING id`,
-    [clientId, email, revenue, conv.product ?? null, conv.order_id ?? null, conv.processor, conv.purchased_at ?? null]
+    [
+      clientId,
+      email,
+      revenue,
+      conv.product ?? null,
+      conv.order_id ?? null,
+      conv.processor,
+      conv.purchased_at ?? null,
+      conv.source_name ?? null,
+      conv.referring_site ?? null,
+    ]
   )
   if (purchaseRows.length === 0) return false // duplicate (webhook retry)
 

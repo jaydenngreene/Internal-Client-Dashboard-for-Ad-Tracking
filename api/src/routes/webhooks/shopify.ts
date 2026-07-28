@@ -121,6 +121,8 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
         processor: 'shopify',
         currency: order.currency,
         landing_site: order.landing_site,
+        source_name: order.source_name,
+        referring_site: order.referring_site,
       })
 
       return reply.code(200).send({ received: true })

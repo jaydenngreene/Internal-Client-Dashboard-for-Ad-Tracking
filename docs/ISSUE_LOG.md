@@ -6,6 +6,24 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-07-30 — Buying Journey tab: avg days/sessions to convert and the "Customers Who Purchased" tab were blank
+
+**Reported:** on the Customer Buying Journey tab, "Avg days to convert" and "Avg sessions to convert" showed `—`, and the "Customers Who Purchased" tab showed its empty state ("No customers converted in this range"), for a client that has real purchases in the selected window.
+
+**Root cause:** `requireOwnership` (`api/src/lib/ownership.ts`) is an intentionally exhaustive, fail-closed table — any dashboard-facing route not listed in `RESOLVERS` gets a `500 {"error":"Server misconfiguration"}` rather than being silently left unprotected. `GET /clients/:id/reports/buying-journey` was added in Phase 2 (`603dd46`, 2026-07-28) but was never added to `RESOLVERS`, so every request to it has 500'd since the feature shipped two days ago. The dashboard's `buyingJourney` React Query call has no explicit error handling (unlike the `journey` lookup query, which does), so the failure was invisible — the stat tiles just rendered their normal null-state `—`/empty-state UI instead of surfacing an error.
+
+**Confirmed live:** called `computeBuyingJourneySummary()` directly against the real Supabase data first — it returned correct non-null numbers for BlackB4U, Nothing But Buckets, and Starstruckofficiall, proving the computation itself was never broken. Then hit the actual HTTP route with a minted valid session token and reproduced the exact `500 Server misconfiguration` from `requireOwnership`, confirming the gap was in the auth/ownership layer, not the report logic.
+
+**Also found while auditing the table for the same class of gap:** `POST /clients/:id/integrations/housecallpro` (`api/src/routes/clients.ts`) had the identical problem — also missing from `RESOLVERS`, also 500ing on every call since it was added. A full diff of every literal `/clients/:id/...` route registered across `api/src/routes/*.ts` against `RESOLVERS`'s keys confirmed these were the only two gaps; the table is now exhaustive again.
+
+**Fix:** added `'/clients/:id/reports/buying-journey': 'client'` and `'/clients/:id/integrations/housecallpro': 'client'` to `RESOLVERS`.
+
+**Verified:** both routes return `200` with a real auth token post-fix (buying-journey confirmed for BlackB4U and Nothing But Buckets); `npm test` 98/98 still passing. A stray test `housecallpro` integration row written to BlackB4U during verification (BlackB4U is a Shopify/ecom brand — Housecall Pro is Universal Flooring Solutions' processor, not BlackB4U's) was deleted afterward.
+
+**Not yet committed** — sitting as a working-tree change in `api/src/lib/ownership.ts`, pending the user's go-ahead to commit.
+
+---
+
 ## 2026-07-28 (later still) — The real identify() bug, finally found: sendBeacon sent text/plain, not JSON
 
 **How this was found:** every prior pass at "why doesn't identify() ever succeed" reasoned from DB aggregates (attributed-rate, identity counts) and from Railway's *history* view, which turned out to have unreliable deployment boundaries and a search filter that returns "No logs found" even for `/track/pageview`, which fires constantly - don't trust that filter. What actually worked: the user watched two real orders land live (6:36pm and 7:13pm) and gave exact timestamps, and Railway's raw unfiltered log stream (scrolled to, not searched to) showed the ground truth directly.

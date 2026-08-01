@@ -1788,6 +1788,41 @@ export function getBuyingJourney(clientId: string, range: DateRange): Promise<Bu
   return fetchJson<BuyingJourneySummary>(`/clients/${clientId}/reports/buying-journey${rangeQuery(range)}`);
 }
 
+// First-touch vs last-touch revenue side by side, per campaign — recomputed from
+// raw session data rather than the client's single active attribution_model, so
+// both are always comparable regardless of which model the client is set to.
+export interface AttributionComparisonRow {
+  name: string;
+  firstTouchRevenue: number;
+  firstTouchSales: number;
+  lastTouchRevenue: number;
+  lastTouchSales: number;
+}
+
+export interface AttributionComparison {
+  campaigns: AttributionComparisonRow[];
+}
+
+export function getAttributionComparison(clientId: string, range: DateRange): Promise<AttributionComparison> {
+  return fetchJson<AttributionComparison>(`/clients/${clientId}/reports/attribution-comparison${rangeQuery(range)}`);
+}
+
+// U-Shaped vs Time-Decay comparison for the lead-driven niches (lead_gen/call/
+// saas/other) - the leads-side equivalent of getAttributionComparison above.
+export interface ModelComparisonRow {
+  name: string;
+  uShapedCredit: number;
+  timeDecayCredit: number;
+}
+
+export interface AttributionModelComparison {
+  campaigns: ModelComparisonRow[];
+}
+
+export function getAttributionModelComparison(clientId: string, range: DateRange): Promise<AttributionModelComparison> {
+  return fetchJson<AttributionModelComparison>(`/clients/${clientId}/reports/attribution-model-comparison${rangeQuery(range)}`);
+}
+
 export type CallDisposition =
   | "new_lead"
   | "qualified"

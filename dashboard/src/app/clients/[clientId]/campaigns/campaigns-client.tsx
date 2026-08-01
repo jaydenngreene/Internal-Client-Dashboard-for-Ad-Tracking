@@ -3,7 +3,17 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { getFunnel, getLtv, getClients, getIntegrations, campaignGoalForNiche, FunnelBreakdown } from "@/lib/api";
+import {
+  getFunnel,
+  getLtv,
+  getClients,
+  getIntegrations,
+  campaignGoalForNiche,
+  FunnelBreakdown,
+  getAttributionComparison,
+  getAttributionModelComparison,
+  Niche,
+} from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { SegmentedToggle } from "@/components/segmented-toggle";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
@@ -12,6 +22,132 @@ import { AddCustomCostForm } from "@/components/add-custom-cost-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
+import { formatCurrency, formatNumber } from "@/lib/format";
+import { vocabularyForNiche } from "@/lib/niche-vocabulary";
+
+// Niches that default to Last Click (high-volume, transactional purchases -
+// see api/src/lib/attributionDefaults.ts for the full reasoning). Everything
+// else (lead_gen/call/saas/other) defaults to U-Shaped instead. Drives which
+// of the two comparison tables below is relevant for this client - a lead
+// never has a first/last-touch REVENUE figure to compare in the first place.
+const LAST_CLICK_DEFAULT_NICHES: Niche[] = ["ecommerce", "info_product"];
+
+// Complements the main breakdown table's single revenue figure (whichever
+// attribution_model the client is set to in Settings) with both first-touch
+// and last-touch side by side, without needing to flip that setting back and
+// forth. Only makes sense per-campaign, so it's Campaign-tab-only.
+function AttributionComparisonTable({ clientId, from, to }: { clientId: string; from: string; to: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["attribution-comparison", clientId, from, to],
+    queryFn: () => getAttributionComparison(clientId, { from, to }),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (!data || data.campaigns.length === 0) return null;
+
+  return (
+    <Card className="px-0">
+      <CardHeader className="px-4">
+        <CardTitle>First-Touch vs Last-Touch</CardTitle>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          The same purchases credited two different ways — the first ad that ever brought this customer in, versus
+          the last one they clicked before buying. Recomputed independently of the Attribution Model setting in
+          Settings, so both are always visible together.
+        </p>
+      </CardHeader>
+      <CardContent className="px-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Campaign</th>
+                <th className="px-4 py-2 font-medium">First-Touch Revenue</th>
+                <th className="px-4 py-2 font-medium">First-Touch Sales</th>
+                <th className="px-4 py-2 font-medium">Last-Touch Revenue</th>
+                <th className="px-4 py-2 font-medium">Last-Touch Sales</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.campaigns.map((row) => (
+                <tr key={row.name} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-4 py-2 font-medium">{row.name}</td>
+                  <td className="px-4 py-2">{formatCurrency(row.firstTouchRevenue)}</td>
+                  <td className="px-4 py-2">{formatNumber(row.firstTouchSales)}</td>
+                  <td className="px-4 py-2">{formatCurrency(row.lastTouchRevenue)}</td>
+                  <td className="px-4 py-2">{formatNumber(row.lastTouchSales)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Leads-side equivalent of AttributionComparisonTable above - U-Shaped (this
+// niche group's default) vs Time-Decay, since a lead/call/subscription has no
+// stored attribution rows to read back under either model (see
+// attributionModelComparison.ts). "Credit" is a dollar figure only for niches
+// that actually have one (saas' MRR) - everything else is a fractional
+// conversion count, so a lead_gen client sees "2.4 leads" rather than a
+// dollar amount their data never had.
+function ModelComparisonTable({
+  clientId,
+  from,
+  to,
+  hasValue,
+}: {
+  clientId: string;
+  from: string;
+  to: string;
+  hasValue: boolean;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["attribution-model-comparison", clientId, from, to],
+    queryFn: () => getAttributionModelComparison(clientId, { from, to }),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (!data || data.campaigns.length === 0) return null;
+
+  const format = hasValue ? formatCurrency : formatNumber;
+
+  return (
+    <Card className="px-0">
+      <CardHeader className="px-4">
+        <CardTitle>U-Shaped vs Time-Decay</CardTitle>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          The same conversions credited two different ways — U-Shaped (this account&apos;s default: 40% first touch /
+          40% last touch / 20% split across the rest) versus Time-Decay, which weighs recent touches more heavily.
+          Recomputed independently of the Attribution Model setting in Settings, so both are always visible together.
+        </p>
+      </CardHeader>
+      <CardContent className="px-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Campaign</th>
+                <th className="px-4 py-2 font-medium">U-Shaped Credit</th>
+                <th className="px-4 py-2 font-medium">Time-Decay Credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.campaigns.map((row) => (
+                <tr key={row.name} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-4 py-2 font-medium">{row.name}</td>
+                  <td className="px-4 py-2">{format(row.uShapedCredit)}</td>
+                  <td className="px-4 py-2">{format(row.timeDecayCredit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 // LTV isn't a funnel breakdown the API knows about (it's its own report, keyed only
 // by acquisition campaign) - it's folded into this page's toggle purely as a UI
@@ -183,6 +319,18 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
             />
           </CardContent>
         </Card>
+      )}
+
+      {effectiveView === "campaign" && niche && LAST_CLICK_DEFAULT_NICHES.includes(niche) && (
+        <AttributionComparisonTable clientId={clientId} from={range.from} to={range.to} />
+      )}
+      {effectiveView === "campaign" && niche && !LAST_CLICK_DEFAULT_NICHES.includes(niche) && (
+        <ModelComparisonTable
+          clientId={clientId}
+          from={range.from}
+          to={range.to}
+          hasValue={vocabularyForNiche(niche).valueColumnLabel !== null}
+        />
       )}
     </div>
   );

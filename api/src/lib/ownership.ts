@@ -88,6 +88,8 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/invalid-traffic': 'client',
   '/clients/:id/reports/subscriptions': 'client',
   '/clients/:id/reports/buying-journey': 'client',
+  '/clients/:id/reports/attribution-comparison': 'client',
+  '/clients/:id/reports/attribution-model-comparison': 'client',
   '/clients/:id/campaigns/:platform/:campaignName': 'client',
   '/clients/:id/campaigns/:platform/:campaignName/creatives/:creativeName': 'client',
   '/clients/:id/tags': 'client',

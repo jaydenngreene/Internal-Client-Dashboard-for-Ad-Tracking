@@ -7,6 +7,8 @@ import { computeMMM } from '../lib/mmm'
 import { computeMmmScenario, ScenarioAdjustment } from '../lib/mmmScenario'
 import { computeBestPaths } from '../lib/bestPaths'
 import { computeBuyingJourneySummary } from '../lib/buyingJourney'
+import { computeAttributionComparison } from '../lib/attributionComparison'
+import { computeAttributionModelComparison } from '../lib/attributionModelComparison'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 import { resolveAdObjectFallback } from '../lib/adObjectFallback'
@@ -1030,6 +1032,33 @@ export async function reportRoutes(app: FastifyInstance) {
       const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
       const niche = rows[0]?.niche ?? 'other'
       return reply.send(await computeBuyingJourneySummary(req.params.id, niche, from, to))
+    }
+  )
+
+  // First-touch vs last-touch revenue, side by side, per campaign — the
+  // account-wide `attribution_model` setting only ever lets a report reflect
+  // one model at a time; this recomputes both directly from raw session data
+  // (see lib/attributionComparison.ts) so they can be compared without
+  // switching that setting back and forth.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/attribution-comparison',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      return reply.send({ campaigns: await computeAttributionComparison(req.params.id, from, to) })
+    }
+  )
+
+  // U-Shaped vs Time-Decay comparison for the lead-driven niches (see
+  // attributionDefaults.ts) - the equivalent of attribution-comparison above,
+  // but for niches whose conversion event (lead/qualified call/subscription)
+  // never has rows in the purchase-only `attributions` table at all.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/attribution-model-comparison',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
+      const niche = rows[0]?.niche ?? 'other'
+      return reply.send({ campaigns: await computeAttributionModelComparison(req.params.id, niche, from, to) })
     }
   )
 

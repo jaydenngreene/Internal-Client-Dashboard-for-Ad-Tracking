@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 — Built: niche-based attribution model defaults + a second comparison tab (U-Shaped vs Time-Decay)
+
+**Ask:** ecommerce/Shopify clients are high-volume and impulse-driven, so Last Click (matching Meta's own default and Shopify's "last non-direct click" dashboard) should be the starting attribution model, not First Click. Lead-driven niches (lead_gen/call/saas) have longer, multi-touch cycles, so U-Shaped (40/40/20) should be their starting default instead. Both must stay fully switchable per client from Settings — this only changes what a client *starts* on. Also: extend the existing First-Touch vs Last-Touch comparison tab with a second one for the leads side, U-Shaped vs Time-Decay.
+
+**Defaults:** new `api/src/lib/attributionDefaults.ts` maps niche → starting model (`ecommerce`/`info_product` → `last_click`; `lead_gen`/`call`/`saas`/`other` → `u_shaped`). Wired into `POST /clients` only — changing a client's niche later deliberately does not re-trigger this, so it can never silently override a model someone already picked by hand.
+
+**Retroactive backfill (user explicitly requested this apply to existing clients immediately, not just new ones):** confirmed first that flipping `attribution_model` is not retroactive to past numbers — `recordPurchase()` reads the client's model at the moment each purchase is ingested and never rewrites old `attributions` rows, so this only changes how *future* purchases get attributed. Ran a one-time backfill updating all 5 existing clients to their niche's new default (all 5 were on the old universal default, `first_click`): BlackB4U/Nothing But Buckets/Report Schedule Test Client/Starstruckofficiall → `last_click`, Universal Flooring Solutions → `u_shaped`. Verified directly against the DB afterward.
+
+**Second comparison tab:** new `api/src/lib/attributionModelComparison.ts`, generalizing the existing first-touch/last-touch pattern (`attributionComparison.ts`, 2026-07-30) to U-Shaped vs Time-Decay for the lead-driven niches. Reuses the exact same `timeDecayWeights`/`uShapedWeights` functions production purchases already use (`attribution.ts`), applied live across every touch in the 90-day window for whichever event type the niche actually uses (lead/qualified_call/subscription_conversion/purchase) — same "recompute from raw sessions, don't touch the purchase-only `attributions` table" reasoning as the first comparison tab, since leads/calls/subscriptions have no rows in that table under any model. Credit is a dollar figure for niches that have one (saas' `mrr_delta`) and a fractional conversion count for the niches that don't (leads/calls), matching `nicheVocabulary.ts`'s existing `hasValue` split. New route `GET /clients/:id/reports/attribution-model-comparison`, added to `ownership.ts`'s `RESOLVERS` table immediately (learned from the previous entry's bug) rather than as an afterthought.
+
+**Frontend:** `campaigns-client.tsx`'s Campaign tab now shows one of the two comparison tables based on niche — First-Touch vs Last-Touch for ecommerce/info_product, U-Shaped vs Time-Decay for everything else.
+
+**Verified:** both workspaces typecheck clean, 98/98 API tests pass. Live-tested against real data: Nothing But Buckets' Settings now shows Last Click, Universal Flooring Solutions shows U-Shaped; screenshotted the First-Touch vs Last-Touch table rendering real numbers. Universal Flooring Solutions has zero real leads on record, so its U-Shaped vs Time-Decay table couldn't be screenshotted with real data - instead verified the underlying computation directly against Nothing But Buckets' real purchases (sane, non-zero weighted credit in the expected range between the first/last-touch numbers) and confirmed the zero-data path returns a clean empty array with no error. Also verified `POST /clients` applies the right default for a fresh ecommerce and a fresh lead_gen test client, then deleted both.
+
+---
+
 ## 2026-07-30 — Buying Journey tab: avg days/sessions to convert and the "Customers Who Purchased" tab were blank
 
 **Reported:** on the Customer Buying Journey tab, "Avg days to convert" and "Avg sessions to convert" showed `—`, and the "Customers Who Purchased" tab showed its empty state ("No customers converted in this range"), for a client that has real purchases in the selected window.

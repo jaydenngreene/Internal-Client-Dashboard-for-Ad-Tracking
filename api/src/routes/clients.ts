@@ -6,6 +6,7 @@ import { isClientOwner } from '../lib/ownership'
 import { backfillIntegration } from '../jobs/adCosts/run'
 import { generateRandomToken } from '../lib/auth'
 import { findUtmMismatches } from '../lib/utmMismatch'
+import { defaultAttributionModelForNiche } from '../lib/attributionDefaults'
 
 const NICHES = ['ecommerce', 'call', 'lead_gen', 'saas', 'info_product', 'other']
 const CLIENT_NAME_MAX_LENGTH = 200
@@ -80,9 +81,14 @@ export async function clientRoutes(app: FastifyInstance) {
     }
 
     const pixelKey = uuidv4()
+    // Niche-based starting default (2026-08-01) - see attributionDefaults.ts for
+    // the reasoning. Only ever applied here, at creation time; switching niche
+    // later (PATCH /clients/:id/niche) deliberately does NOT re-trigger this,
+    // so it never silently overrides a model someone already chose by hand.
+    const attributionModel = defaultAttributionModelForNiche(niche)
     const { rows } = await db.query(
-      `INSERT INTO clients (name, pixel_key, timezone, niche, owner_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name, pixelKey, timezone, niche, req.userId]
+      `INSERT INTO clients (name, pixel_key, timezone, niche, owner_user_id, attribution_model) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name, pixelKey, timezone, niche, req.userId, attributionModel]
     )
     return reply.code(201).send(rows[0])
   })

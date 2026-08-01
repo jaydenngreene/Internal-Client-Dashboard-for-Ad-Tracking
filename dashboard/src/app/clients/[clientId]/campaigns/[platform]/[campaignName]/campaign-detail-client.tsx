@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ImageIcon, PlayIcon } from "lucide-react";
-import { getCampaignDetail, getClients, campaignGoalForNiche, CampaignCreativeRow } from "@/lib/api";
+import { getCampaignDetail, getClients, getCreativeRoles, campaignGoalForNiche, CampaignCreativeRow, CreativeRoleRow } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
+import { RoleBadge } from "@/components/role-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatNumber, formatPercent, formatRoas, formatPlatformLabel } from "@/lib/format";
@@ -21,10 +22,14 @@ function CreativeRowCard({
   creative,
   href,
   goal,
+  role,
 }: {
   creative: CampaignCreativeRow;
   href: string;
   goal: "leads" | "sales";
+  // Undefined while still loading; null once loaded if this creative never
+  // appeared in a converting journey at all (nothing to tag a role onto).
+  role: CreativeRoleRow["role"] | null | undefined;
 }) {
   const router = useRouter();
   return (
@@ -45,6 +50,7 @@ function CreativeRowCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-medium">{creative.name}</p>
+          {role && <RoleBadge role={role} />}
           {!creative.matched && (
             <Badge variant="outline" className="shrink-0 text-[10px] text-status-warning border-status-warning/40">
               unmatched
@@ -85,6 +91,17 @@ export function CampaignDetailClient({
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: getClients });
   const niche = clients?.find((c) => c.id === clientId)?.niche;
   const goal = campaignGoalForNiche(niche ?? "other");
+
+  // Same Opener/Closer/Assist role tags shown on the Campaigns page's Creative
+  // tab, merged in here by name+platform so the same ad reads the same way
+  // wherever it's listed - including via a click-through from the First-Touch
+  // vs Last-Touch (or U-Shaped vs Time-Decay) comparison tables, which both
+  // land on this exact page.
+  const { data: creativeRoles } = useQuery({
+    queryKey: ["creative-roles", clientId, range.from, range.to],
+    queryFn: () => getCreativeRoles(clientId, range),
+  });
+  const roleByKey = new Map((creativeRoles?.creatives ?? []).map((r) => [`${r.name}::${r.platform ?? ""}`, r.role]));
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -168,6 +185,7 @@ export function CampaignDetailClient({
                     key={c.name}
                     creative={c}
                     goal={goal}
+                    role={creativeRoles ? (roleByKey.get(`${c.name}::${platform}`) ?? null) : undefined}
                     href={`/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}/creatives/${encodeURIComponent(c.name)}`}
                   />
                 ))}

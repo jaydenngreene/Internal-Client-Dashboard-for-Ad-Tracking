@@ -6,6 +6,16 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 (later still #3) — Opener/Closer/Assist role badges now also show on the campaign detail page
+
+**Ask:** the role badges only appeared on the Campaigns page's account-wide Creative tab. Wanted them to also show up when clicking into a specific campaign and seeing its own creatives — which is also where clicking a campaign name from the First-Touch vs Last-Touch (or U-Shaped vs Time-Decay) comparison tables lands, so fixing the one page covers both asks.
+
+**Fix:** extracted the `RoleBadge`/`ROLE_LABEL`/`ROLE_BADGE_CLASS` that were only defined inline in `campaigns-client.tsx` into a new shared `dashboard/src/components/role-badge.tsx`, since this is now a second consumer. `campaign-detail-client.tsx` fetches the same `getCreativeRoles` data and merges it into its own `Creatives (N)` list by name+platform, same key convention already used everywhere else in this work.
+
+**Verified:** dashboard typechecks clean. Live-verified: role badges (Opener/Multi-Role/Assist) render correctly on Nothing_But_Buckets_Cold_V1's creative list; confirmed by navigating there directly AND by clicking through from the First-Touch vs Last-Touch table's campaign link - same page, same badges, zero console errors either way.
+
+---
+
 ## 2026-08-01 (later still #2) — Built: Customer Journey path clustering ("N% of buyers touched only this one campaign")
 
 **Ask:** the second, deliberately-deferred half of the Customer Journey work (see the entry below) - visualize the actual sequence of ads a buyer touched before purchasing, clustered into common patterns, e.g. "60% of buyers see this UGC ad first, then this retargeting offer, then buy."

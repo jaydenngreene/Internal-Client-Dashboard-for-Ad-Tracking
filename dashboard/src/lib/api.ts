@@ -1793,6 +1793,10 @@ export function getBuyingJourney(clientId: string, range: DateRange): Promise<Bu
 // both are always comparable regardless of which model the client is set to.
 export interface AttributionComparisonRow {
   name: string;
+  // Null when this row couldn't be resolved to a real ad_costs campaign
+  // (name is then just the raw utm_campaign, or "(no campaign)") - nothing
+  // to click into in that case.
+  platform: string | null;
   firstTouchRevenue: number;
   firstTouchSales: number;
   lastTouchRevenue: number;
@@ -1811,6 +1815,7 @@ export function getAttributionComparison(clientId: string, range: DateRange): Pr
 // saas/other) - the leads-side equivalent of getAttributionComparison above.
 export interface ModelComparisonRow {
   name: string;
+  platform: string | null;
   uShapedCredit: number;
   timeDecayCredit: number;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -69,8 +70,19 @@ function AttributionComparisonTable({ clientId, from, to }: { clientId: string; 
             </thead>
             <tbody>
               {data.campaigns.map((row) => (
-                <tr key={row.name} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-4 py-2 font-medium">{row.name}</td>
+                <tr key={`${row.name}::${row.platform ?? ""}`} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-4 py-2 font-medium">
+                    {row.platform ? (
+                      <Link
+                        href={`/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`}
+                        className="text-primary hover:underline"
+                      >
+                        {row.name}
+                      </Link>
+                    ) : (
+                      row.name
+                    )}
+                  </td>
                   <td className="px-4 py-2">{formatCurrency(row.firstTouchRevenue)}</td>
                   <td className="px-4 py-2">{formatNumber(row.firstTouchSales)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.lastTouchRevenue)}</td>
@@ -135,8 +147,19 @@ function ModelComparisonTable({
             </thead>
             <tbody>
               {data.campaigns.map((row) => (
-                <tr key={row.name} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-4 py-2 font-medium">{row.name}</td>
+                <tr key={`${row.name}::${row.platform ?? ""}`} className="border-b border-border last:border-0 hover:bg-muted/40">
+                  <td className="px-4 py-2 font-medium">
+                    {row.platform ? (
+                      <Link
+                        href={`/clients/${clientId}/campaigns/${encodeURIComponent(row.platform)}/${encodeURIComponent(row.name)}`}
+                        className="text-primary hover:underline"
+                      >
+                        {row.name}
+                      </Link>
+                    ) : (
+                      row.name
+                    )}
+                  </td>
                   <td className="px-4 py-2">{format(row.uShapedCredit)}</td>
                   <td className="px-4 py-2">{format(row.timeDecayCredit)}</td>
                 </tr>

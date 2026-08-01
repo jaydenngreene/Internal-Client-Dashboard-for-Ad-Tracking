@@ -6,6 +6,16 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 (later) — Both comparison tabs: resolve campaign names, link through to creatives
+
+**Ask:** the two comparison tabs shipped earlier today showed raw `utm_campaign` values, which for several real campaigns is the ad platform's numeric campaign id, not a human name (e.g. `120245194137140253` instead of `Nothing_But_Buckets_Cold_V1`) — "still very vague." Also wanted to click a row and drill into that campaign's creatives, same as the main Campaigns table already allows.
+
+**Fix:** both `attributionComparison.ts` and `attributionModelComparison.ts` now resolve each touch's `utm_campaign` against that client's `ad_costs` rows (id-or-name + platform match, the same convention buyingJourney.ts's creative resolution and campaignDetail.ts's own campaign lookup already use) before grouping — a numeric id or an unresolvable value both still degrade to their raw string rather than erroring. Grouping key is now name+platform (not name alone), since the same campaign name can legitimately exist on two different platforms. Both API responses now carry a `platform` field per row; the dashboard renders the campaign name as a link to the existing `/clients/:id/campaigns/:platform/:campaignName` detail page (same creatives-list page the main Campaigns table already links to) whenever a platform resolved, plain text otherwise (nothing to link to for a genuinely unmatched/no-campaign row).
+
+**Verified:** both workspaces typecheck clean, 98/98 API tests pass. Live-verified against real Nothing But Buckets data: the API response for the id-tagged campaign now returns `"name":"Nothing_But_Buckets_Cold_V1","platform":"facebook_ads"` instead of the raw id; screenshotted the comparison table showing the resolved name as a blue link, clicked it, and confirmed it lands on that campaign's real detail page with its full creative breakdown, zero console errors.
+
+---
+
 ## 2026-08-01 — Built: niche-based attribution model defaults + a second comparison tab (U-Shaped vs Time-Decay)
 
 **Ask:** ecommerce/Shopify clients are high-volume and impulse-driven, so Last Click (matching Meta's own default and Shopify's "last non-direct click" dashboard) should be the starting attribution model, not First Click. Lead-driven niches (lead_gen/call/saas) have longer, multi-touch cycles, so U-Shaped (40/40/20) should be their starting default instead. Both must stay fully switchable per client from Settings — this only changes what a client *starts* on. Also: extend the existing First-Touch vs Last-Touch comparison tab with a second one for the leads side, U-Shaped vs Time-Decay.

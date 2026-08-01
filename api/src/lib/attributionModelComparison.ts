@@ -18,6 +18,9 @@ import { timeDecayWeights, uShapedWeights } from './attribution'
 // rather than a misleading dollar amount that doesn't exist in their data.
 export interface ModelComparisonRow {
   name: string
+  // Null when no ad_costs row could resolve this touch to a real campaign -
+  // the dashboard uses this to decide whether the row can link anywhere.
+  platform: string | null
   uShapedCredit: number
   timeDecayCredit: number
 }
@@ -141,6 +144,36 @@ async function getCallConversions(clientId: string, from: string, to: string): P
   return groupByConversion(rows)
 }
 
+interface AdCostsCampaign {
+  campaign_id: string | null
+  campaign_name: string
+  platform: string
+}
+
+const normalizePlatform = (s: string | null) => (s ?? '').trim().toLowerCase().replace(/_ads$/, '')
+
+// Resolves a touch's raw utm_campaign (frequently the ad platform's numeric
+// campaign id, not a human name) against this client's ad_costs rows - same
+// id-or-name + platform matching convention as every other report in this
+// app (see attributionComparison.ts's campaignResolutionLateral for the SQL
+// equivalent; done in JS here since this file's four fetchers each already
+// run their own query, and fetching ad_costs once is cheaper than repeating
+// that join four times).
+function resolveCampaign(
+  utmCampaign: string | null,
+  utmSource: string | null,
+  adCosts: AdCostsCampaign[]
+): { name: string; platform: string | null } {
+  if (!utmCampaign) return { name: UNNAMED, platform: null }
+  const normalizedSource = normalizePlatform(utmSource)
+  const match = adCosts.find(
+    (c) =>
+      normalizePlatform(c.platform) === normalizedSource &&
+      (c.campaign_id === utmCampaign || c.campaign_name.trim().toLowerCase() === utmCampaign.trim().toLowerCase())
+  )
+  return match ? { name: match.campaign_name, platform: match.platform } : { name: utmCampaign, platform: null }
+}
+
 export async function computeAttributionModelComparison(
   clientId: string,
   niche: string,
@@ -149,25 +182,36 @@ export async function computeAttributionModelComparison(
 ): Promise<ModelComparisonRow[]> {
   const config = conversionConfigForNiche(niche)
 
-  const conversions = await ((): Promise<ConversionWithTouches[]> => {
-    switch (config.eventType) {
-      case 'purchase':
-        return getPurchaseConversions(clientId, from, to)
-      case 'subscription_conversion':
-        return getSubscriptionConversions(clientId, from, to)
-      case 'qualified_call':
-        return getCallConversions(clientId, from, to)
-      case 'lead':
-        return getLeadConversions(clientId, from, to)
-    }
-  })()
+  const [conversions, adCostsRows] = await Promise.all([
+    ((): Promise<ConversionWithTouches[]> => {
+      switch (config.eventType) {
+        case 'purchase':
+          return getPurchaseConversions(clientId, from, to)
+        case 'subscription_conversion':
+          return getSubscriptionConversions(clientId, from, to)
+        case 'qualified_call':
+          return getCallConversions(clientId, from, to)
+        case 'lead':
+          return getLeadConversions(clientId, from, to)
+      }
+    })(),
+    db.query<AdCostsCampaign>(
+      `SELECT DISTINCT campaign_id, campaign_name, platform FROM ad_costs WHERE client_id = $1 AND campaign_name IS NOT NULL`,
+      [clientId]
+    ),
+  ])
+  const adCosts = adCostsRows.rows
 
-  const byName = new Map<string, ModelComparisonRow>()
-  const get = (name: string): ModelComparisonRow => {
-    let row = byName.get(name)
+  const byKey = new Map<string, ModelComparisonRow>()
+  // Keyed by name+platform, not name alone - the same campaign name can exist
+  // on two different platforms, and collapsing those into one row would
+  // silently blend their numbers together.
+  const get = (name: string, platform: string | null): ModelComparisonRow => {
+    const key = `${name}::${platform ?? ''}`
+    let row = byKey.get(key)
     if (!row) {
-      row = { name, uShapedCredit: 0, timeDecayCredit: 0 }
-      byName.set(name, row)
+      row = { name, platform, uShapedCredit: 0, timeDecayCredit: 0 }
+      byKey.set(key, row)
     }
     return row
   }
@@ -177,11 +221,12 @@ export async function computeAttributionModelComparison(
     const uShapedW = uShapedWeights(touches.length)
     const timeDecayW = timeDecayWeights(touches, new Date(eventTime))
     touches.forEach((touch, i) => {
-      const row = get(touch.utm_campaign ?? UNNAMED)
+      const { name, platform } = resolveCampaign(touch.utm_campaign, touch.utm_source, adCosts)
+      const row = get(name, platform)
       row.uShapedCredit += value * uShapedW[i]
       row.timeDecayCredit += value * timeDecayW[i]
     })
   }
 
-  return [...byName.values()].sort((a, b) => b.uShapedCredit + b.timeDecayCredit - (a.uShapedCredit + a.timeDecayCredit))
+  return [...byKey.values()].sort((a, b) => b.uShapedCredit + b.timeDecayCredit - (a.uShapedCredit + a.timeDecayCredit))
 }

@@ -13,6 +13,8 @@ import {
   FunnelBreakdown,
   getAttributionComparison,
   getAttributionModelComparison,
+  getCreativeRoles,
+  CreativeRole,
   Niche,
 } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
@@ -22,9 +24,36 @@ import { LtvTable } from "@/components/ltv-table";
 import { AddCustomCostForm } from "@/components/add-custom-cost-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { ClientKicker } from "@/components/client-kicker";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { vocabularyForNiche } from "@/lib/niche-vocabulary";
+import { cn } from "@/lib/utils";
+
+// Customer Journey / Ad Role badge - which job a creative is strongest at,
+// so a cold-traffic opener doesn't get judged (and cut) purely on last-click
+// revenue. See api/src/lib/creativeRoles.ts for the full methodology.
+const ROLE_LABEL: Record<CreativeRole, string> = {
+  opener: "Opener",
+  closer: "Closer",
+  assist: "Assist",
+  multi_role: "Multi-Role",
+};
+
+const ROLE_BADGE_CLASS: Record<CreativeRole, string> = {
+  opener: "border-chart-4/40 bg-chart-4/10 text-chart-4",
+  closer: "border-chart-1/40 bg-chart-1/10 text-chart-1",
+  assist: "border-chart-3/40 bg-chart-3/10 text-chart-3",
+  multi_role: "border-border bg-muted text-muted-foreground",
+};
+
+function RoleBadge({ role }: { role: CreativeRole }) {
+  return (
+    <Badge variant="outline" className={cn("text-[10px]", ROLE_BADGE_CLASS[role])}>
+      {ROLE_LABEL[role]}
+    </Badge>
+  );
+}
 
 // Niches that default to Last Click (high-volume, transactional purchases -
 // see api/src/lib/attributionDefaults.ts for the full reasoning). Everything
@@ -272,6 +301,15 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
     queryFn: () => getFunnel(clientId, range, effectiveView as FunnelBreakdown),
     enabled: !isLtv,
   });
+  // Customer Journey / Ad Role columns only apply to the Creative tab - role
+  // (opener/closer/assist) is a per-ad concept, not a per-campaign one.
+  const isCreativeView = effectiveView === "creative";
+  const creativeRolesQuery = useQuery({
+    queryKey: ["creative-roles", clientId, range.from, range.to],
+    queryFn: () => getCreativeRoles(clientId, range),
+    enabled: isCreativeView,
+  });
+  const roleByKey = new Map((creativeRolesQuery.data?.creatives ?? []).map((r) => [`${r.name}::${r.platform ?? ""}`, r]));
   const ltvQuery = useQuery({
     queryKey: ["ltv", clientId, range.from, range.to],
     queryFn: () => getLtv(clientId, range),
@@ -339,9 +377,42 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
                           : null
                     : undefined
               }
+              extraColumns={
+                isCreativeView
+                  ? [
+                      { key: "openerCount", label: "Opener" },
+                      { key: "closerCount", label: "Closer" },
+                      { key: "assistCount", label: "Assist" },
+                      { key: "role", label: "Role" },
+                    ]
+                  : undefined
+              }
+              renderExtraCell={
+                isCreativeView
+                  ? (row, key) => {
+                      const roleRow = roleByKey.get(`${row.name}::${row.platform ?? ""}`);
+                      if (!roleRow) return "—";
+                      if (key === "role") return <RoleBadge role={roleRow.role} />;
+                      if (key === "openerCount") return formatNumber(roleRow.openerCount);
+                      if (key === "closerCount") return formatNumber(roleRow.closerCount);
+                      if (key === "assistCount") return formatNumber(roleRow.assistCount);
+                      return null;
+                    }
+                  : undefined
+              }
             />
           </CardContent>
         </Card>
+      )}
+
+      {isCreativeView && (
+        <p className="px-1 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Opener</span> = first touch in a converting journey (cold
+          traffic this ad brought in), <span className="font-medium text-foreground">Closer</span> = last touch
+          before purchase, <span className="font-medium text-foreground">Assist</span> = a touch in between. Judging
+          an ad on revenue/ROAS alone can make a real opener look worthless and lead to cutting the ad that&apos;s
+          quietly feeding the rest of the funnel.
+        </p>
       )}
 
       {effectiveView === "campaign" && niche && LAST_CLICK_DEFAULT_NICHES.includes(niche) && (

@@ -9,6 +9,7 @@ import { computeBestPaths } from '../lib/bestPaths'
 import { computeBuyingJourneySummary } from '../lib/buyingJourney'
 import { computeAttributionComparison } from '../lib/attributionComparison'
 import { computeAttributionModelComparison } from '../lib/attributionModelComparison'
+import { computeCreativeRoles } from '../lib/creativeRoles'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 import { resolveAdObjectFallback } from '../lib/adObjectFallback'
@@ -1059,6 +1060,21 @@ export async function reportRoutes(app: FastifyInstance) {
       const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
       const niche = rows[0]?.niche ?? 'other'
       return reply.send({ campaigns: await computeAttributionModelComparison(req.params.id, niche, from, to) })
+    }
+  )
+
+  // Customer Journey / Ad Role breakdown - every creative that appears in a
+  // converting journey, tagged by whether it was the opener (first touch),
+  // the closer (last touch), or an assist (a middle touch), so a cold-traffic
+  // opener doesn't get judged - and cut - purely on last-click revenue. See
+  // lib/creativeRoles.ts for the full methodology.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/creative-roles',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
+      const niche = rows[0]?.niche ?? 'other'
+      return reply.send({ creatives: await computeCreativeRoles(req.params.id, niche, from, to) })
     }
   )
 

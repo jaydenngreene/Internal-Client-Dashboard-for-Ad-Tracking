@@ -1,5 +1,5 @@
 import { db } from '../db'
-import { conversionConfigForNiche } from '../config/nicheVocabulary'
+import { conversionConfigForNiche, ConversionEventType } from '../config/nicheVocabulary'
 import { timeDecayWeights, uShapedWeights } from './attribution'
 
 // A side-by-side U-Shaped vs Time-Decay credit comparison, per campaign, for
@@ -25,7 +25,7 @@ export interface ModelComparisonRow {
   timeDecayCredit: number
 }
 
-interface TouchSession {
+export interface TouchSession {
   id: string
   utm_campaign: string | null
   utm_content: string | null
@@ -36,9 +36,12 @@ interface TouchSession {
   started_at: string
 }
 
-interface ConversionWithTouches {
+export interface ConversionWithTouches {
   value: number
   eventTime: string
+  // Sorted ascending by started_at - touches[0] is the first-ever touch in
+  // the 90-day window before this conversion, touches[length-1] the last one
+  // before it happened. creativeRoles.ts relies on this ordering directly.
   touches: TouchSession[]
 }
 
@@ -144,6 +147,27 @@ async function getCallConversions(clientId: string, from: string, to: string): P
   return groupByConversion(rows)
 }
 
+// Which fetcher runs depends only on the niche's declared event type - shared
+// with creativeRoles.ts, which needs the exact same per-conversion touch
+// lists to classify opener/closer/assist roles, just aggregated differently.
+export function getConversionsForNiche(
+  clientId: string,
+  eventType: ConversionEventType,
+  from: string,
+  to: string
+): Promise<ConversionWithTouches[]> {
+  switch (eventType) {
+    case 'purchase':
+      return getPurchaseConversions(clientId, from, to)
+    case 'subscription_conversion':
+      return getSubscriptionConversions(clientId, from, to)
+    case 'qualified_call':
+      return getCallConversions(clientId, from, to)
+    case 'lead':
+      return getLeadConversions(clientId, from, to)
+  }
+}
+
 interface AdCostsCampaign {
   campaign_id: string | null
   campaign_name: string
@@ -183,18 +207,7 @@ export async function computeAttributionModelComparison(
   const config = conversionConfigForNiche(niche)
 
   const [conversions, adCostsRows] = await Promise.all([
-    ((): Promise<ConversionWithTouches[]> => {
-      switch (config.eventType) {
-        case 'purchase':
-          return getPurchaseConversions(clientId, from, to)
-        case 'subscription_conversion':
-          return getSubscriptionConversions(clientId, from, to)
-        case 'qualified_call':
-          return getCallConversions(clientId, from, to)
-        case 'lead':
-          return getLeadConversions(clientId, from, to)
-      }
-    })(),
+    getConversionsForNiche(clientId, config.eventType, from, to),
     db.query<AdCostsCampaign>(
       `SELECT DISTINCT campaign_id, campaign_name, platform FROM ad_costs WHERE client_id = $1 AND campaign_name IS NOT NULL`,
       [clientId]

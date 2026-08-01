@@ -6,6 +6,20 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 (later still) — Built: Customer Journey / Ad Role breakdown (Opener/Closer/Assist)
+
+**Ask:** last-click alone makes cold-traffic "opener" ads look worthless (even though they're feeding the whole funnel), and first-click alone undervalues the "closer"/retargeting ads that actually convert warm traffic - risking cutting the wrong ads. Wanted, per campaign/creative: a role tag (Opener/Closer/Assist/Multi-Role) based on where each creative shows up in real converting journeys, alongside the existing spend/ROAS/CPA/AOV/revenue metrics already on the Campaigns page. Explicitly asked for an honest read on whether this was worth building before starting - flagged two real caveats (role/path signal quality scales with purchase volume; a separate journey-path-clustering visualization is much higher-risk to deliver well than role-tagging) and the user chose to build role-tagging first, treating path-clustering as a second, prototype-first pass.
+
+**Built:** `api/src/lib/creativeRoles.ts` - for every converting journey (purchase/lead/qualified_call/subscription_conversion, whichever the niche uses, same generalization as the U-Shaped/Time-Decay comparison), classifies every touch by position: `touches[0]` is the Opener, `touches[length-1]` the Closer, anything in between an Assist (deduped within one journey, so a creative clicked twice in the middle of one path only counts once). A single-touch journey counts as both opener and closer for that one creative. Tallies are **counts of distinct converting journeys touched in that role**, not a credit split - a deliberately different, complementary metric shape from the other two comparison tabs (which split revenue/credit across touches; this instead answers "how many sales did this ad touch, and in what capacity," the same shape as platforms' own "assisted conversions" reporting). Role badge is whichever count is highest; a tie is `multi_role`.
+
+**Reused rather than duplicated:** `getConversionsForNiche` was extracted out of `attributionModelComparison.ts` (previously an inline switch inside that one function) so this file didn't need a third copy of the same four per-niche touch-fetching queries. Spend/ROAS/CPA/AOV/revenue/CTR/CPC are NOT recomputed here at all - `campaign-breakdown-table.tsx` gained a generic `extraColumns`/`renderExtraCell` prop pair so the Creative tab's existing table (already fetching all of that) can have the three role counts + badge merged into it client-side by name+platform, instead of a second, separate table duplicating those metrics.
+
+**Verified:** both workspaces typecheck clean, 101/101 API tests pass (added 3 for `classifyRole`'s tie-breaking, including the single-touch-journey case). Live-verified against real Nothing But Buckets creative data: real, varied role distribution across Opener/Closer/Assist/Multi-Role, resolved creative names carried through correctly, existing drill-through to the creative detail page still works, zero console errors, Campaign tab (untouched) still renders exactly as before.
+
+**Deliberately not built yet:** the journey-path visualization/clustering piece (e.g. "Ad A → Ad B → Ad C → Purchase," grouped into common patterns) - flagged as the higher-risk part of the original ask, since real paths are expected to be extremely long-tailed at full creative granularity with this app's current data volumes. Queued as a prototype-against-real-data pass rather than committing to a specific output shape up front.
+
+---
+
 ## 2026-08-01 (later) — Both comparison tabs: resolve campaign names, link through to creatives
 
 **Ask:** the two comparison tabs shipped earlier today showed raw `utm_campaign` values, which for several real campaigns is the ad platform's numeric campaign id, not a human name (e.g. `120245194137140253` instead of `Nothing_But_Buckets_Cold_V1`) — "still very vague." Also wanted to click a row and drill into that campaign's creatives, same as the main Campaigns table already allows.

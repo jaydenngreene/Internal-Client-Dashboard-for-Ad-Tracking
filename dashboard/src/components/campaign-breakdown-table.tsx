@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Compass } from "lucide-react";
 import {
@@ -46,6 +46,8 @@ export function CampaignBreakdownTable({
   goal,
   showPlatformBadge = true,
   getHref,
+  extraColumns,
+  renderExtraCell,
 }: {
   rows: FunnelRow[];
   nameColumnLabel: string;
@@ -59,6 +61,14 @@ export function CampaignBreakdownTable({
   // creative rows aren't a single scoped entity the same way) — omitted entirely means
   // rows render as plain (non-clickable) table rows, same as before this prop existed.
   getHref?: (row: FunnelRow) => string | null;
+  // Lets a caller bolt extra columns onto the end of this table without this
+  // component knowing anything about where the data comes from (e.g. the
+  // Creative tab's Opener/Closer/Assist role columns, merged in client-side
+  // from a separate report) - unsortable by design, since the source data
+  // isn't part of FunnelRow itself. Omitted entirely means the table renders
+  // exactly as before either prop existed.
+  extraColumns?: { key: string; label: string }[];
+  renderExtraCell?: (row: FunnelRow, key: string) => ReactNode;
 }) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
@@ -197,6 +207,14 @@ export function CampaignBreakdownTable({
                 {sortKey === col.key && (sortDesc ? " ↓" : " ↑")}
               </TableHead>
             ))}
+            {extraColumns?.map((col) => (
+              <TableHead
+                key={col.key}
+                className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                {col.label}
+              </TableHead>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -276,6 +294,11 @@ export function CampaignBreakdownTable({
               {goal === "sales" && (
                 <TableCell className="text-right tabular-nums">{formatRoas(row.roas)}</TableCell>
               )}
+              {extraColumns?.map((col) => (
+                <TableCell key={col.key} className="text-right tabular-nums">
+                  {renderExtraCell?.(row, col.key)}
+                </TableCell>
+              ))}
             </TableRow>
             );
           })}

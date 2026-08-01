@@ -1828,6 +1828,30 @@ export function getAttributionModelComparison(clientId: string, range: DateRange
   return fetchJson<AttributionModelComparison>(`/clients/${clientId}/reports/attribution-model-comparison${rangeQuery(range)}`);
 }
 
+// Customer Journey / Ad Role breakdown - every creative that appeared in a
+// converting journey, tagged by opener (first touch) / closer (last touch) /
+// assist (a touch in between) / multi_role (tied for top). Merged client-side
+// into the Creative breakdown table by name+platform - this endpoint carries
+// no spend/revenue/ROAS of its own, since that data already exists there.
+export type CreativeRole = "opener" | "closer" | "assist" | "multi_role";
+
+export interface CreativeRoleRow {
+  name: string;
+  platform: string | null;
+  openerCount: number;
+  closerCount: number;
+  assistCount: number;
+  role: CreativeRole;
+}
+
+export interface CreativeRoles {
+  creatives: CreativeRoleRow[];
+}
+
+export function getCreativeRoles(clientId: string, range: DateRange): Promise<CreativeRoles> {
+  return fetchJson<CreativeRoles>(`/clients/${clientId}/reports/creative-roles${rangeQuery(range)}`);
+}
+
 export type CallDisposition =
   | "new_lead"
   | "qualified"

@@ -10,6 +10,7 @@ import { computeBuyingJourneySummary } from '../lib/buyingJourney'
 import { computeAttributionComparison } from '../lib/attributionComparison'
 import { computeAttributionModelComparison } from '../lib/attributionModelComparison'
 import { computeCreativeRoles } from '../lib/creativeRoles'
+import { computeJourneyPaths } from '../lib/journeyPaths'
 import { getOverviewSummary } from '../lib/overviewSummary'
 import { computeMarkovAttribution } from '../lib/markovAttribution'
 import { resolveAdObjectFallback } from '../lib/adObjectFallback'
@@ -1075,6 +1076,20 @@ export async function reportRoutes(app: FastifyInstance) {
       const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
       const niche = rows[0]?.niche ?? 'other'
       return reply.send({ creatives: await computeCreativeRoles(req.params.id, niche, from, to) })
+    }
+  )
+
+  // Customer Journey path clustering - "N% of buyers touched only this one
+  // campaign/creative before buying." See lib/journeyPaths.ts for the full
+  // methodology, including why consecutive-repeat collapsing was essential
+  // once this was prototyped against real data.
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    '/clients/:id/reports/journey-paths',
+    async (req, reply) => {
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      const { rows } = await db.query<{ niche: string }>('SELECT niche FROM clients WHERE id = $1', [req.params.id])
+      const niche = rows[0]?.niche ?? 'other'
+      return reply.send(await computeJourneyPaths(req.params.id, niche, from, to))
     }
   )
 

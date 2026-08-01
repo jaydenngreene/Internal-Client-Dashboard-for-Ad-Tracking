@@ -15,6 +15,8 @@ import {
   getAttributionModelComparison,
   getCreativeRoles,
   CreativeRole,
+  getJourneyPaths,
+  JourneyPathsForGrain,
   Niche,
 } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
@@ -196,6 +198,116 @@ function ModelComparisonTable({
             </tbody>
           </table>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Customer Journey path clustering - built as a prototype-against-real-data
+// pass (2026-08-01) after finding that consecutive repeats of the same touch
+// (retargeting showing the same ad 3-5x before a purchase) inflate "unique
+// path" rates to 60-100% unless collapsed first; collapsed, real clients'
+// data showed a clean majority pattern at campaign grain (e.g. "70% of
+// buyers touched exactly one campaign"). Campaign-grain tab shown first for
+// that reason - creative-grain is real but more spread out. Source/platform
+// grain was prototyped too but dropped: it was almost trivially dominant
+// ("just Facebook") and not worth a whole view. See journeyPaths.ts for the
+// full methodology and the "singleton" gate (a path only one buyer ever took
+// isn't a pattern).
+type PathGrain = "campaign" | "creative";
+
+function JourneyStepChain({ steps }: { steps: string[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {steps.map((step, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-muted-foreground">&rarr;</span>}
+          <Badge variant="secondary" className="max-w-56 truncate text-[11px]">
+            {step}
+          </Badge>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function JourneyPathsGrainView({ data, hasValue }: { data: JourneyPathsForGrain; hasValue: boolean }) {
+  if (data.patterns.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        No repeat journey pattern yet — every converting path in this range was unique to one buyer.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {data.patterns.map((row, i) => (
+        <div key={i} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+          <JourneyStepChain steps={row.steps} />
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-muted-foreground">
+              {formatNumber(row.count)} buyer{row.count === 1 ? "" : "s"} ({row.percentage.toFixed(1)}%)
+            </span>
+            {hasValue && <span className="font-medium text-chart-1">{formatCurrency(row.totalValue)}</span>}
+          </div>
+        </div>
+      ))}
+      {data.singletonJourneys > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">
+          Plus {formatNumber(data.singletonJourneys)} other journey{data.singletonJourneys === 1 ? "" : "s"}{" "}
+          whose exact path was unique to that one buyer — not shown individually since one buyer isn&apos;t a pattern.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function JourneyPathsCard({ clientId, from, to, hasValue }: { clientId: string; from: string; to: string; hasValue: boolean }) {
+  const [grain, setGrain] = useState<PathGrain>("campaign");
+  const { data, isLoading } = useQuery({
+    queryKey: ["journey-paths", clientId, from, to],
+    queryFn: () => getJourneyPaths(clientId, { from, to }),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (!data || data.totalJourneys === 0) return null;
+
+  // A handful of total journeys isn't enough to call anything a "pattern" -
+  // same reasoning as the singleton gate itself, just applied to the whole
+  // account rather than one path. Still shows the real total rather than
+  // hiding the card outright, so a thin client sees why nothing's listed.
+  const MIN_TOTAL_FOR_PATTERNS = 5;
+  const hasEnoughData = data.totalJourneys >= MIN_TOTAL_FOR_PATTERNS;
+
+  return (
+    <Card className="px-0">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 px-4">
+        <div>
+          <CardTitle>Customer Journey Patterns</CardTitle>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            The actual sequence of ads buyers touched before purchasing, grouped into common patterns. Based on{" "}
+            {formatNumber(data.totalJourneys)} converting journey{data.totalJourneys === 1 ? "" : "s"} in this range.
+          </p>
+        </div>
+        <SegmentedToggle
+          value={grain}
+          onChange={(v) => setGrain(v as PathGrain)}
+          options={[
+            { value: "campaign", label: "By Campaign" },
+            { value: "creative", label: "By Creative" },
+          ]}
+        />
+      </CardHeader>
+      <CardContent className="px-4">
+        {hasEnoughData ? (
+          <JourneyPathsGrainView data={data[grain]} hasValue={hasValue} />
+        ) : (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Only {formatNumber(data.totalJourneys)} converting journey{data.totalJourneys === 1 ? "" : "s"} in this
+            range — not enough yet to reliably call anything a common pattern.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -420,6 +532,14 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
       )}
       {effectiveView === "campaign" && niche && !LAST_CLICK_DEFAULT_NICHES.includes(niche) && (
         <ModelComparisonTable
+          clientId={clientId}
+          from={range.from}
+          to={range.to}
+          hasValue={vocabularyForNiche(niche).valueColumnLabel !== null}
+        />
+      )}
+      {effectiveView === "campaign" && niche && (
+        <JourneyPathsCard
           clientId={clientId}
           from={range.from}
           to={range.to}

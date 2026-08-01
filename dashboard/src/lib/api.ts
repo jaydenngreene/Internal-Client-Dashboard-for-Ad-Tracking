@@ -1852,6 +1852,33 @@ export function getCreativeRoles(clientId: string, range: DateRange): Promise<Cr
   return fetchJson<CreativeRoles>(`/clients/${clientId}/reports/creative-roles${rangeQuery(range)}`);
 }
 
+// Customer Journey path clustering - "N% of buyers touched only this one
+// campaign/creative before buying." A pattern requires at least 2 distinct
+// buyers walked it; anyone whose exact path was unique is folded into
+// singletonJourneys rather than listed as if it were a real pattern.
+export interface JourneyPathRow {
+  steps: string[];
+  count: number;
+  percentage: number;
+  totalValue: number;
+}
+
+export interface JourneyPathsForGrain {
+  patterns: JourneyPathRow[];
+  singletonJourneys: number;
+}
+
+export interface JourneyPaths {
+  totalJourneys: number;
+  hasValue: boolean;
+  campaign: JourneyPathsForGrain;
+  creative: JourneyPathsForGrain;
+}
+
+export function getJourneyPaths(clientId: string, range: DateRange): Promise<JourneyPaths> {
+  return fetchJson<JourneyPaths>(`/clients/${clientId}/reports/journey-paths${rangeQuery(range)}`);
+}
+
 export type CallDisposition =
   | "new_lead"
   | "qualified"

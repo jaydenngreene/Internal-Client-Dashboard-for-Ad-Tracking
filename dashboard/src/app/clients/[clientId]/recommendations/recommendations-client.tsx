@@ -59,7 +59,7 @@ export function RecommendationsClient({ clientId }: { clientId: string }) {
           <ClientKicker clientId={clientId} />
           <h1 className="text-lg font-semibold">Recommendations</h1>
           <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
-            Flagged items across your account that need a decision. Nothing here acts on its own — confirm to act,
+            Flagged items across your account that need a decision. Nothing here acts on its own: confirm to act,
             or dismiss to leave it as is.
           </p>
         </div>

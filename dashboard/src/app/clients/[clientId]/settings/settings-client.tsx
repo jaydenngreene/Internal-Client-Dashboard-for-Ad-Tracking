@@ -791,7 +791,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "webhook_secret", label: "Webhook signing secret", type: "password" },
     ],
     helpText:
-      "Follow the walkthrough above this Integrations section first — it has the copy-paste tracking snippets. This row just stores the webhook signing secret Shopify hands you during that same walkthrough.",
+      "Follow the walkthrough above this Integrations section first, it has the copy-paste tracking snippets. This row just stores the webhook signing secret Shopify hands you during that same walkthrough.",
   },
   {
     platform: "stripe",
@@ -829,7 +829,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     label: "GoHighLevel",
     category: "Payment Processors",
     fields: [{ key: "webhook_secret", label: "Shared secret", type: "password" }],
-    helpText: "GHL has no fixed webhook format — this is wired up by hand in their Workflow Builder.",
+    helpText: "GHL has no fixed webhook format, this is wired up by hand in their Workflow Builder.",
     guideSlug: "guide-gohighlevel",
   },
   {
@@ -837,7 +837,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     label: "Housecall Pro",
     category: "Payment Processors",
     fields: [{ key: "webhook_secret", label: "Signing secret", type: "password" }],
-    helpText: "Requires Housecall Pro's MAX plan — webhooks aren't on lower tiers.",
+    helpText: "Requires Housecall Pro's MAX plan. Webhooks aren't on lower tiers.",
     guideSlug: "guide-housecallpro",
   },
   {
@@ -876,7 +876,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
     ],
     helpText:
-      "Two setup paths depending on this client's account — fill in the wrong fields and it fails to sync silently. See the full guide before connecting.",
+      "Two setup paths depending on this client's account. Fill in the wrong fields and it fails to sync silently. See the full guide before connecting.",
     guideSlug: "guide-google-ads",
   },
   {
@@ -966,14 +966,14 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "voice_intelligence_service_sid", label: "Voice Intelligence Service SID (for call transcription)", optional: true },
     ],
     helpText:
-      "Both Account SID and Auth Token are on the Twilio Console home screen after logging in. The Voice Intelligence Service SID is optional and only needed for automatic call transcription — Twilio Console → Voice → Intelligence → create a service, then copy its SID here.",
+      "Both Account SID and Auth Token are on the Twilio Console home screen after logging in. The Voice Intelligence Service SID is optional and only needed for automatic call transcription: Twilio Console → Voice → Intelligence → create a service, then copy its SID here.",
   },
   {
     platform: "customers-ai",
     label: "Customers.ai",
     category: "CRM & Remarketing",
     fields: [{ key: "webhook_secret", label: "Shared secret", type: "password" }],
-    helpText: "Also needs Customers.ai's own separate tracking pixel installed on the site — easy to miss.",
+    helpText: "Also needs Customers.ai's own separate tracking pixel installed on the site. Easy to miss.",
     guideSlug: "guide-customers-ai",
   },
   {

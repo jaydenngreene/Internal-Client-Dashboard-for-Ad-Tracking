@@ -170,7 +170,7 @@ export function CreativeFatigueClient({ clientId }: { clientId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-sm text-muted-foreground">
-          Creatives with a sustained decline in ROAS, CTR, CPA, CPM, or frequency — confirmed over both the last
+          Creatives with a sustained decline in ROAS, CTR, CPA, CPM, or frequency, confirmed over both the last
           few days and the last couple weeks, not a one-day dip. Only shown once a creative has spent or run long
           enough to earn a verdict. A trend signal, distinct from Pause Candidates&apos; ROAS-threshold alerts.
           Advisory only, nothing is paused.

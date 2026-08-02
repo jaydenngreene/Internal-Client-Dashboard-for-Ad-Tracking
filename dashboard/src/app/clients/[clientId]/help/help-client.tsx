@@ -52,11 +52,22 @@ function HelpCard({ entry, forceOpen, focused }: { entry: HelpEntry; forceOpen: 
               ))}
             </dl>
           )}
-          {entry.howToUse && (
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">How to use it: </span>
-              {entry.howToUse}
-            </p>
+          {entry.howToUse && Array.isArray(entry.howToUse) ? (
+            <div className="text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">How to use it</p>
+              <ol className="mt-1 flex list-decimal flex-col gap-1 pl-4">
+                {entry.howToUse.map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          ) : (
+            entry.howToUse && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">How to use it: </span>
+                {entry.howToUse}
+              </p>
+            )
           )}
         </div>
       </details>

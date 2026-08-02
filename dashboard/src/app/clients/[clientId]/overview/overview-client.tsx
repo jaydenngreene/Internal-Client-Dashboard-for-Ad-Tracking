@@ -510,7 +510,7 @@ function SaasSnapshotCard({
       <CardContent className="flex flex-wrap gap-6 px-0">
         <SnapshotStat
           label="Current MRR"
-          tooltip="Monthly recurring revenue right now — a live snapshot, not scoped to the selected date range."
+          tooltip="Monthly recurring revenue right now: a live snapshot, not scoped to the selected date range."
           value={formatCurrency(data.currentMrr)}
           tone="positive"
         />
@@ -522,7 +522,7 @@ function SaasSnapshotCard({
         />
         <SnapshotStat
           label="Net Revenue Retention"
-          tooltip="What happened to existing subscribers' revenue over this range (expansion, contraction, and churn) — new-customer MRR is deliberately excluded, this measures retention/growth of who was already there. Above 100% means upgrades outpaced downgrades and cancellations."
+          tooltip="What happened to existing subscribers' revenue over this range (expansion, contraction, and churn). New-customer MRR is deliberately excluded, this measures retention/growth of who was already there. Above 100% means upgrades outpaced downgrades and cancellations."
           value={formatPercent(data.nrr)}
           tone={data.nrr !== null && data.nrr >= 100 ? "positive" : "negative"}
         />

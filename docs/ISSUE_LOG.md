@@ -6,6 +6,21 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-02 (later) — Long instructions as real bullet lists; em dashes removed from every user-facing string
+
+**Ask:** two style fixes. Multi-step instructions (the integration setup guides added 2026-08-01) should render as actual bullet/numbered lists, not "1) ... 2) ... 3)..." crammed into one paragraph. Separately: no em dashes anywhere the user actually sees.
+
+**Built:**
+- `help-content.ts`'s `HelpEntry.howToUse` is now `string | string[]` — a string still renders as one line, an array renders as a real `<ol>` (`help-client.tsx` updated to branch on `Array.isArray`). The 7 integration setup guides (Google Ads, Bing Ads, PayPal, GoHighLevel, Housecall Pro, Customers.ai, BigQuery) were rewritten from single-paragraph numbered prose into actual `howToUse` arrays — PayPal and GoHighLevel in particular went from a dense "1) ... 2) ... 3)..." block to 4-6 real list items.
+- Swept every `.ts`/`.tsx` file under `dashboard/src` for the em dash character and rewrote each occurrence in user-facing text (JSX text nodes, tooltip/helpText/purpose strings, page subtitles) using a comma, period, or colon depending on what the sentence actually needed — not a blanket find-replace, since a mechanical swap would have produced run-on or fragment sentences in a lot of these. Left three categories alone, deliberately: code comments (internal developer notes, not part of "the site" a user sees), the Liquid `{% comment %}` blocks inside the Shopify tracking-snippet template strings (that text ends up pasted into a client's Shopify theme, not rendered in Kado), and the standalone `"—"` glyph used as a "no value" placeholder in tables (`return "—"` for a null metric) — that's a UI symbol serving a completely different purpose than a sentence-joining em dash, removing it would just break the empty-state convention used throughout every report table.
+- Touched files: `help-content.ts`, `help-client.tsx`, `settings-client.tsx` (both the INTEGRATIONS helpText strings and the two-button icon-placement row from the previous entry), `campaigns-client.tsx`, `overview-client.tsx`, `creative-fatigue-client.tsx`, `recommendations-client.tsx`, `experiments-client.tsx`. Every other file with an em dash (`api.ts`, `nav-items.ts`, `niche-vocabulary.ts`, and ~55 more) was checked and confirmed to only have it in comments — left as-is.
+
+**Verified:** `tsc --noEmit` and `next build` both clean. Live-tested: the GoHighLevel setup guide (Help & Info) now renders as a real 6-item numbered list instead of one paragraph; its Settings tooltip and every other spot-checked tooltip render correctly with the rewritten, dash-free copy.
+
+**Commit:** (see git log for the commit hash following this entry)
+
+---
+
 ## 2026-08-02 — Settings integration rows: the info icon was too easy to miss at the far right
 
 **Reported:** the "i" icon added to each Settings → Integrations row (2026-08-01, #4 below) sat all the way at the right edge of the row, after the Connected/Not connected badge and Connect/Edit/Hide text — easy to miss entirely, since nothing about that side of the row otherwise looks interactive or informational.

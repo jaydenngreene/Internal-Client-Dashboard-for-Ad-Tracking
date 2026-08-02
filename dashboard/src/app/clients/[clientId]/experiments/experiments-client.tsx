@@ -43,7 +43,7 @@ export function ExperimentsClient({ clientId }: { clientId: string }) {
           <h1 className="text-lg font-semibold">Experiments</h1>
           <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
             Tests whether a campaign is really driving new sales, not just taking credit for sales that would have
-            happened anyway — two ways to measure it.
+            happened anyway: two ways to measure it.
           </p>
         </div>
         <SegmentedToggle value={type} onChange={(v) => setType(v as ExperimentType)} options={TYPE_OPTIONS} />

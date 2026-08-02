@@ -62,7 +62,7 @@ function AttributionComparisonTable({ clientId, from, to }: { clientId: string; 
       <CardHeader className="px-4">
         <CardTitle>First-Touch vs Last-Touch</CardTitle>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          The same purchases credited two different ways — the first ad that ever brought this customer in, versus
+          The same purchases credited two different ways: the first ad that ever brought this customer in, versus
           the last one they clicked before buying. Recomputed independently of the Attribution Model setting in
           Settings, so both are always visible together.
         </p>
@@ -141,7 +141,7 @@ function ModelComparisonTable({
       <CardHeader className="px-4">
         <CardTitle>U-Shaped vs Time-Decay</CardTitle>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          The same conversions credited two different ways — U-Shaped (this account&apos;s default: 40% first touch /
+          The same conversions credited two different ways: U-Shaped (this account&apos;s default: 40% first touch /
           40% last touch / 20% split across the rest) versus Time-Decay, which weighs recent touches more heavily.
           Recomputed independently of the Attribution Model setting in Settings, so both are always visible together.
         </p>
@@ -215,7 +215,7 @@ function JourneyPathsGrainView({ data, hasValue }: { data: JourneyPathsForGrain;
   if (data.patterns.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        No repeat journey pattern yet — every converting path in this range was unique to one buyer.
+        No repeat journey pattern yet. Every converting path in this range was unique to one buyer.
       </p>
     );
   }
@@ -236,7 +236,7 @@ function JourneyPathsGrainView({ data, hasValue }: { data: JourneyPathsForGrain;
       {data.singletonJourneys > 0 && (
         <p className="px-1 text-xs text-muted-foreground">
           Plus {formatNumber(data.singletonJourneys)} other journey{data.singletonJourneys === 1 ? "" : "s"}{" "}
-          whose exact path was unique to that one buyer — not shown individually since one buyer isn&apos;t a pattern.
+          whose exact path was unique to that one buyer, not shown individually since one buyer isn&apos;t a pattern.
         </p>
       )}
     </div>
@@ -285,7 +285,7 @@ function JourneyPathsCard({ clientId, from, to, hasValue }: { clientId: string; 
         ) : (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Only {formatNumber(data.totalJourneys)} converting journey{data.totalJourneys === 1 ? "" : "s"} in this
-            range — not enough yet to reliably call anything a common pattern.
+            range, not enough yet to reliably call anything a common pattern.
           </p>
         )}
       </CardContent>
@@ -319,7 +319,7 @@ function DataDrivenAttributionCard({ clientId, from, to }: { clientId: string; f
         <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
           A more advanced read on which channels actually deserve credit, based on real patterns across every
           visitor&apos;s path to purchase (not just people who bought): for each channel, how much your results would
-          suffer if it disappeared entirely. Shown for comparison only — the Attribution Model set in Settings still
+          suffer if it disappeared entirely. Shown for comparison only: the Attribution Model set in Settings still
           drives the revenue numbers everywhere else.
         </p>
       </CardHeader>
@@ -394,7 +394,7 @@ function CreativePatternsCard({ clientId }: { clientId: string }) {
           <Sparkles className="size-4 text-primary" /> Creative Patterns
         </CardTitle>
         <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
-          What KIND of creative wins, not just which specific ad — every AI-tagged creative&apos;s real spend and
+          What KIND of creative wins, not just which specific ad: every AI-tagged creative&apos;s real spend and
           revenue, grouped by hook type, angle, and tone. Generate tags from a creative&apos;s detail page above first;
           this only aggregates what&apos;s already tagged.
         </p>

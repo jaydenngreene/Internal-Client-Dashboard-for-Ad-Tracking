@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 (later still #5) — Test coverage for the Facebook/Google ad-cost sync jobs and the lead-capture routes
+
+**Ask:** Priority 3 from the same platform-wide audit. The audit found the API's 101 (now 128) tests covered pure logic only — attribution math, auth, bot detection, etc. — and **zero** test files ever touched `adCosts/facebook.ts`, `adCosts/google.ts`, `/track/identify`, or `webhooks/gohighlevel.ts`. Everything on those paths had only ever been checked by hand against live data, recorded as spot-checks in this log rather than as regression tests — meaning a fix confirmed working today has no guardrail against silently breaking again later.
+
+**Built**, 27 new tests across 4 new files, all against real exported functions/routes (no new test-only abstractions):
+- `api/src/jobs/adCosts/__tests__/facebook.test.ts` (8 tests) — `fetchFacebookAdCosts` and `fetchAdObjectFallback` against a stubbed `global.fetch`. Covers spend/frequency/video-watch-time parsing, the `act_` account-id prefix logic, `paging.next` pagination, an Insights-API error surfacing as a thrown error, and — the one that matters most — **a single ad's creative lookup throwing on a malformed/non-JSON response does not crash the whole sync**, the same failure class that actually broke Snapchat's sync (fixed 2026-07-28, see that entry) before anything caught it. Also confirms `fetchAdObjectFallback` returns `null` for a genuinely deleted ad, matching the documented tested-live limit from 2026-07-27.
+- `api/src/jobs/adCosts/__tests__/google.test.ts` (4 tests) — `fetchGoogleAdCosts` against a mocked `getGoogleAdsCustomer`. Covers `cost_micros` → dollars conversion, campaign/ad-group/ad field mapping, Responsive Search Ad headline/description taking priority over the legacy Expanded Text Ad fields when both exist, the ETA fallback when RSA data is absent, and that the client's config (customer_id/login_customer_id/refresh_token) passes through to `getGoogleAdsCustomer` unchanged — the exact MCC-vs-independent-account routing the new Google Ads setup guide (previous entry) had to explain because getting it backwards fails silently.
+- `api/src/routes/__tests__/identify.test.ts` (8 tests) — `/track/identify` via `app.inject()` with `db`/`sendConversionSignals`/`lookupVisitorId`/`identityLinking`/`dispatchEvent`/`attemptRetroactiveAttribution` all mocked. Covers the 400/401/404 validation chain, email normalization, that a Lead conversion signal carries the most recent session's click IDs, that `attemptRetroactiveAttribution` fires with the right args (the retry this route added specifically for the Shopify order-webhook-before-identify race, 2026-07-25), and — explicitly, since it's a documented design guarantee — that a cross-device-linking failure or a retroactive-attribution failure never blocks the 200 response.
+- `api/src/routes/webhooks/__tests__/gohighlevel.test.ts` (8 tests) — covers the shared-secret check (401 on wrong secret, any secret accepted while unconfigured — the same bootstrap convention Shopify/Stripe use), `contact.email`/`contact.phone` taking priority over top-level fallback fields, charge → `recordPurchase` vs. refund → `recordRefund` routing, the zero-amount/missing-email silent no-op, and phone-linking only firing when both email and phone are present, with a linking failure not blocking the response.
+
+**Verified:** `npm test` now 128/128 passing (21 test files, up from 17/101), `tsc --noEmit` clean.
+
+**Not built this pass:** GoHighLevel's own live-lead-submission gap (still flagged as "never confirmed end-to-end with a real submitted lead" in the "Known unverified / open risk" section below) isn't closed by this — these are unit-level regression tests against the route's own logic, not a substitute for that live confirmation.
+
+---
+
 ## 2026-08-01 (later still #4) — Site-wide integration help: robust hover tooltips + setup guides for all 17 integrations
 
 **Ask:** Priority 2 from a platform-wide audit (tests/attribution integrity/UX/docs pass, same session). Google Ads' Settings row had zero help text — the single biggest self-serve onboarding gap the audit found for a non-technical media buyer. The ask expanded to fixing this site-wide: a consistent hover-tooltip pattern everywhere, click-through to a full guide when a description is too long for a bubble, and a hard requirement that the tooltip never get clipped or blocked by anything.

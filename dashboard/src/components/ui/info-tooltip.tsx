@@ -14,10 +14,12 @@ import { cn } from "@/lib/utils";
 // this can be dropped next to any label anywhere without checking what
 // contains it.
 //
-// If `href` is given, the icon itself becomes a link (not a link *inside* the
-// tooltip bubble — a tooltip's ARIA role must not contain focusable content)
-// and the popup gets a "view full setup guide"-style hint appended, for
-// descriptions too long to comfortably read in a hover bubble.
+// If `href` is given, the icon itself becomes a link, and the popup's
+// "Full setup guide" line is a second, real link to the same place — a user
+// naturally tries clicking the visible link-styled text first, not just the
+// tiny icon. Base UI's tooltip popup is hoverable by default (moving the
+// mouse off the icon and onto the popup doesn't close it), so that click
+// target actually stays reachable.
 export function InfoTooltip({
   text,
   href,
@@ -60,7 +62,11 @@ export function InfoTooltip({
         <Tooltip.Positioner side="top" sideOffset={6} collisionPadding={8} className="z-50">
           <Tooltip.Popup className="max-w-[min(18rem,calc(100vw-1.5rem))] rounded-md border border-border/50 bg-popover px-2.5 py-1.5 text-[11px] font-normal normal-case leading-snug text-popover-foreground shadow-lg">
             <p>{text}</p>
-            {href && <p className="mt-1 font-medium text-primary">{linkLabel} →</p>}
+            {href && (
+              <Link href={href} className="mt-1 inline-block font-medium text-primary outline-none hover:underline focus-visible:underline">
+                {linkLabel} →
+              </Link>
+            )}
           </Tooltip.Popup>
         </Tooltip.Positioner>
       </Tooltip.Portal>

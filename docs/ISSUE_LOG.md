@@ -6,6 +6,18 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-02 (later still) — The tooltip's "Full setup guide" text wasn't actually clickable
+
+**Reported:** only the tiny "i" icon navigated to the full setup guide; the "Full setup guide →" text inside the tooltip popup, styled to look like a link, was a plain `<p>`. A user's natural instinct is to click the visible link-styled text, not the small icon it's attached to.
+
+**Fix:** `info-tooltip.tsx`'s popup now renders that line as a real `next/link` `<Link>` to the same `href`, instead of a styled paragraph. Works because Base UI's tooltip popup is hoverable by default, moving the mouse from the icon onto the popup doesn't close it, so the link stays reachable. The icon itself remains a link too (unchanged) — this adds a second, more discoverable way to reach the same guide, not a replacement.
+
+**Verified:** `tsc --noEmit` and `next build` clean. Live-tested: clicking directly on "Full setup guide →" text in the GoHighLevel tooltip navigates to `/help?topic=guide-gohighlevel`, same destination as clicking the icon.
+
+**Commit:** (see git log for the commit hash following this entry)
+
+---
+
 ## 2026-08-02 (later) — Long instructions as real bullet lists; em dashes removed from every user-facing string
 
 **Ask:** two style fixes. Multi-step instructions (the integration setup guides added 2026-08-01) should render as actual bullet/numbered lists, not "1) ... 2) ... 3)..." crammed into one paragraph. Separately: no em dashes anywhere the user actually sees.

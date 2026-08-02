@@ -6,11 +6,12 @@ import { useDateRangeState } from "@/lib/date-range";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientKicker } from "@/components/client-kicker";
 
 // Step 56 — advisory only, same "flag, don't silently act" pattern as Pause
 // Candidates/Creative Fatigue. Nothing here excludes anything from other
-// reports automatically.
+// reports automatically. Renders just this recommendation type's own content,
+// mounted as one tab inside the Recommendations hub — see
+// pause-candidates-client.tsx's header comment for the full reasoning.
 export function InvalidTrafficClient({ clientId }: { clientId: string }) {
   const { range } = useDateRangeState("30d");
 
@@ -20,19 +21,13 @@ export function InvalidTrafficClient({ clientId }: { clientId: string }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <ClientKicker clientId={clientId} />
-          <h1 className="text-lg font-semibold">Invalid Traffic</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Sessions flagged by user-agent (known bots/crawlers/headless browsers) or click-velocity signatures
-            (many sessions from one IP in a short window). Advisory only, nothing is excluded from other reports
-            automatically. Ad spend/click numbers come from each platform's own reporting, not this pixel, so this
-            mainly protects funnel/engagement metrics from bot noise, not ad spend efficiency.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-4">
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        Sessions flagged by user-agent (known bots/crawlers/headless browsers) or click-velocity signatures
+        (many sessions from one IP in a short window). Advisory only, nothing is excluded from other reports
+        automatically. Ad spend/click numbers come from each platform&apos;s own reporting, not this pixel, so this
+        mainly protects funnel/engagement metrics from bot noise, not ad spend efficiency.
+      </p>
 
       {isError && <p className="text-sm text-status-critical">Failed to load report. Is the API running?</p>}
       {isLoading && <Skeleton className="h-48 w-full" />}

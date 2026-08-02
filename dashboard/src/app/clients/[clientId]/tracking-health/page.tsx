@@ -1,4 +1,4 @@
-import { TrackingHealthClient } from "./tracking-health-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function TrackingHealthPage({
   params,
@@ -6,5 +6,5 @@ export default async function TrackingHealthPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <TrackingHealthClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/recommendations?type=tracking-health`} />;
 }

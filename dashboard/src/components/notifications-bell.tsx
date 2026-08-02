@@ -14,12 +14,14 @@ import { cn } from "@/lib/utils";
 // signals (Pause Candidates, Creative Fatigue, Tracking Health, Budget
 // Reallocation) a user would otherwise only ever see by remembering to check
 // each page separately - this just counts and links to them, not a new
-// notifications table/inbox to maintain.
+// notifications table/inbox to maintain. Links point into the Recommendations
+// hub's ?type= deep link (2026-08-01 nav consolidation folded all four into
+// one page) rather than their old standalone routes.
 const CATEGORIES: { key: "pauseCandidates" | "creativeFatigue" | "trackingHealth" | "budgetReallocation"; label: string; href: string }[] = [
-  { key: "pauseCandidates", label: "Pause candidates", href: "pause-candidates" },
-  { key: "creativeFatigue", label: "Creative fatigue", href: "creative-fatigue" },
-  { key: "trackingHealth", label: "Tracking health", href: "tracking-health" },
-  { key: "budgetReallocation", label: "Budget reallocation", href: "budget-reallocation" },
+  { key: "pauseCandidates", label: "Pause candidates", href: "recommendations?type=pause-candidates" },
+  { key: "creativeFatigue", label: "Creative fatigue", href: "recommendations?type=creative-fatigue" },
+  { key: "trackingHealth", label: "Tracking health", href: "recommendations?type=tracking-health" },
+  { key: "budgetReallocation", label: "Budget reallocation", href: "recommendations?type=budget-reallocation" },
 ];
 
 export function NotificationsBell() {

@@ -1,4 +1,4 @@
-import { InvalidTrafficClient } from "./invalid-traffic-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function InvalidTrafficPage({
   params,
@@ -6,5 +6,5 @@ export default async function InvalidTrafficPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <InvalidTrafficClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/recommendations?type=invalid-traffic`} />;
 }

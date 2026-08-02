@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import {
   getFunnel,
   getLtv,
@@ -16,6 +17,9 @@ import {
   getCreativeRoles,
   getJourneyPaths,
   JourneyPathsForGrain,
+  getMarkovAttribution,
+  getCreativeTagPerformance,
+  CreativeTagPerformanceRow,
   Niche,
 } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
@@ -28,8 +32,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RoleBadge } from "@/components/role-badge";
 import { ClientKicker } from "@/components/client-kicker";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { vocabularyForNiche } from "@/lib/niche-vocabulary";
+import { TAG_LABEL, DIMENSION_LABEL } from "@/lib/creative-tag-labels";
+import { cn } from "@/lib/utils";
 
 // Niches that default to Last Click (high-volume, transactional purchases -
 // see api/src/lib/attributionDefaults.ts for the full reasoning). Everything
@@ -287,6 +293,140 @@ function JourneyPathsCard({ clientId, from, to, hasValue }: { clientId: string; 
   );
 }
 
+// Step 59 — data-driven ("algorithmic") attribution via a Markov chain removal-
+// effect model: how much each channel's OWN conversion probability would drop
+// if it were removed from every visitor's path entirely, across every visitor
+// (converting and not), not just the touches on one sale. Deliberately a
+// comparison view, not a switch - whichever rule-based model is set in
+// Settings is still what drives every other report's revenue numbers. Folded
+// into this tab (2026-08-01 nav consolidation) as a third comparison card next
+// to First-Touch-vs-Last-Touch / U-Shaped-vs-Time-Decay above, since it's the
+// same "same purchases, credited a different way" idea - it used to be its own
+// standalone page under Data-Driven Attribution.
+function DataDrivenAttributionCard({ clientId, from, to }: { clientId: string; from: string; to: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["markov-attribution", clientId, from, to],
+    queryFn: () => getMarkovAttribution(clientId, { from, to }),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (!data) return null;
+
+  return (
+    <Card className="px-0">
+      <CardHeader className="px-4">
+        <CardTitle>Data-Driven Attribution</CardTitle>
+        <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
+          A more advanced read on which channels actually deserve credit, based on real patterns across every
+          visitor&apos;s path to purchase (not just people who bought): for each channel, how much your results would
+          suffer if it disappeared entirely. Shown for comparison only — the Attribution Model set in Settings still
+          drives the revenue numbers everywhere else.
+        </p>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 px-4">
+        {!data.available && <p className="py-4 text-center text-sm text-muted-foreground">{data.reason}</p>}
+        {data.available && (
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Overall Conversion Rate</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {formatPercent((data.totalConversionProbability ?? 0) * 100)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Visitors Analyzed</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">{formatNumber(data.visitorsAnalyzed ?? 0)}</p>
+              </div>
+              <div className="rounded-lg border border-border px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">Total Revenue</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">{formatCurrency(data.totalRevenue ?? 0)}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm font-medium">Channel Impact</p>
+              {data.channels?.map((c) => (
+                <div key={c.channel} className="flex flex-col gap-1 border-b border-border pb-2 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{c.channel}</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatCurrency(c.attributedRevenue)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-chart-4" style={{ width: `${Math.round(c.creditShare * 100)}%` }} />
+                    </div>
+                    <p className="w-36 shrink-0 text-right text-xs text-muted-foreground">
+                      {formatPercent(c.creditShare * 100)} credit, {formatNumber(c.touchpoints)} touchpoints
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// "What KIND of creative wins," not just which specific ad - aggregates every
+// AI-tagged creative's real spend/revenue by hook type/angle/tone (generate
+// tags from a creative's own detail page first; this reads already-generated
+// tags, nothing here re-runs the AI). Account-wide, not date-scoped. Folded
+// into the Creative tab (2026-08-01 nav consolidation) since it's the same
+// subject at a different grain (tag-aggregate vs. per-ad) - it used to be its
+// own standalone page under Creative Patterns.
+function CreativePatternsCard({ clientId }: { clientId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["creative-tag-performance", clientId],
+    queryFn: () => getCreativeTagPerformance(clientId),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (!data || data.length === 0) return null;
+
+  const byDimension = (dim: CreativeTagPerformanceRow["dimension"]) => data.filter((r) => r.dimension === dim);
+
+  return (
+    <Card className="px-4">
+      <CardHeader className="px-0">
+        <CardTitle className="flex items-center gap-1.5">
+          <Sparkles className="size-4 text-primary" /> Creative Patterns
+        </CardTitle>
+        <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
+          What KIND of creative wins, not just which specific ad — every AI-tagged creative&apos;s real spend and
+          revenue, grouped by hook type, angle, and tone. Generate tags from a creative&apos;s detail page above first;
+          this only aggregates what&apos;s already tagged.
+        </p>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 gap-4 px-0 lg:grid-cols-3">
+        {(["hook_type", "angle", "tone"] as const).map((dim) => {
+          const rows = byDimension(dim);
+          if (rows.length === 0) return null;
+          return (
+            <div key={dim} className="flex flex-col gap-2">
+              <p className="text-sm font-medium">{DIMENSION_LABEL[dim]}</p>
+              {rows.map((r) => (
+                <div key={r.value} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{TAG_LABEL[r.value] ?? r.value}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {r.creativeCount} creative{r.creativeCount === 1 ? "" : "s"} &middot; {formatCurrency(r.totalSpend)} spent
+                    </span>
+                  </div>
+                  <span className={cn("text-sm font-semibold tabular-nums", (r.avgRoas ?? 0) >= 1 ? "text-chart-1" : "text-chart-2")}>
+                    {r.avgRoas === null ? "-" : formatRoas(r.avgRoas)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 // LTV isn't a funnel breakdown the API knows about (it's its own report, keyed only
 // by acquisition campaign) - it's folded into this page's toggle purely as a UI
 // grouping so "what's this campaign worth" lives next to the rest of the
@@ -520,6 +660,11 @@ export function CampaignsClient({ clientId }: { clientId: string }) {
           hasValue={vocabularyForNiche(niche).valueColumnLabel !== null}
         />
       )}
+      {effectiveView === "campaign" && (
+        <DataDrivenAttributionCard clientId={clientId} from={range.from} to={range.to} />
+      )}
+
+      {isCreativeView && <CreativePatternsCard clientId={clientId} />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { CreativePatternsClient } from "./creative-patterns-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function CreativePatternsPage({
   params,
@@ -6,5 +6,5 @@ export default async function CreativePatternsPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <CreativePatternsClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/campaigns?view=creative`} />;
 }

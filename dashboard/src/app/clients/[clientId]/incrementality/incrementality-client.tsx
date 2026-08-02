@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientKicker } from "@/components/client-kicker";
 
 const STATUS_LABEL = { pending: "Not started", running: "Paused, in progress", completed: "Completed" };
 const STATUS_VARIANT: Record<string, "outline" | "secondary" | "default"> = {
@@ -164,6 +163,9 @@ function NewTestForm({ clientId }: { clientId: string }) {
   );
 }
 
+// Renders just this experiment type's own content, mounted as one tab inside
+// the Experiments hub (experiments-client.tsx), which supplies the shared
+// header; this used to be its own standalone page.
 export function IncrementalityClient({ clientId }: { clientId: string }) {
   const { data: tests, isLoading } = useQuery({
     queryKey: ["incrementality-tests", clientId],
@@ -171,20 +173,16 @@ export function IncrementalityClient({ clientId }: { clientId: string }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div>
-        <ClientKicker clientId={clientId} />
-        <h1 className="text-lg font-semibold">Incrementality Testing</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Tests whether a campaign is really driving new sales, not just taking credit for sales that would have
-          happened anyway. Pause the campaign completely, then watch what happens to your TOTAL revenue, not just
-          this campaign's own attributed revenue (that number trivially drops to zero the moment it's paused, so it
-          can't tell you anything on its own). If total revenue drops too, that drop is roughly what the campaign
-          was really worth. If total revenue barely moves, this campaign was likely just taking credit for sales
-          that would have come through another channel anyway. See Geo-Lift Testing (in the sidebar) for a more
-          rigorous version of this same idea, once you have visitor location data to use.
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        Tests whether a campaign is really driving new sales, not just taking credit for sales that would have
+        happened anyway. Pause the campaign completely, then watch what happens to your TOTAL revenue, not just
+        this campaign&apos;s own attributed revenue (that number trivially drops to zero the moment it&apos;s
+        paused, so it can&apos;t tell you anything on its own). If total revenue drops too, that drop is roughly
+        what the campaign was really worth. If total revenue barely moves, this campaign was likely just taking
+        credit for sales that would have come through another channel anyway. See the Geo-Lift tab for a more
+        rigorous version of this same idea, once you have visitor location data to use.
+      </p>
 
       <NewTestForm clientId={clientId} />
 

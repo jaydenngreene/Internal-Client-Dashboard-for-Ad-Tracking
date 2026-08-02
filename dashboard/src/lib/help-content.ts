@@ -100,11 +100,13 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         slug: "campaigns",
         title: "Campaigns",
-        purpose: "The main performance breakdown table: switch between Campaign, Source, Keyword, and Creative (ad-level) views, plus an LTV-by-acquisition-campaign tab.",
+        purpose: "The main performance breakdown table: switch between Campaign, Source, Keyword, and Creative (ad-level) views, plus an LTV-by-acquisition-campaign tab. The Campaign tab also includes an attribution-model comparison (e.g. First-Touch vs Last-Touch), customer journey pattern clustering, and a Data-Driven Attribution card; the Creative tab includes a Creative Patterns card — these were separate pages until the 2026-08-01 nav consolidation folded them in here.",
         metrics: [
           { term: "CTR / CPC", definition: "Click-through rate and cost per click, straight from the ad platform." },
           { term: "CPL / Ad Spend per Purchase", definition: "Ad spend divided by leads or by purchases, whichever this client's niche optimizes for." },
           { term: "ROAS", definition: "Revenue ÷ ad spend, per row." },
+          { term: "Data-Driven Attribution", definition: "A Markov-chain based model: estimates each channel's real contribution from patterns across every visitor's path to purchase, not just the people who bought. Shown for comparison only, separate from the fixed first/last/linear/time-decay/u-shaped rules that drive the rest of the dashboard." },
+          { term: "Creative Patterns", definition: "What your best-performing AI-tagged creatives have in common (hook type, angle, tone), so you know what to make more of. Only populated once creatives have been tagged from their own detail page." },
         ],
         howToUse: "Sort any column by clicking its header. Export the current view to CSV with the button above the table.",
       },
@@ -125,16 +127,6 @@ export const HELP_SECTIONS: HelpSection[] = [
         title: "Media Mix Model",
         purpose: "Estimates how much revenue each ad platform is actually responsible for from real spend/revenue history, independent of whichever attribution model drives the rest of the dashboard. Includes a budget scenario simulator: \"what if I moved $X/day from Platform A to B\".",
         howToUse: "Treat this as a second opinion alongside attribution-based numbers, not a replacement. The two methods can (and often do) disagree.",
-      },
-      {
-        slug: "creative-patterns",
-        title: "Creative Patterns",
-        purpose: "Finds what your best-performing creatives have in common (format, hook style, length, etc.) so you know what to make more of.",
-      },
-      {
-        slug: "data-driven-attribution",
-        title: "Data-Driven Attribution",
-        purpose: "A Markov-chain based model: estimates each channel's real contribution from patterns across every visitor's path to purchase, not just the people who bought. Separate from the fixed first/last/linear/time-decay/u-shaped rules used elsewhere.",
       },
       {
         slug: "leads",
@@ -172,39 +164,33 @@ export const HELP_SECTIONS: HelpSection[] = [
         purpose: "Visitors identified by Customers.ai, with AI-drafted outreach copy awaiting your review. Approving a draft doesn't send anything by itself, it only marks the candidate ready for the next step (e.g. adding to a Klaviyo list).",
       },
       {
-        slug: "pause-candidates",
-        title: "Pause Candidates",
-        purpose: "Ads flagged by daily anomaly detection for a ROAS drop vs. their own 7-day average. Advisory only: nothing pauses automatically, you confirm or dismiss each flag.",
+        // Pause Candidates/Budget Reallocation/Creative Fatigue/Tracking Health/
+        // Invalid Traffic were five separate sidebar items and five separate
+        // help entries here — folded into one Recommendations hub with an
+        // internal type toggle (2026-08-01 nav consolidation, same slug as
+        // lib/nav-items.ts's new entry).
+        slug: "recommendations",
+        title: "Recommendations",
+        purpose: "Flagged items across your account that need a decision — one hub with a toggle between five types. Nothing here acts on its own: confirm to act, or dismiss to leave it as is.",
+        metrics: [
+          { term: "Pause Candidates", definition: "Ads flagged by daily anomaly detection for a ROAS drop vs. their own 7-day average." },
+          { term: "Budget Reallocation", definition: "Campaign pairs with a real ROAS gap (winner at least 1.5x the loser's ROAS over the last 7 days)." },
+          { term: "Creative Fatigue", definition: "Creatives with a sustained ROAS/CTR/CPA decline confirmed over both the last few days and the last couple weeks, not a one-day dip. A trend signal, distinct from Pause Candidates' threshold alerts." },
+          { term: "Tracking Health", definition: "Watches whether tracking itself is intact, not performance: a silent pixel, a traffic collapse, or a platform with real ad spend but no matching sessions." },
+          { term: "Invalid Traffic", definition: "Sessions flagged by user-agent (known bots/crawlers/headless browsers) or click-velocity signatures (many sessions from one IP in a short window). Nothing is excluded from other reports automatically." },
+        ],
       },
       {
-        slug: "budget-reallocation",
-        title: "Budget Reallocation",
-        purpose: "Campaign pairs with a real ROAS gap (winner at least 1.5x the loser's ROAS over the last 7 days). Advisory only: confirm to actually move budget, dismiss to leave both unchanged.",
-      },
-      {
-        slug: "creative-fatigue",
-        title: "Creative Fatigue",
-        purpose: "Creatives whose CTR has declined 30%+ over the last 3 days vs. the 7 days before that. A trend signal, distinct from Pause Candidates' ROAS-threshold alerts. Advisory only.",
-      },
-      {
-        slug: "invalid-traffic",
-        title: "Invalid Traffic",
-        purpose: "Sessions flagged by user-agent (known bots/crawlers/headless browsers) or click-velocity signatures (many sessions from one IP in a short window). Advisory only: nothing is excluded from other reports automatically.",
-      },
-      {
-        slug: "tracking-health",
-        title: "Tracking Health",
-        purpose: "Watches whether tracking itself is intact, not performance: a silent pixel, a traffic collapse, or a platform with real ad spend but no matching sessions. Advisory only.",
-      },
-      {
-        slug: "incrementality",
-        title: "Incrementality Testing",
-        purpose: "Tests whether a campaign is really driving new sales, not just taking credit for sales that would have happened anyway. Pause it completely and watch what happens to TOTAL revenue, not just that campaign's own numbers.",
-      },
-      {
-        slug: "geo-lift",
-        title: "Geo-Lift Testing",
-        purpose: "Same question as Incrementality Testing, different method: pause ads in a few \"holdout\" regions while they keep running everywhere else, then compare.",
+        // Incrementality/Geo-Lift Testing were two separate sidebar items
+        // running the identical test-card workflow — folded into one
+        // Experiments hub (2026-08-01 nav consolidation).
+        slug: "experiments",
+        title: "Experiments",
+        purpose: "Tests whether a campaign is really driving new sales, not just taking credit for sales that would have happened anyway — two ways to measure it, toggled on one page.",
+        metrics: [
+          { term: "Incrementality", definition: "Pause a campaign completely and watch what happens to TOTAL revenue, not just that campaign's own numbers." },
+          { term: "Geo-Lift", definition: "Same question, more rigorous method: pause ads in a few \"holdout\" regions while they keep running everywhere else, then compare revenue per visitor between the two groups. Also accounts for anything affecting the whole business at once (a seasonal dip, a site issue) that a plain Incrementality test can't rule out." },
+        ],
       },
     ],
   },

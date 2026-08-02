@@ -1,4 +1,4 @@
-import { MarkovAttributionClient } from "./markov-attribution-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function DataDrivenAttributionPage({
   params,
@@ -6,5 +6,5 @@ export default async function DataDrivenAttributionPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <MarkovAttributionClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/campaigns?view=campaign`} />;
 }

@@ -1,4 +1,4 @@
-import { GeoLiftClient } from "./geo-lift-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function GeoLiftPage({
   params,
@@ -6,5 +6,5 @@ export default async function GeoLiftPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <GeoLiftClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/experiments?type=geo-lift`} />;
 }

@@ -1,4 +1,4 @@
-import { IncrementalityClient } from "./incrementality-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function IncrementalityPage({
   params,
@@ -6,5 +6,5 @@ export default async function IncrementalityPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <IncrementalityClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/experiments?type=incrementality`} />;
 }

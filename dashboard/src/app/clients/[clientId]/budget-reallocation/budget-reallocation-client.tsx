@@ -15,7 +15,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientKicker } from "@/components/client-kicker";
 
 const STATUS_OPTIONS: { value: BudgetReallocationStatus; label: string }[] = [
   { value: "pending", label: "Pending Review" },
@@ -99,6 +98,9 @@ function SuggestionCard({ item, clientId }: { item: BudgetReallocationSuggestion
   );
 }
 
+// Renders just this recommendation type's own controls + content, mounted as
+// one tab inside the Recommendations hub — see pause-candidates-client.tsx's
+// header comment for the full reasoning.
 export function BudgetReallocationClient({ clientId }: { clientId: string }) {
   const [status, setStatus] = useState<BudgetReallocationStatus>("pending");
 
@@ -108,16 +110,12 @@ export function BudgetReallocationClient({ clientId }: { clientId: string }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <ClientKicker clientId={clientId} />
-          <h1 className="text-lg font-semibold">Budget Reallocation</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Campaign pairs with a real ROAS gap (winner at least 1.5x the loser's ROAS over the last 7 days).
-            Nothing shifts automatically. Confirm to actually move budget, or dismiss to leave both unchanged.
-          </p>
-        </div>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Campaign pairs with a real ROAS gap (winner at least 1.5x the loser&apos;s ROAS over the last 7 days).
+          Nothing shifts automatically. Confirm to actually move budget, or dismiss to leave both unchanged.
+        </p>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as BudgetReallocationStatus)} options={STATUS_OPTIONS} />
       </div>
 

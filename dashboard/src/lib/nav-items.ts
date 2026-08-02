@@ -5,22 +5,16 @@ import {
   Megaphone,
   Filter,
   ChartNoAxesCombined,
-  Waypoints,
   UserSearch,
   RefreshCw,
   Mail,
   Layers,
   Repeat2,
-  PauseCircle,
-  ArrowLeftRight,
-  TrendingDown,
-  ShieldAlert,
+  ListChecks,
   FlaskConical,
-  MapPinned,
   Tag,
   Users,
   Settings2,
-  Sparkles,
   HelpCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -61,17 +55,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { slug: "overview", label: "Overview", icon: LayoutDashboard, enabled: true },
       { slug: "insights", label: "Insights", icon: Lightbulb, enabled: true },
       { slug: "chat", label: "Gojo", icon: Bot, enabled: true },
+      // Creative Patterns and Data-Driven Attribution used to be separate nav
+      // items here — folded into Campaigns (2026-08-01 nav consolidation) as
+      // cards on its Creative and Campaign tabs respectively, same "same
+      // subject, different tab" pattern as the First-Touch/Last-Touch and
+      // journey-path work that already lived there. See campaigns-client.tsx.
       { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true, group: "Reporting" },
       { slug: "funnel", label: "Funnel", icon: Filter, enabled: true, group: "Reporting" },
       { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true, group: "Reporting" },
-      { slug: "creative-patterns", label: "Creative Patterns", icon: Sparkles, enabled: true, group: "Reporting" },
-      {
-        slug: "data-driven-attribution",
-        label: "Data-Driven Attribution",
-        icon: Waypoints,
-        enabled: true,
-        group: "Reporting",
-      },
       {
         slug: "leads",
         label: "Leads",
@@ -112,13 +103,16 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Testing & Automation",
     items: [
       { slug: "remarketing", label: "Remarketing", icon: Repeat2, enabled: true },
-      { slug: "pause-candidates", label: "Pause Candidates", icon: PauseCircle, enabled: true },
-      { slug: "budget-reallocation", label: "Budget Reallocation", icon: ArrowLeftRight, enabled: true },
-      { slug: "creative-fatigue", label: "Creative Fatigue", icon: TrendingDown, enabled: true },
-      { slug: "invalid-traffic", label: "Invalid Traffic", icon: ShieldAlert, enabled: true },
-      { slug: "tracking-health", label: "Tracking Health", icon: ShieldAlert, enabled: true },
-      { slug: "incrementality", label: "Incrementality Testing", icon: FlaskConical, enabled: true },
-      { slug: "geo-lift", label: "Geo-Lift Testing", icon: MapPinned, enabled: true },
+      // Pause Candidates/Budget Reallocation/Creative Fatigue/Tracking Health/
+      // Invalid Traffic were five separate nav items here, all the same
+      // "flagged items, confirm or dismiss" shape — folded into one
+      // Recommendations hub with an internal toggle (2026-08-01 nav
+      // consolidation). See recommendations-client.tsx.
+      { slug: "recommendations", label: "Recommendations", icon: ListChecks, enabled: true },
+      // Incrementality/Geo-Lift Testing were two separate nav items running
+      // the identical test-card workflow — folded into one Experiments hub.
+      // See experiments-client.tsx.
+      { slug: "experiments", label: "Experiments", icon: FlaskConical, enabled: true },
     ],
   },
   {

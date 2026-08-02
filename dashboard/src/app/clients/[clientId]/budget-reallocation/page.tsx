@@ -1,4 +1,4 @@
-import { BudgetReallocationClient } from "./budget-reallocation-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function BudgetReallocationPage({
   params,
@@ -6,5 +6,5 @@ export default async function BudgetReallocationPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <BudgetReallocationClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/recommendations?type=budget-reallocation`} />;
 }

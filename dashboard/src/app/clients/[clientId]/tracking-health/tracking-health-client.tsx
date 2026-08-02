@@ -13,7 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientKicker } from "@/components/client-kicker";
 import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS: { value: FatigueStatus; label: string }[] = [
@@ -72,6 +71,9 @@ function SignalCard({ signal, clientId }: { signal: TrackingHealthSignal; client
   );
 }
 
+// Renders just this recommendation type's own controls + content, mounted as
+// one tab inside the Recommendations hub — see pause-candidates-client.tsx's
+// header comment for the full reasoning.
 export function TrackingHealthClient({ clientId }: { clientId: string }) {
   const [status, setStatus] = useState<FatigueStatus>("active");
 
@@ -81,16 +83,12 @@ export function TrackingHealthClient({ clientId }: { clientId: string }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <ClientKicker clientId={clientId} />
-          <h1 className="text-lg font-semibold">Tracking Health</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Watches whether tracking itself is intact, not performance: a silent pixel, a traffic collapse, or a
-            platform with real ad spend but no matching sessions. Advisory only; nothing here changes automatically.
-          </p>
-        </div>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Watches whether tracking itself is intact, not performance: a silent pixel, a traffic collapse, or a
+          platform with real ad spend but no matching sessions. Advisory only; nothing here changes automatically.
+        </p>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as FatigueStatus)} options={STATUS_OPTIONS} />
       </div>
 

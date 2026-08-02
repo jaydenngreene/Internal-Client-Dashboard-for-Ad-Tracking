@@ -14,7 +14,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientKicker } from "@/components/client-kicker";
 import { formatCurrency } from "@/lib/format";
 
 const STATUS_OPTIONS: { value: PauseCandidateStatus; label: string }[] = [
@@ -98,6 +97,10 @@ function CandidateCard({ candidate, clientId }: { candidate: PauseCandidate; cli
   );
 }
 
+// Renders just this recommendation type's own controls + content — no page
+// chrome of its own (ClientKicker/h1/outer padding). Mounted as one tab inside
+// the Recommendations hub (recommendations-client.tsx), which supplies the
+// shared header; this used to be its own standalone page.
 export function PauseCandidatesClient({ clientId }: { clientId: string }) {
   const [status, setStatus] = useState<PauseCandidateStatus>("pending");
 
@@ -107,16 +110,12 @@ export function PauseCandidatesClient({ clientId }: { clientId: string }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <ClientKicker clientId={clientId} />
-          <h1 className="text-lg font-semibold">Pause Candidates</h1>
-          <p className="text-sm text-muted-foreground">
-            Ads flagged by daily anomaly detection for a ROAS drop vs. their 7-day average. Nothing is
-            paused automatically. Confirm here to actually pause it, or dismiss to leave it running.
-          </p>
-        </div>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Ads flagged by daily anomaly detection for a ROAS drop vs. their 7-day average. Nothing is
+          paused automatically. Confirm here to actually pause it, or dismiss to leave it running.
+        </p>
         <SegmentedToggle value={status} onChange={(v) => setStatus(v as PauseCandidateStatus)} options={STATUS_OPTIONS} />
       </div>
 

@@ -1,4 +1,4 @@
-import { PauseCandidatesClient } from "./pause-candidates-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function PauseCandidatesPage({
   params,
@@ -6,5 +6,5 @@ export default async function PauseCandidatesPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <PauseCandidatesClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/recommendations?type=pause-candidates`} />;
 }

@@ -1,4 +1,4 @@
-import { CreativeFatigueClient } from "./creative-fatigue-client";
+import { RouteRedirect } from "@/components/route-redirect";
 
 export default async function CreativeFatiguePage({
   params,
@@ -6,5 +6,5 @@ export default async function CreativeFatiguePage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <CreativeFatigueClient clientId={clientId} />;
+  return <RouteRedirect to={`/clients/${clientId}/recommendations?type=creative-fatigue`} />;
 }

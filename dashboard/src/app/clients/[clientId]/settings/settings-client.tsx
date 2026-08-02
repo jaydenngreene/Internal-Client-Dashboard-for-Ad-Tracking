@@ -51,6 +51,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { FieldLabel } from "@/components/ui/field-label";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { LogoUploadField } from "@/components/logo-upload-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientKicker } from "@/components/client-kicker";
@@ -766,36 +767,78 @@ interface IntegrationDef {
   label: string;
   category: string;
   fields: IntegrationFieldDef[];
+  // Short teaser shown in the hover tooltip next to the row's label. Keep it
+  // to 1-3 sentences — anything needing real step-by-step detail should set
+  // guideSlug instead of trying to cram it in here (a tooltip that's too
+  // long to read on hover defeats the point of it).
   helpText?: string;
+  // When a platform's setup genuinely needs a multi-step walkthrough (OAuth
+  // flows, creating an app in another platform's developer console, etc.),
+  // this points at that entry's slug in help-content.ts's "Integration Setup
+  // Guides" section. The tooltip icon becomes a real link to
+  // /clients/:id/help?topic=<slug>, which deep-links straight to that guide,
+  // forced open, instead of trying to fit the whole thing in a hover bubble.
+  guideSlug?: string;
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
-  { platform: "shopify", label: "Shopify", category: "Payment Processors", fields: [
-    { key: "shop_domain", label: "Shop domain" },
-    { key: "webhook_secret", label: "Webhook signing secret", type: "password" },
-  ] },
-  { platform: "stripe", label: "Stripe", category: "Payment Processors", fields: [
-    { key: "webhook_secret", label: "Signing secret (whsec_...)", type: "password" },
-  ] },
-  { platform: "paypal", label: "PayPal", category: "Payment Processors", fields: [
-    { key: "client_id", label: "App Client ID" },
-    { key: "client_secret", label: "App Client Secret", type: "password" },
-    { key: "webhook_id", label: "Webhook ID" },
-  ] },
-  { platform: "square", label: "Square", category: "Payment Processors", fields: [
-    { key: "signature_key", label: "Signature key", type: "password" },
-    { key: "notification_url", label: "Notification URL" },
-  ] },
-  { platform: "gohighlevel", label: "GoHighLevel", category: "Payment Processors", fields: [
-    { key: "webhook_secret", label: "Shared secret", type: "password" },
-  ] },
+  {
+    platform: "shopify",
+    label: "Shopify",
+    category: "Payment Processors",
+    fields: [
+      { key: "shop_domain", label: "Shop domain" },
+      { key: "webhook_secret", label: "Webhook signing secret", type: "password" },
+    ],
+    helpText:
+      "Follow the walkthrough above this Integrations section first — it has the copy-paste tracking snippets. This row just stores the webhook signing secret Shopify hands you during that same walkthrough.",
+  },
+  {
+    platform: "stripe",
+    label: "Stripe",
+    category: "Payment Processors",
+    fields: [{ key: "webhook_secret", label: "Signing secret (whsec_...)", type: "password" }],
+    helpText:
+      "Stripe Dashboard → Developers → Webhooks → Add endpoint. Endpoint URL: /webhooks/stripe/<this client's ID, shown in the URL above>. Select charge.succeeded, charge.refunded, and checkout.session.completed, then paste the Signing secret (starts whsec_) it shows you into the field below.",
+  },
+  {
+    platform: "paypal",
+    label: "PayPal",
+    category: "Payment Processors",
+    fields: [
+      { key: "client_id", label: "App Client ID" },
+      { key: "client_secret", label: "App Client Secret", type: "password" },
+      { key: "webhook_id", label: "Webhook ID" },
+    ],
+    helpText: "Needs a REST API app and a webhook created in the PayPal Developer Dashboard first.",
+    guideSlug: "guide-paypal",
+  },
+  {
+    platform: "square",
+    label: "Square",
+    category: "Payment Processors",
+    fields: [
+      { key: "signature_key", label: "Signature key", type: "password" },
+      { key: "notification_url", label: "Notification URL" },
+    ],
+    helpText:
+      "Square Developer Dashboard → your app → Webhooks → Add Endpoint. Notification URL: /webhooks/square/<this client's ID, shown in the URL above>, subscribed to payment.updated and refund.updated. Copy the Signature Key it shows into the field below, and the same URL into Notification URL here.",
+  },
+  {
+    platform: "gohighlevel",
+    label: "GoHighLevel",
+    category: "Payment Processors",
+    fields: [{ key: "webhook_secret", label: "Shared secret", type: "password" }],
+    helpText: "GHL has no fixed webhook format — this is wired up by hand in their Workflow Builder.",
+    guideSlug: "guide-gohighlevel",
+  },
   {
     platform: "housecallpro",
     label: "Housecall Pro",
     category: "Payment Processors",
     fields: [{ key: "webhook_secret", label: "Signing secret", type: "password" }],
-    helpText:
-      "Requires the MAX plan. Housecall Pro Settings → Webhooks → Add Webhook URL: /webhooks/housecallpro/<this client's ID, shown in the URL above>. Enable invoice.paid, invoice.payment.succeeded, and invoice.refund.succeeded. Paste the signing secret it shows you after saving into the field below.",
+    helpText: "Requires Housecall Pro's MAX plan — webhooks aren't on lower tiers.",
+    guideSlug: "guide-housecallpro",
   },
   {
     platform: "facebook-ads",
@@ -820,71 +863,154 @@ const INTEGRATIONS: IntegrationDef[] = [
     helpText:
       "Sends Lead/Purchase events to Meta server-side for better ad optimization. Needs a token with permission on this pixel. Meta Events Manager → Data Sources → your pixel → Settings gives you the Pixel ID; on that same screen, under Conversions API, click \"Generate access token\" for the token.",
   },
-  { platform: "google-ads", label: "Google Ads", category: "Ad Platforms", fields: [
-    { key: "customer_id", label: "Customer ID" },
-    { key: "login_customer_id", label: "Login customer ID (MCC)", optional: true },
-    { key: "refresh_token", label: "Refresh token", type: "password", optional: true },
-    { key: "conversion_action_purchase", label: "Purchase conversion action", optional: true },
-    { key: "conversion_action_lead", label: "Lead conversion action", optional: true },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "bing-ads", label: "Bing / Microsoft Ads", category: "Ad Platforms", fields: [
-    { key: "customer_id", label: "Customer ID" },
-    { key: "account_id", label: "Account ID" },
-    { key: "refresh_token", label: "Refresh token", type: "password" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "tiktok-ads", label: "TikTok Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "advertiser_id", label: "Advertiser ID" },
-    { key: "pixel_code", label: "Pixel code" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "snapchat-ads", label: "Snapchat Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "pixel_id", label: "Pixel ID" },
-    { key: "ad_account_id", label: "Ad account ID" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "pinterest-ads", label: "Pinterest Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "ad_account_id", label: "Ad account ID" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "linkedin-ads", label: "LinkedIn Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "account_id", label: "Sponsored account ID", optional: true },
-    { key: "conversion_id_purchase", label: "Purchase conversion ID", optional: true },
-    { key: "conversion_id_lead", label: "Lead conversion ID", optional: true },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "reddit-ads", label: "Reddit Ads", category: "Ad Platforms", fields: [
-    { key: "access_token", label: "Access token", type: "password" },
-    { key: "account_id", label: "Account ID" },
-    { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
-  ] },
-  { platform: "twilio", label: "Twilio", category: "Call Tracking", fields: [
-    { key: "account_sid", label: "Account SID" },
-    { key: "auth_token", label: "Auth token", type: "password" },
-    { key: "voice_intelligence_service_sid", label: "Voice Intelligence Service SID (for call transcription)", optional: true },
-  ] },
-  { platform: "customers-ai", label: "Customers.ai", category: "CRM & Remarketing", fields: [
-    { key: "webhook_secret", label: "Shared secret", type: "password" },
-  ] },
-  { platform: "klaviyo", label: "Klaviyo", category: "CRM & Remarketing", fields: [
-    { key: "api_key", label: "API key", type: "password" },
-    { key: "list_id", label: "List ID" },
-  ] },
-  { platform: "alerts", label: "Alerts (Slack / Email / SMS)", category: "Alerts", fields: [
-    { key: "slack_webhook_url", label: "Slack incoming webhook URL", optional: true },
-    { key: "alert_email", label: "Alert email", optional: true },
-    { key: "alert_phone", label: "Alert phone (SMS, needs Twilio + a tracking number above)", optional: true },
-  ] },
-  { platform: "bigquery", label: "BigQuery Export", category: "Data Warehouse", fields: [
-    { key: "project_id", label: "GCP project ID" },
-    { key: "dataset_id", label: "Dataset ID (must already exist)" },
-    { key: "service_account_key", label: "Service account key (paste the full JSON key file)", type: "password" },
-  ] },
+  {
+    platform: "google-ads",
+    label: "Google Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "customer_id", label: "Customer ID" },
+      { key: "login_customer_id", label: "Login customer ID (MCC)", optional: true },
+      { key: "refresh_token", label: "Refresh token", type: "password", optional: true },
+      { key: "conversion_action_purchase", label: "Purchase conversion action", optional: true },
+      { key: "conversion_action_lead", label: "Lead conversion action", optional: true },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "Two setup paths depending on this client's account — fill in the wrong fields and it fails to sync silently. See the full guide before connecting.",
+    guideSlug: "guide-google-ads",
+  },
+  {
+    platform: "bing-ads",
+    label: "Bing / Microsoft Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "customer_id", label: "Customer ID" },
+      { key: "account_id", label: "Account ID" },
+      { key: "refresh_token", label: "Refresh token", type: "password" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText: "Same OAuth-refresh-token pattern as Google Ads, Microsoft's own account IDs.",
+    guideSlug: "guide-bing-ads",
+  },
+  {
+    platform: "tiktok-ads",
+    label: "TikTok Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "advertiser_id", label: "Advertiser ID" },
+      { key: "pixel_code", label: "Pixel code" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "TikTok Ads Manager → Assets → Events → your pixel gives the Pixel Code. TikTok Business Center → your app → generate an Access Token scoped to this Advertiser ID (found top-left of Ads Manager once that account is selected).",
+  },
+  {
+    platform: "snapchat-ads",
+    label: "Snapchat Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "pixel_id", label: "Pixel ID" },
+      { key: "ad_account_id", label: "Ad account ID" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "Snapchat Ads Manager → Business Details gives the Ad Account ID. Events Manager → your pixel → Settings gives the Pixel ID. The Access Token comes from Snapchat's Business API OAuth flow for that ad account.",
+  },
+  {
+    platform: "pinterest-ads",
+    label: "Pinterest Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "ad_account_id", label: "Ad account ID" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "Pinterest Ads Manager → Account Settings shows the Ad Account ID (a numeric string). The Access Token comes from a Pinterest-verified app's OAuth flow, scoped to ads:read (and ads:write if this app should also manage budgets).",
+  },
+  {
+    platform: "linkedin-ads",
+    label: "LinkedIn Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "account_id", label: "Sponsored account ID", optional: true },
+      { key: "conversion_id_purchase", label: "Purchase conversion ID", optional: true },
+      { key: "conversion_id_lead", label: "Lead conversion ID", optional: true },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "LinkedIn Campaign Manager → Account Assets → Sponsored Accounts shows the Sponsored account ID. Conversion IDs (optional, only for sending conversions back to LinkedIn) are under Account Assets → Conversion Tracking → the specific conversion action.",
+  },
+  {
+    platform: "reddit-ads",
+    label: "Reddit Ads",
+    category: "Ad Platforms",
+    fields: [
+      { key: "access_token", label: "Access token", type: "password" },
+      { key: "account_id", label: "Account ID" },
+      { key: "currency", label: "Ad account currency (e.g. USD, if different from reporting currency)", optional: true },
+    ],
+    helpText:
+      "Reddit Ads Manager → Account Settings shows the Account ID. The Access Token comes from Reddit's Ads API OAuth flow for that account.",
+  },
+  {
+    platform: "twilio",
+    label: "Twilio",
+    category: "Call Tracking",
+    fields: [
+      { key: "account_sid", label: "Account SID" },
+      { key: "auth_token", label: "Auth token", type: "password" },
+      { key: "voice_intelligence_service_sid", label: "Voice Intelligence Service SID (for call transcription)", optional: true },
+    ],
+    helpText:
+      "Both Account SID and Auth Token are on the Twilio Console home screen after logging in. The Voice Intelligence Service SID is optional and only needed for automatic call transcription — Twilio Console → Voice → Intelligence → create a service, then copy its SID here.",
+  },
+  {
+    platform: "customers-ai",
+    label: "Customers.ai",
+    category: "CRM & Remarketing",
+    fields: [{ key: "webhook_secret", label: "Shared secret", type: "password" }],
+    helpText: "Also needs Customers.ai's own separate tracking pixel installed on the site — easy to miss.",
+    guideSlug: "guide-customers-ai",
+  },
+  {
+    platform: "klaviyo",
+    label: "Klaviyo",
+    category: "CRM & Remarketing",
+    fields: [
+      { key: "api_key", label: "API key", type: "password" },
+      { key: "list_id", label: "List ID" },
+    ],
+    helpText:
+      "Klaviyo → Settings → API Keys → Create Private API Key (needs campaigns/lists/profiles scopes). List ID is under Lists & Segments → open the specific list → the gear icon shows its List ID.",
+  },
+  {
+    platform: "alerts",
+    label: "Alerts (Slack / Email / SMS)",
+    category: "Alerts",
+    fields: [
+      { key: "slack_webhook_url", label: "Slack incoming webhook URL", optional: true },
+      { key: "alert_email", label: "Alert email", optional: true },
+      { key: "alert_phone", label: "Alert phone (SMS, needs Twilio + a tracking number above)", optional: true },
+    ],
+    helpText:
+      "Slack: create an Incoming Webhook for the channel you want alerts in (Slack → Apps → Incoming Webhooks → Add to Slack), paste the URL it gives you. Email is just an inbox to send to. SMS needs Twilio connected above plus at least one tracking number provisioned.",
+  },
+  {
+    platform: "bigquery",
+    label: "BigQuery Export",
+    category: "Data Warehouse",
+    fields: [
+      { key: "project_id", label: "GCP project ID" },
+      { key: "dataset_id", label: "Dataset ID (must already exist)" },
+      { key: "service_account_key", label: "Service account key (paste the full JSON key file)", type: "password" },
+    ],
+    helpText: "Needs a GCP service account with BigQuery roles and a JSON key created first.",
+    guideSlug: "guide-bigquery",
+  },
 ];
 
 function IntegrationRow({
@@ -948,20 +1074,27 @@ function IntegrationRow({
 
   return (
     <div className="rounded-lg border border-border">
-      <button
-        type="button"
-        onClick={openRow}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm"
-      >
-        <span className="font-medium">{def.label}</span>
-        <span className="flex items-center gap-2">
-          <Badge variant={connected ? "secondary" : "outline"}>{connected ? "Connected" : "Not connected"}</Badge>
-          <span className="text-xs text-muted-foreground">{open ? "Hide" : connected ? "Edit" : "Connect"}</span>
-        </span>
-      </button>
+      <div className="flex w-full items-center gap-1.5 px-3 py-2">
+        <button
+          type="button"
+          onClick={openRow}
+          className="flex flex-1 items-center justify-between text-left text-sm"
+        >
+          <span className="font-medium">{def.label}</span>
+          <span className="flex items-center gap-2">
+            <Badge variant={connected ? "secondary" : "outline"}>{connected ? "Connected" : "Not connected"}</Badge>
+            <span className="text-xs text-muted-foreground">{open ? "Hide" : connected ? "Edit" : "Connect"}</span>
+          </span>
+        </button>
+        {def.helpText && (
+          <InfoTooltip
+            text={def.helpText}
+            href={def.guideSlug ? `/clients/${clientId}/help?topic=${def.guideSlug}` : undefined}
+          />
+        )}
+      </div>
       {open && (
         <div className="flex flex-col gap-3 border-t border-border p-3">
-          {def.helpText && <p className="text-xs text-muted-foreground">{def.helpText}</p>}
           <div className="flex flex-wrap gap-2">
             {def.fields.map((f) => {
               // Password fields are always stripped from what the API sends back

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { HELP_SECTIONS, HelpEntry } from "@/lib/help-content";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ClientKicker } from "@/components/client-kicker";
+import { cn } from "@/lib/utils";
 
 function matches(entry: HelpEntry, query: string): boolean {
   const q = query.toLowerCase();
@@ -15,10 +17,25 @@ function matches(entry: HelpEntry, query: string): boolean {
   );
 }
 
-function HelpCard({ entry, forceOpen }: { entry: HelpEntry; forceOpen: boolean }) {
+// Deep-linked from an InfoTooltip's "Full setup guide" link elsewhere in the
+// app (e.g. an integration row in Settings) via ?topic=<slug> — forces that
+// one entry open and scrolls it into view on arrival, with a brief highlight
+// ring so it's obvious which card the link was pointing at among a whole
+// section of them.
+function HelpCard({ entry, forceOpen, focused }: { entry: HelpEntry; forceOpen: boolean; focused: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focused]);
+
   return (
-    <Card className="px-0 py-0">
-      <details open={forceOpen || undefined} className="group/details">
+    <Card
+      ref={ref}
+      id={entry.slug}
+      className={cn("scroll-mt-6 px-0 py-0 transition-shadow", focused && "ring-2 ring-primary")}
+    >
+      <details open={forceOpen || focused || undefined} className="group/details">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium marker:content-none">
           {entry.title}
           <span className="text-muted-foreground transition-transform group-open/details:rotate-180">⌄</span>
@@ -50,6 +67,7 @@ function HelpCard({ entry, forceOpen }: { entry: HelpEntry; forceOpen: boolean }
 export function HelpClient({ clientId }: { clientId: string }) {
   const [query, setQuery] = useState("");
   const trimmed = query.trim();
+  const topic = useSearchParams().get("topic");
 
   const sections = useMemo(() => {
     if (!trimmed) return HELP_SECTIONS;
@@ -89,7 +107,7 @@ export function HelpClient({ clientId }: { clientId: string }) {
             </p>
             <div className="flex flex-col gap-2">
               {section.entries.map((entry) => (
-                <HelpCard key={entry.slug} entry={entry} forceOpen={!!trimmed} />
+                <HelpCard key={entry.slug} entry={entry} forceOpen={!!trimmed} focused={entry.slug === topic} />
               ))}
             </div>
           </div>

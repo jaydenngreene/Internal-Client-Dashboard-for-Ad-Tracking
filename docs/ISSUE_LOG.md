@@ -6,6 +6,25 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-01 (later still #4) — Site-wide integration help: robust hover tooltips + setup guides for all 17 integrations
+
+**Ask:** Priority 2 from a platform-wide audit (tests/attribution integrity/UX/docs pass, same session). Google Ads' Settings row had zero help text — the single biggest self-serve onboarding gap the audit found for a non-technical media buyer. The ask expanded to fixing this site-wide: a consistent hover-tooltip pattern everywhere, click-through to a full guide when a description is too long for a bubble, and a hard requirement that the tooltip never get clipped or blocked by anything.
+
+**Found:** the existing `InfoTooltip` (used on 4 KPI labels) was pure CSS, `absolute`-positioned *inside* whatever container held it — silently clipped by any `Card` (all cards are `overflow-hidden`, see `card.tsx`) or a viewport edge, exactly the failure mode flagged. Only 3 of 17 Settings integrations (`housecallpro`, `facebook-ads`, `facebook-capi`) had any help text at all; the rest — including Google Ads, PayPal, GoHighLevel, Bing, BigQuery, several with real multi-step OAuth/app-creation flows — had none.
+
+**Built:**
+- Rebuilt `InfoTooltip` (`dashboard/src/components/ui/info-tooltip.tsx`) on Base UI's Tooltip primitive (already a dependency via `select.tsx`'s Select) instead of hand-rolled CSS — Portal renders into `document.body`, Positioner auto-flips/shifts to stay on-screen, so it can no longer be clipped by an ancestor `Card`. Kept the existing `text` prop for the 4 KPI call sites; added optional `href`/`linkLabel` — when set, the icon itself becomes a real link (not a link *inside* the tooltip bubble, which would violate the ARIA tooltip role) and the popup appends a "Full setup guide →" hint.
+- `INTEGRATIONS` array in `settings-client.tsx`: added `helpText` for every platform that lacked one (Google Ads, Bing, TikTok, Snapchat, Pinterest, LinkedIn, Reddit, Twilio, Customers.ai, Klaviyo, BigQuery, Shopify, Stripe, Square, GoHighLevel, PayPal), plus a new `guideSlug` field on the 7 platforms whose real setup needs more than a hover bubble can hold (Google Ads, Bing Ads, PayPal, GoHighLevel, Housecall Pro, Customers.ai, BigQuery). Google Ads' tooltip/guide specifically calls out the two setup paths (client under the agency's shared MCC vs. a client with their own independent login) — filling in the wrong field combination previously failed to sync with zero visible error, per the audit.
+- Row header restructured so the tooltip icon sits as a sibling of the row's toggle button, not nested inside it (a `<button>`/`<Link>` inside a `<button>` is invalid HTML and breaks click handling); removed the old always-visible helpText paragraph under an expanded row now that the same content lives in the hover tooltip — net effect is a cleaner row list.
+- `help-content.ts`: new "Integration Setup Guides" section, one entry per guide-linked platform with real step-by-step instructions (webhook URLs, where to find each ID, OAuth-flow notes).
+- `help-client.tsx` + `help/page.tsx`: added `?topic=<slug>` deep-linking — lands on a `HelpEntry`, force-opens it, scrolls it into view, and rings it with a highlight, so a tooltip's "Full setup guide" link drops the user directly on the right guide instead of a flat unstructured page. `page.tsx` wrapped in `<Suspense>` per this app's existing convention for any client component using `useSearchParams` (matches `campaigns/page.tsx`).
+
+**Verified:** `tsc --noEmit` clean, `next build` clean (Turbopack, all routes compiled). Live-tested against real Nothing But Buckets data: Google Ads' tooltip renders fully on-screen with no clipping near the right viewport edge (the old component's exact failure mode); clicking its "Full setup guide" link lands on Help & Info with "Connecting Google Ads" auto-expanded and ring-highlighted; repeated for Housecall Pro's guide link on a fresh navigation, confirming the scroll-into-view actually fires rather than just working when already-scrolled.
+
+**Not built this pass, by design:** the remaining 10 platforms with only a short tooltip (Shopify, Stripe, Square, Facebook Ads/CAPI, TikTok, Snapchat, Pinterest, LinkedIn, Reddit, Twilio, Klaviyo, Alerts) don't have a guide page — their setup genuinely fits in 1-3 sentences, a guide would be padding. Revisit only if one of these turns out to need more explanation in practice.
+
+---
+
 ## 2026-08-01 (later still #3) — Opener/Closer/Assist role badges now also show on the campaign detail page
 
 **Ask:** the role badges only appeared on the Campaigns page's account-wide Creative tab. Wanted them to also show up when clicking into a specific campaign and seeing its own creatives — which is also where clicking a campaign name from the First-Touch vs Last-Touch (or U-Shaped vs Time-Decay) comparison tables lands, so fixing the one page covers both asks.

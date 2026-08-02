@@ -233,4 +233,71 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
     ],
   },
+  {
+    label: "Integration Setup Guides",
+    entries: [
+      {
+        slug: "guide-google-ads",
+        title: "Connecting Google Ads",
+        purpose:
+          "Connects a client's Google Ads account so Kado can pull daily spend/impressions/clicks and, optionally, send Purchase/Lead conversions back as Enhanced Conversions. There are two setup paths depending on how this client's account relates to the agency's own Google Ads manager account (MCC) — the field list looks identical either way, so it's easy to fill in the wrong combination without knowing which path applies.",
+        metrics: [
+          { term: "Customer ID", definition: "This client's own 10-digit Google Ads account number (shown as 123-456-7890 in the Google Ads UI — enter digits only, no dashes). Always required." },
+          { term: "Login customer ID (MCC)", definition: "Only for a client managed under the agency's Google Ads manager account. It's the MCC's own ID, not the client's. Leave blank if this client has their own standalone login." },
+          { term: "Refresh token", definition: "Only for a client OUTSIDE the agency's shared MCC. Comes from a one-time Google OAuth consent flow for that account — it doesn't expire the way a login session does. Clients under the shared MCC reuse credentials already configured in the backend and can leave this blank." },
+          { term: "Purchase / Lead conversion action", definition: "Optional, only needed to send conversions back to Google. In the client's Google Ads account: Goals → Conversions → click the action → the resource name is in its details panel." },
+        ],
+        howToUse:
+          "Path A — client is under the agency's MCC (most clients): fill in Customer ID (the client's account) and Login customer ID (the agency's MCC), leave Refresh token blank. Path B — client has their own independent Google Ads login: fill in Customer ID and Refresh token, leave Login customer ID blank. If unsure which applies, ask whoever manages this client's ad accounts before saving — the wrong combination fails to sync silently rather than erroring.",
+      },
+      {
+        slug: "guide-bing-ads",
+        title: "Connecting Bing / Microsoft Ads",
+        purpose:
+          "Connects a client's Microsoft Advertising account for daily spend/click sync and keyword tracking. Same OAuth-refresh-token pattern as Google Ads, just Microsoft's own account IDs.",
+        howToUse:
+          "Customer ID and Account ID are both under Accounts & Billing in Microsoft Advertising (Customer ID is the top-level account, Account ID the specific ad account beneath it). The refresh token comes from a one-time Microsoft OAuth consent flow for this account — ask whoever manages the agency's Microsoft Advertising API access to generate one; it doesn't expire like a normal login.",
+      },
+      {
+        slug: "guide-paypal",
+        title: "Connecting PayPal",
+        purpose:
+          "Verifies that incoming PayPal payment webhooks genuinely came from PayPal (not spoofed) and records this client's purchases/refunds.",
+        howToUse:
+          "1) In the PayPal Developer Dashboard (developer.paypal.com) → Apps & Credentials, create (or open) a REST API app for this client — that screen gives you the Client ID and Client Secret. 2) In that same app, add a webhook: URL is /webhooks/paypal/<this client's ID, shown in the URL above>, subscribed to at least PAYMENT.CAPTURE.COMPLETED and PAYMENT.CAPTURE.REFUNDED. 3) After saving, PayPal shows a Webhook ID — paste that below. Use Sandbox credentials while testing; switch to Live before the client goes live.",
+      },
+      {
+        slug: "guide-gohighlevel",
+        title: "Connecting GoHighLevel",
+        purpose:
+          "GoHighLevel has no fixed payment-webhook format the way Shopify or Stripe do — this connects through GHL's own Workflow Builder custom webhook action instead, so the exact fields sent depend on how that workflow is built for this client.",
+        howToUse:
+          "1) Make up a shared secret (any string) and remember it. 2) In GoHighLevel, open or build the workflow that fires when a deal closes or payment is taken, and add a Webhook action. 3) Point its URL at /webhooks/gohighlevel/<this client's ID, shown in the URL above>. 4) In that webhook action, map GHL's fields into this exact JSON shape: secret (your string from step 1), event, contact.email, amount, transaction_id. 5) Paste the same secret below and save. Submit one real test lead through the live workflow afterward and confirm it shows up on the Leads tab — this mapping is hand-built per client, so a typo fails silently instead of erroring.",
+      },
+      {
+        slug: "guide-housecallpro",
+        title: "Connecting Housecall Pro",
+        purpose:
+          "Requires Housecall Pro's MAX plan — webhooks aren't available on lower tiers. Records invoice payments/refunds as purchases for service-based clients.",
+        howToUse:
+          "In Housecall Pro: Settings → Webhooks → Add Webhook, URL is /webhooks/housecallpro/<this client's ID, shown in the URL above>. Enable invoice.paid, invoice.payment.succeeded, and invoice.refund.succeeded. Housecall Pro shows a signing secret right after saving — paste it below immediately, since it's normally only shown once.",
+      },
+      {
+        slug: "guide-customers-ai",
+        title: "Connecting Customers.ai",
+        purpose:
+          "Feeds anonymous-visitor identity matches (name/email resolved from on-site behavior) into the Remarketing tab as draft outreach candidates. Nothing sends automatically — a person reviews and approves every draft first.",
+        howToUse:
+          "1) In Customers.ai, set up a Custom Webhook integration pointed at /webhooks/customers-ai/<this client's ID, shown in the URL above>, and pick a shared secret to include in its payload. 2) Paste that same secret below. 3) Easy to miss: Customers.ai also needs its own tracking script (their \"X-Ray\" pixel) installed on the client's site — a second, separate pixel from Kado's own, installed in addition to it, not instead of it.",
+      },
+      {
+        slug: "guide-bigquery",
+        title: "Connecting BigQuery Export",
+        purpose:
+          "Exports this client's raw event/attribution data into a client-owned BigQuery dataset on a schedule — for agencies or clients who want their own SQL/BI tooling on the raw data instead of only Kado's built-in reports.",
+        howToUse:
+          "1) In Google Cloud Console, create a Service Account in the destination project (IAM & Admin → Service Accounts → Create). 2) Grant it two roles: BigQuery Data Editor and BigQuery Job User. 3) Create a JSON key for it (Keys tab → Add Key → JSON) — it only downloads once, save it somewhere safe. 4) Create the destination dataset in BigQuery yourself first — this integration writes into an existing dataset, it won't create one. 5) Paste the Project ID, Dataset ID, and the full contents of the downloaded JSON key file below.",
+      },
+    ],
+  },
 ];

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { HelpClient } from "./help-client";
 
 export default async function HelpPage({
@@ -6,5 +7,9 @@ export default async function HelpPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <HelpClient clientId={clientId} />;
+  return (
+    <Suspense>
+      <HelpClient clientId={clientId} />
+    </Suspense>
+  );
 }

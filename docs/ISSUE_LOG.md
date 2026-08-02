@@ -6,6 +6,18 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-02 — Settings integration rows: the info icon was too easy to miss at the far right
+
+**Reported:** the "i" icon added to each Settings → Integrations row (2026-08-01, #4 below) sat all the way at the right edge of the row, after the Connected/Not connected badge and Connect/Edit/Hide text — easy to miss entirely, since nothing about that side of the row otherwise looks interactive or informational.
+
+**Fix:** moved it to sit immediately after the integration's own name instead — the same position the app's own established convention already uses everywhere else (`kpi-tile.tsx`, `stat-label.tsx`, `stat-chart-card.tsx`, Overview's card titles all put the icon right after the label it explains). Couldn't just move the icon inside the existing single `<button>` that wrapped the whole row (a `<button>` can't contain another interactive element — the tooltip's own trigger is a real button/link — without breaking the click handling), so the row is now two `<button>`s, both calling the same `openRow` handler, with the icon sitting between them: `[name][i][badge/status]`. Visually still one continuous clickable row; only the icon itself isn't part of either button.
+
+**Verified:** `tsc --noEmit` and `next build` both clean. Live-tested against real data: hovering PayPal's icon in its new position renders the tooltip fully on-screen with the "Full setup guide" link intact, same as before the move; clicking either the name or the badge/status area still opens the row.
+
+**Commit:** (see git log for the commit hash following this entry)
+
+---
+
 ## 2026-08-01 (later still #6) — Nav consolidation: Recommendations + Experiments hubs, Data-Driven Attribution + Creative Patterns folded into Campaigns
 
 **Ask:** Priority 4 from the platform audit. Testing & Automation had 8 flat nav items, 5 of them the identical "list of flagged items, confirm or dismiss" shape (Pause Candidates/Budget Reallocation/Creative Fatigue/Tracking Health/Invalid Traffic) and 2 more the identical test-card workflow (Incrementality/Geo-Lift). Reports had two more (Data-Driven Attribution, Creative Patterns) that were near-duplicates of content already living on Campaigns since the 2026-08-01 comparison-table/journey-clustering work. Fold them the same way Campaigns already did, per the audit's explicit precedent.

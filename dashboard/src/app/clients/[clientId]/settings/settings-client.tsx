@@ -1074,17 +1074,15 @@ function IntegrationRow({
 
   return (
     <div className="rounded-lg border border-border">
-      <div className="flex w-full items-center gap-1.5 px-3 py-2">
-        <button
-          type="button"
-          onClick={openRow}
-          className="flex flex-1 items-center justify-between text-left text-sm"
-        >
-          <span className="font-medium">{def.label}</span>
-          <span className="flex items-center gap-2">
-            <Badge variant={connected ? "secondary" : "outline"}>{connected ? "Connected" : "Not connected"}</Badge>
-            <span className="text-xs text-muted-foreground">{open ? "Hide" : connected ? "Edit" : "Connect"}</span>
-          </span>
+      <div className="flex w-full items-center gap-1.5 px-3 py-2 text-sm">
+        {/* Two buttons, not one, both calling openRow — lets the "i" sit right next
+            to the name (where it's actually seen) instead of trailing all the way
+            at the far right past the badge/status text, where it was easy to miss
+            entirely. A single <button> can't contain the tooltip's own interactive
+            trigger (invalid HTML / breaks the click), so the row is split around it
+            instead of wrapping the whole thing in one element. */}
+        <button type="button" onClick={openRow} className="text-left font-medium">
+          {def.label}
         </button>
         {def.helpText && (
           <InfoTooltip
@@ -1092,6 +1090,10 @@ function IntegrationRow({
             href={def.guideSlug ? `/clients/${clientId}/help?topic=${def.guideSlug}` : undefined}
           />
         )}
+        <button type="button" onClick={openRow} className="flex flex-1 items-center justify-end gap-2 text-left">
+          <Badge variant={connected ? "secondary" : "outline"}>{connected ? "Connected" : "Not connected"}</Badge>
+          <span className="text-xs text-muted-foreground">{open ? "Hide" : connected ? "Edit" : "Connect"}</span>
+        </button>
       </div>
       {open && (
         <div className="flex flex-col gap-3 border-t border-border p-3">

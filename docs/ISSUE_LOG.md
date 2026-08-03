@@ -6,6 +6,22 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-03 (later) — Real bug found via the new per-product table: every add-to-cart was being double-counted
+
+**Reported:** asked how to fix the "(unnamed product)" rows the new per-product cart table (previous entry) surfaced.
+
+**Investigated directly against the real Supabase DB, not assumed** (temp script, deleted after): Nothing But Buckets' `add_to_cart` events split almost exactly 519 named / 427 unnamed. Pulled every `cart_events` row for a session containing an unnamed row and looked at it directly — in every case, the unnamed row is followed 1-2 seconds later by a fully-formed named row in the *same session*, e.g. `session f77f064e`: unnamed `product_id=44409924681779` at `17:51:13.193`, then named `product_id=7853490962483` ("Kappa Alpha Psi Bucket Hat", $34.98) at `17:51:15.032`. Same pattern repeated across every sampled session.
+
+**Root cause:** the Shopify theme.liquid snippet (`shopifyThemeSnippet` in `settings-client.tsx` / `pixel/src/shopify/theme-snippet.liquid`) had its own generic `/cart/add` form-submit listener firing `ADT.trackAddToCart` with only the cart form's variant id (no name, no price — nothing else was ever available to it). The Customer Events custom pixel (`shopifyCustomPixelSnippet`), installed as a *separate, required* step in the same walkthrough, independently subscribes to Shopify's own `product_added_to_cart` platform event and sends the real product id/name/price. Both are standard setup per the walkthrough's own instructions, both fire for the same physical add-to-cart action, so every single add-to-cart (and, by the same mechanism, every checkout-initiation) was being recorded twice: once complete, once as a bare, valueless variant-id row. This inflated the Add to Cart KPI, Cart Abandonment rate, and abandoned-cart value app-wide for every Shopify client with both snippets installed, not just cosmetic noise in the new product table.
+
+**Fix:** removed the `/cart/add` form-submit listener and the checkout-link click listener entirely from both `pixel/src/shopify/theme-snippet.liquid` and its mirror in `settings-client.tsx`, leaving the Customer Events pixel as the single source for `add_to_cart`/`begin_checkout`. Chose this direction (not the reverse) because Customer Events is Shopify's own platform-level event system — it fires reliably regardless of whether a theme submits a real form or calls Shopify's AJAX cart API directly, which is exactly the case the theme-snippet listener existed to guess at and can no longer justify now that both fire together. Identify-for-logged-in-customer and product-page-view tracking in the theme snippet are untouched — Customer Events doesn't cover either of those, no overlap there.
+
+**Not fixed — deliberately, not an oversight:** existing already-recorded double-counted rows in `cart_events` are untouched. Retroactively pairing and deduplicating them would need a timestamp/session-proximity heuristic that could misfire on legitimately-close real events; safer to leave history alone and stop the bleeding going forward, same reasoning as every other pixel-snippet fix in this log. This also means, same standing caveat as always: the fix only takes effect once the dashboard is redeployed **and** each existing Shopify client re-copies the updated theme.liquid snippet from Settings and re-pastes it into their theme — an already-live client keeps double-counting until that happens.
+
+**Verified:** `tsc --noEmit` and `next build` clean. Live-checked the Settings page renders the updated, shorter theme snippet with the removal explained inline.
+
+---
+
 ## 2026-08-03 — Built: per-product add-to-cart breakdown, linked from Overview's Cart → Purchase donut
 
 **Ask:** Kado's add-to-cart tracking already captured a product_id/product_name/value per event (`cart_events` schema, since Step 8), but no report ever grouped by product — every existing query only aggregated by `event_type` (total views/adds/checkouts). User wanted to actually see which products get added to cart most, with abandonment/value per product, every product, not a top-10 slice, plus a click-through from Overview's existing "Cart → Purchase Conversion" donut straight to it.

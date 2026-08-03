@@ -43,33 +43,19 @@
 {% endif %}
 
 {% comment %}
-  Add to cart — listens for Shopify's standard cart form submit (action="/cart/add"),
-  which virtually every theme uses even when the visual "Add to cart" button differs.
+  Add-to-cart and checkout-initiation used to be tracked here too (a generic
+  /cart/add form-submit listener and a checkout-link click listener), running
+  ALONGSIDE the Customer Events pixel below, which subscribes to Shopify's own
+  product_added_to_cart/checkout_started events. Real production data (Nothing
+  But Buckets, 2026-08-03) showed both firing for the same physical add-to-cart
+  action a second or two apart — this snippet's copy always unnamed/$0 (it only
+  ever had the cart form's variant id to work with, no title or price), the
+  Customer Events copy always fully-formed. Every add-to-cart and checkout
+  start was being double-counted. Removed here since Customer Events' own
+  subscriptions are Shopify's platform-level event system, not theme markup
+  the way this listener was — they fire reliably regardless of whether a theme
+  submits a real form or calls Shopify's cart API directly via JavaScript, so
+  nothing here needs to guess at page markup as a fallback anymore. See
+  Settings → Customer events → Add custom pixel (the snippet below) for the
+  one remaining source of these two events.
 {% endcomment %}
-<script>
-  document.addEventListener('submit', function (e) {
-    var form = e.target;
-    if (form && form.action && form.action.indexOf('/cart/add') !== -1 && window.ADT) {
-      var qty = form.querySelector('[name="quantity"]');
-      ADT.trackAddToCart(
-        { id: form.querySelector('[name="id"]') ? form.querySelector('[name="id"]').value : null },
-        null
-      );
-    }
-  });
-</script>
-
-{% comment %}
-  Checkout initiation — fired from the cart page's "checkout" click, not from inside
-  checkout itself. Shopify's hosted checkout is locked down for script injection on
-  non-Plus stores (the same reason checkout-tracking.liquid only targets the order
-  status page), so this is the last point we can reliably hook.
-{% endcomment %}
-<script>
-  document.addEventListener('click', function (e) {
-    var el = e.target.closest('a[href*="/checkout"], [name="checkout"], [href="/checkout"]');
-    if (el && window.ADT) {
-      ADT.trackInitiateCheckout(null);
-    }
-  });
-</script>

@@ -156,38 +156,23 @@ function shopifyThemeSnippet(apiUrl: string, pixelKey: string): string {
 </script>
 {% endif %}
 
-{% comment %} Add to cart — listens for Shopify's standard cart form submit {% endcomment %}
-<script>
-  document.addEventListener('submit', function (e) {
-    var form = e.target;
-    if (form && form.action && form.action.indexOf('/cart/add') !== -1 && window.ADT) {
-      ADT.trackAddToCart(
-        { id: form.querySelector('[name="id"]') ? form.querySelector('[name="id"]').value : null },
-        null
-      );
-    }
-  });
-</script>
-
-{% comment %} Checkout initiation — fired from the cart page's checkout click {% endcomment %}
-<script>
-  document.addEventListener('click', function (e) {
-    var el = e.target.closest('a[href*="/checkout"], [name="checkout"], [href="/checkout"]');
-    if (el && window.ADT) {
-      ADT.trackInitiateCheckout(null);
-    }
-  });
-</script>`;
+{% comment %}
+  Add-to-cart/checkout-initiation used to be tracked here too, alongside the
+  Customer Events pixel below — removed 2026-08-03 after real data showed both
+  firing for the same action, this copy always unnamed/$0 (only ever had the
+  cart form's variant id, no title/price), the Customer Events copy always
+  complete. Every add-to-cart was being double-counted. See Settings →
+  Customer events → Add custom pixel for the one remaining source.
+{% endcomment %}`;
 }
 
-// Settings → Customer events → Add custom pixel. This is the theme-independent
-// path for add-to-cart/checkout-start: Shopify dispatches product_added_to_cart
-// and checkout_started itself from its own cart/checkout logic, so it fires
-// reliably even on themes whose "Add to cart" button calls Shopify's AJAX cart
-// API directly (fetch/XHR to /cart/add) instead of a real <form> submission —
-// confirmed live on a real client site where the theme snippet's submit-event
-// listener above never fired at all, not even a capture-phase one, because no
-// native submit event was ever dispatched in the first place. Runs in Shopify's
+// Settings → Customer events → Add custom pixel. This is now the ONLY
+// add-to-cart/checkout-start source (the theme snippet above used to also
+// track both, removed 2026-08-03 once real data showed the two running
+// together double-counted every event). Shopify dispatches product_added_to_cart
+// and checkout_started itself from its own cart/checkout logic, so this fires
+// reliably regardless of whether a theme's "Add to cart" button submits a real
+// form or calls Shopify's AJAX cart API directly. Runs in Shopify's
 // sandboxed pixel context (no window.ADT_CONFIG, no document.cookie) - values
 // are inlined directly, matching the same per-client substitution the other
 // snippets already do.

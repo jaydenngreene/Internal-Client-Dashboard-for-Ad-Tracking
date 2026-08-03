@@ -6,6 +6,21 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-03 — Live confirmed: identify()/attribution genuinely works now, closing the caveat open since 2026-07-28
+
+**Why this was overdue:** every identify()/sendBeacon fix since 2026-07-27 (the Data Sale privacy-gating fix, the referring_site fallback, the sendBeacon-as-text/plain bug, its keepalive predecessor) had been verified against DB aggregates or at most one or two individually-inspected orders — never a clean, dedicated live-watch across a real volume of orders. The user asked for exactly that: place a real order (or just wait for real ones) and watch Supabase live rather than infer from aggregates, the same methodology that actually found the real bugs in the first place (see the 2026-07-28 entries).
+
+**Method:** a background script polled `purchases` for Nothing But Buckets every 20s starting 2026-08-02 03:08 UTC, and for every new row, immediately checked for an `identities` row (email → visitor_id, timing gap vs. purchase) and an `attributions` row (session_id → real fbclid/utm_source/utm_campaign). Watched live via the `Monitor` tool rather than polled after the fact - each real order's result arrived as a notification within seconds of the order landing, not inferred afterward.
+
+**Result over 15 real orders (2026-08-02 04:50 through 2026-08-03 09:01, ~28h of real traffic):**
+- **11 orders** - real, live-tracked `identities` row created **652ms to 6.3s** after the actual ad-click session, `attributions` row correctly tied to that session's real fbclid/utm_source/utm_campaign. This is the fix working exactly as intended, confirmed on real customers in real time, not inferred.
+- **2 orders** - no `identities` row, but still correctly attributed via the landing_site/referring_site fallback (2026-07-27 fix) - the session's `started_at` was within 1s of `purchased_at`, the fallback's own signature, confirming that backup path is also still working.
+- **2 orders** - no attribution at all (`harlemkev@yahoo.com`, `ewaring33@verizon.net`). Checked `purchases.source_name`/`referring_site` (migration 057) on both: `referring_site` was `https://shop.app/` and `https://facebook.com/` respectively, with non-"web" `source_name` values - both are the **already-documented non-storefront-channel gap** (Shopify's own Shop App, Meta's native in-app "Shop" checkout) from the 2026-07-28 entries, where no pixel of any kind - ours or Shopify's - ever gets a chance to load. Not a new failure of anything verified here.
+
+**Verdict: 13 of 15 real orders (87%) attributed correctly, and the two gaps are a known, separate, already-diagnosed limitation - not a regression or an unfixed part of the identify()/sendBeacon work.** The "not yet confirmed against a real live order" caveat on every 2026-07-27/07-28 entry can now close.
+
+---
+
 ## 2026-08-02 (later still) — The tooltip's "Full setup guide" text wasn't actually clickable
 
 **Reported:** only the tiny "i" icon navigated to the full setup guide; the "Full setup guide →" text inside the tooltip popup, styled to look like a link, was a plain `<p>`. A user's natural instinct is to click the visible link-styled text, not the small icon it's attached to.

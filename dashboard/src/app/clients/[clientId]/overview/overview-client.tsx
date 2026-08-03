@@ -310,14 +310,25 @@ function CartConversionCard({ clientId, range }: { clientId: string; range: { fr
       </CardHeader>
       <CardContent className="px-0">
         {data.addToCartCount > 0 ? (
-          <DonutChart
-            centerValue={completionRate === null ? "-" : formatPercent(completionRate)}
-            centerLabel={`${formatNumber(completed)} of ${formatNumber(data.addToCartCount)} carts`}
-            segments={[
-              { key: "completed", label: "Purchased", value: completed, color: "var(--color-chart-1)" },
-              { key: "abandoned", label: "Abandoned", value: data.abandonedCartCount, color: "var(--color-chart-2)" },
-            ]}
-          />
+          // Whole donut is a link to Funnel's MOF tab, which has the same cart
+          // numbers broken out per product — click the chart to see which
+          // products are actually driving (or abandoning) that rate. Wraps only
+          // the chart, not the whole card, since CardTitle's InfoTooltip is its
+          // own interactive trigger and a <button> can't nest inside an <a>.
+          <Link
+            href={`/clients/${clientId}/funnel?stage=mof`}
+            className="block rounded-lg outline-none transition-opacity hover:opacity-80 focus-visible:opacity-80"
+          >
+            <DonutChart
+              centerValue={completionRate === null ? "-" : formatPercent(completionRate)}
+              centerLabel={`${formatNumber(completed)} of ${formatNumber(data.addToCartCount)} carts`}
+              segments={[
+                { key: "completed", label: "Purchased", value: completed, color: "var(--color-chart-1)" },
+                { key: "abandoned", label: "Abandoned", value: data.abandonedCartCount, color: "var(--color-chart-2)" },
+              ]}
+            />
+            <p className="mt-1 text-center text-[11px] font-medium text-primary">See products added to cart →</p>
+          </Link>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">No carts started in this range yet.</p>
         )}

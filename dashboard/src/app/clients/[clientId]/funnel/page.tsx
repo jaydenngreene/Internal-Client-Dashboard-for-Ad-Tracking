@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { FunnelClient } from "./funnel-client";
 
 export default async function FunnelPage({
@@ -6,5 +7,9 @@ export default async function FunnelPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  return <FunnelClient clientId={clientId} />;
+  return (
+    <Suspense>
+      <FunnelClient clientId={clientId} />
+    </Suspense>
+  );
 }

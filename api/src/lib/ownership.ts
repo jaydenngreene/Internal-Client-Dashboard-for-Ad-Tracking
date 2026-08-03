@@ -72,6 +72,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/overview': 'client',
   '/clients/:id/reports/bof': 'client',
   '/clients/:id/reports/mof': 'client',
+  '/clients/:id/reports/cart-products': 'client',
   '/clients/:id/reports/leads': 'client',
   '/clients/:id/reports/ltv': 'client',
   '/clients/:id/reports/funnel': 'client',

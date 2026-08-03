@@ -72,6 +72,11 @@ interface MofQuery {
   to?: string
 }
 
+interface CartProductsQuery {
+  from?: string
+  to?: string
+}
+
 interface CallsQuery {
   from?: string
   to?: string
@@ -809,6 +814,100 @@ export async function reportRoutes(app: FastifyInstance) {
         cartAbandonmentRate: addToCartCount > 0 ? (abandonedCartCount / addToCartCount) * 100 : null,
         series,
       })
+    }
+  )
+
+  // Per-product breakdown of the same cart_events MOF already aggregates by
+  // event_type only — every distinct product that was viewed/added/abandoned in
+  // the range, not just a top-N slice. Grouped by product_id (the more reliable
+  // identifier — the fallback theme-snippet path only ever sends an id, no
+  // name), with product_name picked via MAX() since it should be stable per id.
+  // Abandonment reuses the exact same per-visitor "no purchase after this add"
+  // heuristic as the MOF cartAbandonmentRate above, just grouped by product too.
+  app.get<{ Params: { id: string }; Querystring: CartProductsQuery }>(
+    '/clients/:id/reports/cart-products',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+
+      const [countsRows, abandonedRows] = await Promise.all([
+        db.query<{ product_id: string; product_name: string | null; event_type: string; total: string; value: string }>(
+          `SELECT COALESCE(product_id, '(no product id)') AS product_id,
+                  MAX(product_name) AS product_name,
+                  event_type,
+                  COUNT(*) AS total,
+                  COALESCE(SUM(value), 0) AS value
+           FROM cart_events
+           WHERE client_id = $1 AND created_at::date BETWEEN $2 AND $3
+           GROUP BY COALESCE(product_id, '(no product id)'), event_type`,
+          [clientId, from, to]
+        ),
+        db.query<{ product_id: string; total: string }>(
+          `SELECT COALESCE(ce.product_id, '(no product id)') AS product_id, COUNT(*) AS total
+           FROM cart_events ce
+           JOIN sessions s ON s.id = ce.session_id
+           WHERE ce.client_id = $1 AND ce.event_type = 'add_to_cart' AND ce.created_at::date BETWEEN $2 AND $3
+             AND NOT EXISTS (
+               SELECT 1 FROM identities i
+               JOIN purchases p ON p.client_id = i.client_id AND p.email = i.email
+               WHERE i.client_id = ce.client_id AND i.visitor_id = s.visitor_id
+                 AND p.purchased_at >= ce.created_at
+             )
+           GROUP BY COALESCE(ce.product_id, '(no product id)')`,
+          [clientId, from, to]
+        ),
+      ])
+
+      interface ProductAgg {
+        productId: string
+        productName: string | null
+        viewCount: number
+        addToCartCount: number
+        initiateCheckoutCount: number
+        cartValue: number
+        abandonedCount: number
+      }
+      const byProduct = new Map<string, ProductAgg>()
+      const getEntry = (productId: string): ProductAgg => {
+        let entry = byProduct.get(productId)
+        if (!entry) {
+          entry = {
+            productId,
+            productName: null,
+            viewCount: 0,
+            addToCartCount: 0,
+            initiateCheckoutCount: 0,
+            cartValue: 0,
+            abandonedCount: 0,
+          }
+          byProduct.set(productId, entry)
+        }
+        return entry
+      }
+      for (const r of countsRows.rows) {
+        const entry = getEntry(r.product_id)
+        entry.productName = entry.productName ?? r.product_name
+        const total = parseInt(r.total, 10)
+        if (r.event_type === 'view_item') entry.viewCount = total
+        else if (r.event_type === 'add_to_cart') {
+          entry.addToCartCount = total
+          entry.cartValue = parseFloat(r.value)
+        } else if (r.event_type === 'begin_checkout') entry.initiateCheckoutCount = total
+      }
+      for (const r of abandonedRows.rows) {
+        getEntry(r.product_id).abandonedCount = parseInt(r.total, 10)
+      }
+
+      const products = Array.from(byProduct.values())
+        .filter((p) => p.addToCartCount > 0 || p.viewCount > 0 || p.initiateCheckoutCount > 0)
+        .map((p) => ({
+          ...p,
+          productName: p.productName ?? '(unnamed product)',
+          abandonmentRate: p.addToCartCount > 0 ? (p.abandonedCount / p.addToCartCount) * 100 : null,
+        }))
+        .sort((a, b) => b.addToCartCount - a.addToCartCount)
+
+      return reply.send({ from, to, products })
     }
   )
 

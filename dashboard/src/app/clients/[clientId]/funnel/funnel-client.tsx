@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { getTof, getMof, getBof, getCalls, getClients, campaignGoalForNiche } from "@/lib/api";
+import { getTof, getMof, getBof, getCalls, getClients, getCartProducts, campaignGoalForNiche } from "@/lib/api";
 import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatDuration } from "@/lib/format";
 import { SegmentedToggle } from "@/components/segmented-toggle";
@@ -22,6 +23,7 @@ import { ClientKicker } from "@/components/client-kicker";
 import { KpiTile } from "@/components/kpi-tile";
 
 type Stage = "tof" | "mof" | "bof";
+const STAGE_VALUES: Stage[] = ["tof", "mof", "bof"];
 
 const STAGE_OPTIONS: { value: Stage; label: string }[] = [
   { value: "tof", label: "TOF" },
@@ -37,7 +39,23 @@ const STAGE_SUBTITLE: Record<Stage, string> = {
 
 export function FunnelClient({ clientId }: { clientId: string }) {
   const { range } = useDateRangeState("30d");
-  const [stage, setStage] = useState<Stage>("tof");
+  // Lets Overview's Cart → Purchase Conversion donut (and any other link)
+  // land directly on a stage, e.g. /funnel?stage=mof — same pattern as
+  // Campaigns' ?view= and Recommendations' ?type=.
+  const searchParams = useSearchParams();
+  const requestedStage = searchParams.get("stage");
+  const initialStage = (STAGE_VALUES as string[]).includes(requestedStage ?? "") ? (requestedStage as Stage) : "tof";
+  const [stage, setStage] = useState<Stage>(initialStage);
+
+  // A same-route link (e.g. clicking the donut while already on Funnel) is a
+  // client-side navigation, not a remount, so the useState initializer above
+  // only fires once — this re-syncs when the URL's own stage param changes.
+  // Same fix as recommendations-client.tsx's identical effect.
+  useEffect(() => {
+    if (requestedStage && (STAGE_VALUES as string[]).includes(requestedStage)) {
+      setStage(requestedStage as Stage);
+    }
+  }, [requestedStage]);
 
   const tof = useQuery({
     queryKey: ["tof", clientId, range.from, range.to],
@@ -70,6 +88,12 @@ export function FunnelClient({ clientId }: { clientId: string }) {
     queryKey: ["calls", clientId, range.from, range.to],
     queryFn: () => getCalls(clientId, range),
     enabled: stage === "bof" && isCallBased,
+  });
+
+  const cartProducts = useQuery({
+    queryKey: ["cart-products", clientId, range.from, range.to],
+    queryFn: () => getCartProducts(clientId, range),
+    enabled: stage === "mof" && isEcommerce,
   });
 
   return (
@@ -257,6 +281,69 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                 );
               })()}
             </div>
+          )}
+
+          {isEcommerce && (
+            <Card className="px-0">
+              <CardHeader className="px-4">
+                <CardTitle>Products Added to Cart</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Every product with a view, add-to-cart, or checkout-start event in this range, not just the
+                  top few. Abandonment uses the same "no purchase by this visitor afterward" definition as the
+                  Cart Abandonment tile above.
+                </p>
+              </CardHeader>
+              <CardContent className="px-0">
+                {cartProducts.isLoading && <Skeleton className="mx-4 h-48" />}
+                {cartProducts.data && cartProducts.data.products.length === 0 && (
+                  <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No product view/cart/checkout events in this range yet.
+                  </p>
+                )}
+                {cartProducts.data && cartProducts.data.products.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Product
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Views
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Added to Cart
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Checkout Started
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Abandonment Rate
+                        </TableHead>
+                        <TableHead className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Cart Value
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cartProducts.data.products.map((p) => (
+                        <TableRow key={p.productId}>
+                          <TableCell className="font-medium">{p.productName}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatNumber(p.viewCount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatNumber(p.addToCartCount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatNumber(p.initiateCheckoutCount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {p.abandonmentRate === null ? "-" : formatPercent(p.abandonmentRate)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-chart-1">
+                            {formatCurrency(p.cartValue)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           )}
         </>
       )}

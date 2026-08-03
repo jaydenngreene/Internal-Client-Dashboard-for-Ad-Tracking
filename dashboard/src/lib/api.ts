@@ -1400,6 +1400,23 @@ export interface MofReport {
   series: MofSeriesPoint[];
 }
 
+export interface CartProductRow {
+  productId: string;
+  productName: string;
+  viewCount: number;
+  addToCartCount: number;
+  initiateCheckoutCount: number;
+  cartValue: number;
+  abandonedCount: number;
+  abandonmentRate: number | null;
+}
+
+export interface CartProductsReport {
+  from: string;
+  to: string;
+  products: CartProductRow[];
+}
+
 export interface CallsByCampaignRow {
   campaign_name: string;
   calls: number;
@@ -1549,6 +1566,13 @@ export function getTof(clientId: string, range?: DateRange): Promise<TofReport> 
 
 export function getMof(clientId: string, range?: DateRange): Promise<MofReport> {
   return fetchJson<MofReport>(`/clients/${clientId}/reports/mof${rangeQuery(range)}`);
+}
+
+// Every distinct product that was viewed/added-to-cart/abandoned in the range,
+// not a top-N slice — matches MOF's own add-to-cart/abandonment definitions,
+// just broken out per product instead of aggregated across all of them.
+export function getCartProducts(clientId: string, range?: DateRange): Promise<CartProductsReport> {
+  return fetchJson<CartProductsReport>(`/clients/${clientId}/reports/cart-products${rangeQuery(range)}`);
 }
 
 export function getLtv(clientId: string, range?: DateRange): Promise<LtvReport> {

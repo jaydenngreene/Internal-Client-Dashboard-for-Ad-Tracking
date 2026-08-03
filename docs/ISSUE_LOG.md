@@ -6,6 +6,18 @@ Newest entries first. Each entry: what was reported, what was actually true, the
 
 ---
 
+## 2026-08-03 (even later) — Built: Export CSV on the Products Added to Cart table
+
+**Ask:** an export button for the per-product cart table (same day's earlier addition).
+
+**Built:** `Export CSV` button in the card header (`CardAction`, same `Button size="xs" variant="outline"` + `downloadCsv()` pattern `campaign-breakdown-table.tsx` already uses — no new export mechanism invented). Exports Product/Views/Added to Cart/Checkout Started/Abandonment Rate/Cart Value for every row currently in the table. Only renders once there's data to export (no dead button on an empty table).
+
+**Caught during verification:** the raw `abandonmentRate` is an unrounded division result (e.g. `68.88888888888889`) — fine for on-screen display since `formatPercent()` already rounds it for the table, but `downloadCsv()` exports raw values, so the first test export had ugly long decimals. Rounded to 1 decimal place at export time (matching `formatPercent`'s own precision) without changing the underlying report data.
+
+**Verified:** `tsc --noEmit` and `next build` clean. Live-tested against real Nothing But Buckets data — clicked Export CSV, confirmed the downloaded file, checked the exact values against what's on screen, both before and after the rounding fix.
+
+---
+
 ## 2026-08-03 (later still) — Historical duplicate cart_events cleaned up: 539 rows deleted
 
 Follow-up to the previous entry (the double-tracked add-to-cart bug). The code fix there only stops *new* double-counting once redeployed and re-pasted per client — it does nothing for the duplicate rows already sitting in `cart_events`. User asked to clean those up too.

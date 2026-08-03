@@ -17,10 +17,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientKicker } from "@/components/client-kicker";
 import { KpiTile } from "@/components/kpi-tile";
+import { downloadCsv } from "@/lib/csv";
 
 type Stage = "tof" | "mof" | "bof";
 const STAGE_VALUES: Stage[] = ["tof", "mof", "bof"];
@@ -292,6 +294,33 @@ export function FunnelClient({ clientId }: { clientId: string }) {
                   top few. Abandonment uses the same "no purchase by this visitor afterward" definition as the
                   Cart Abandonment tile above.
                 </p>
+                {cartProducts.data && cartProducts.data.products.length > 0 && (
+                  <CardAction>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() =>
+                        downloadCsv(
+                          "products-added-to-cart.csv",
+                          cartProducts.data!.products.map((p) => ({
+                            ...p,
+                            abandonmentRate: p.abandonmentRate === null ? null : Math.round(p.abandonmentRate * 10) / 10,
+                          })),
+                          [
+                            { key: "productName", label: "Product" },
+                            { key: "viewCount", label: "Views" },
+                            { key: "addToCartCount", label: "Added to Cart" },
+                            { key: "initiateCheckoutCount", label: "Checkout Started" },
+                            { key: "abandonmentRate", label: "Abandonment Rate (%)" },
+                            { key: "cartValue", label: "Cart Value" },
+                          ]
+                        )
+                      }
+                    >
+                      Export CSV
+                    </Button>
+                  </CardAction>
+                )}
               </CardHeader>
               <CardContent className="px-0">
                 {cartProducts.isLoading && <Skeleton className="mx-4 h-48" />}

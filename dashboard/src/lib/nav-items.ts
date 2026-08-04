@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Mail,
   Layers,
+  PieChart,
   Repeat2,
   ListChecks,
   FlaskConical,
@@ -63,6 +64,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true, group: "Reporting" },
       { slug: "funnel", label: "Funnel", icon: Filter, enabled: true, group: "Reporting" },
       { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true, group: "Reporting" },
+      // Facebook-only (2026-08-04) — Meta-attributed purchase counts by age/
+      // gender/placement, same source Ads Manager's own breakdown tables use.
+      // Shown for every client rather than niche/platform-gated in nav-items
+      // itself; an account with no Facebook data just sees each toggle's
+      // empty state, same pattern as Campaigns' Source tab hiding itself only
+      // once there's a second connected ad platform to roll up against.
+      { slug: "ad-breakdown", label: "Ad Breakdown", icon: PieChart, enabled: true, group: "Reporting" },
       {
         slug: "leads",
         label: "Leads",

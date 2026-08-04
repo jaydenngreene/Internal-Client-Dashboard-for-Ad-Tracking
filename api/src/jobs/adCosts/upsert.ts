@@ -1,5 +1,5 @@
 import { db } from '../../db'
-import { AdCostRow } from './types'
+import { AdCostRow, AdBreakdownRow } from './types'
 import { convertToBaseCurrency, getClientCurrency } from '../../lib/currency'
 
 // Step 48 — an ad account has one fixed currency; declared by the user per
@@ -81,6 +81,38 @@ export async function upsertAdCosts(clientId: string, platform: string, rows: Ad
         row.video_p75_watched ?? null,
         row.video_p100_watched ?? null,
         row.frequency ?? null,
+      ]
+    )
+  }
+}
+
+// Ad Breakdown tab (2026-08-04) — purchase counts, no currency conversion
+// needed (unlike upsertAdCosts' spend), so this stays a plain write.
+export async function upsertAdBreakdowns(clientId: string, platform: string, rows: AdBreakdownRow[]): Promise<void> {
+  if (rows.length === 0) return
+
+  for (const row of rows) {
+    await db.query(
+      `INSERT INTO ad_breakdowns
+         (client_id, platform, campaign_id, campaign_name, ad_id, ad_name, date, breakdown_type, breakdown_value, purchases)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (client_id, platform, ad_id, date, breakdown_type, breakdown_value)
+       DO UPDATE SET
+         campaign_id   = EXCLUDED.campaign_id,
+         campaign_name = EXCLUDED.campaign_name,
+         ad_name       = EXCLUDED.ad_name,
+         purchases     = EXCLUDED.purchases`,
+      [
+        clientId,
+        platform,
+        row.campaign_id,
+        row.campaign_name,
+        row.ad_id,
+        row.ad_name,
+        row.date,
+        row.breakdown_type,
+        row.breakdown_value,
+        row.purchases,
       ]
     )
   }

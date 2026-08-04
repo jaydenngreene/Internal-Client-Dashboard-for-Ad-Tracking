@@ -93,6 +93,13 @@ interface AgencyOverviewQuery {
   to?: string
 }
 
+interface AdBreakdownQuery {
+  from?: string
+  to?: string
+  level?: 'campaign' | 'ad'
+  type?: 'age' | 'gender' | 'placement'
+}
+
 interface CohortsQuery {
   months?: string
 }
@@ -1911,6 +1918,55 @@ export async function reportRoutes(app: FastifyInstance) {
         byDisposition: dispositionRows.rows.map((r) => ({
           disposition: r.disposition ?? '(untagged)',
           calls: parseInt(r.calls, 10),
+        })),
+      })
+    }
+  )
+
+  // Ad Breakdown tab (2026-08-04) — Meta-attributed purchase counts by age,
+  // gender, or placement, at campaign or ad grain. Deliberately not folded
+  // into the funnel/campaigns breakdown route above: this reads from
+  // ad_breakdowns (Facebook-only, purchases-only), a completely separate table
+  // from ad_costs/purchases/attributions, with no spend/revenue/ROAS to show —
+  // Meta's own pixel-attributed count, not this app's session-based
+  // attribution (Facebook's click URL carries no age/placement info, so there
+  // is no way to tie Kado's own revenue to either dimension).
+  app.get<{ Params: { id: string }; Querystring: AdBreakdownQuery }>(
+    '/clients/:id/reports/ad-breakdown',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      const level = req.query.level === 'ad' ? 'ad' : 'campaign'
+      const type =
+        req.query.type === 'gender' ? 'gender' : req.query.type === 'placement' ? 'placement' : 'age'
+
+      const groupCol = level === 'ad' ? 'ad_id' : 'campaign_id'
+      const nameCol = level === 'ad' ? 'ad_name' : 'campaign_name'
+
+      const { rows } = await db.query<{
+        group_id: string | null
+        name: string | null
+        breakdown_value: string
+        purchases: string
+      }>(
+        `SELECT ${groupCol} AS group_id, ${nameCol} AS name, breakdown_value, SUM(purchases) AS purchases
+         FROM ad_breakdowns
+         WHERE client_id = $1 AND date BETWEEN $2 AND $3 AND breakdown_type = $4
+         GROUP BY ${groupCol}, ${nameCol}, breakdown_value
+         ORDER BY ${nameCol}, breakdown_value`,
+        [clientId, from, to, type]
+      )
+
+      return reply.send({
+        from,
+        to,
+        level,
+        type,
+        rows: rows.map((r) => ({
+          id: r.group_id,
+          name: r.name ?? `(unnamed ${level})`,
+          breakdownValue: r.breakdown_value,
+          purchases: parseInt(r.purchases, 10),
         })),
       })
     }

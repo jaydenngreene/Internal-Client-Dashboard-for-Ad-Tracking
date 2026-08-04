@@ -32,3 +32,17 @@ export interface AdCostRow {
   // disclosure as the fields above.
   frequency?: number | null
 }
+
+// Ad Breakdown tab (2026-08-04) — one row per ad per day per single breakdown
+// dimension (age/gender/placement), not the crossed ad_costs shape above.
+// Facebook-only for now, same disclosure as creative/video fields.
+export interface AdBreakdownRow {
+  date: string // YYYY-MM-DD
+  campaign_id: string | null
+  campaign_name: string | null
+  ad_id: string
+  ad_name: string | null
+  breakdown_type: 'age' | 'gender' | 'placement'
+  breakdown_value: string
+  purchases: number
+}

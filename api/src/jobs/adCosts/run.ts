@@ -1,5 +1,5 @@
 import { db } from '../../db'
-import { fetchFacebookAdCosts } from './facebook'
+import { fetchFacebookAdCosts, fetchFacebookAdBreakdowns } from './facebook'
 import { fetchGoogleAdCosts } from './google'
 import { fetchBingAdCosts } from './bing'
 import { fetchTikTokAdCosts } from './tiktok'
@@ -7,7 +7,7 @@ import { fetchSnapchatAdCosts } from './snapchat'
 import { fetchPinterestAdCosts } from './pinterest'
 import { fetchLinkedInAdCosts } from './linkedin'
 import { fetchRedditAdCosts } from './reddit'
-import { upsertAdCosts } from './upsert'
+import { upsertAdCosts, upsertAdBreakdowns } from './upsert'
 import { withRetry } from '../../lib/retry'
 
 export type AdPlatform =
@@ -71,6 +71,20 @@ export async function syncOneIntegration(integration: ClientIntegration, sinceSt
   }
 
   await upsertAdCosts(integration.client_id, integration.platform, rows)
+
+  // Ad Breakdown tab (2026-08-04) — Facebook-only for now, same disclosure as
+  // the creative/video fields fetchFacebookAdCosts already carries; no other
+  // platform's fetcher or the ad_breakdowns table supports this yet.
+  if (integration.platform === 'facebook_ads') {
+    const breakdownRows = await fetchFacebookAdBreakdowns(
+      integration.config.access_token,
+      integration.config.ad_account_id,
+      sinceStr,
+      untilStr
+    )
+    await upsertAdBreakdowns(integration.client_id, integration.platform, breakdownRows)
+  }
+
   return rows.length
 }
 

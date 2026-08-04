@@ -1591,6 +1591,33 @@ export function getAgencyOverview(range?: DateRange): Promise<AgencyOverviewRepo
   return fetchJson<AgencyOverviewReport>(`/reports/agency-overview${rangeQuery(range)}`);
 }
 
+export type AdBreakdownLevel = "campaign" | "ad";
+export type AdBreakdownType = "age" | "gender" | "placement";
+
+export interface AdBreakdownRow {
+  id: string | null;
+  name: string;
+  breakdownValue: string;
+  purchases: number;
+}
+
+export interface AdBreakdownReport {
+  from: string;
+  to: string;
+  level: AdBreakdownLevel;
+  type: AdBreakdownType;
+  rows: AdBreakdownRow[];
+}
+
+export function getAdBreakdown(
+  clientId: string,
+  range: DateRange | undefined,
+  level: AdBreakdownLevel,
+  type: AdBreakdownType
+): Promise<AdBreakdownReport> {
+  return fetchJson<AdBreakdownReport>(`/clients/${clientId}/reports/ad-breakdown${rangeQuery(range, { level, type })}`);
+}
+
 export interface CampaignDetailKpis {
   cost: number;
   impressions: number;

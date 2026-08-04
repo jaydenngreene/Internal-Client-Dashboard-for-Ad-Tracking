@@ -1,4 +1,4 @@
-import { AdCostRow } from './types'
+import { AdCostRow, AdBreakdownRow } from './types'
 
 const GRAPH_VERSION = process.env.FB_GRAPH_API_VERSION ?? 'v21.0'
 
@@ -296,4 +296,114 @@ export async function fetchFacebookAdCosts(
   }
 
   return rows
+}
+
+interface FacebookBreakdownRow {
+  campaign_id?: string
+  campaign_name?: string
+  ad_id: string
+  ad_name?: string
+  date_start: string
+  age?: string
+  gender?: string
+  platform_position?: string
+  actions?: FacebookActionValue[]
+}
+
+interface FacebookBreakdownResponse {
+  data: FacebookBreakdownRow[]
+  paging?: { cursors?: { after?: string }; next?: string }
+  error?: { message: string; type: string; code: number }
+}
+
+// Meta reports pixel purchases under 'omni_purchase' (web+app+offline combined
+// — what Ads Manager's own "Results" column uses for a purchase-objective
+// campaign) whenever it's present; older/pixel-only setups only ever populate
+// the narrower 'offsite_conversion.fb_pixel_purchase' action instead. Falls
+// back to that only when omni_purchase never shows up in the row at all —
+// never summed together with it, which would double-count the same purchase
+// under both action types.
+function purchaseCount(actions?: FacebookActionValue[]): number {
+  if (!actions || actions.length === 0) return 0
+  const omni = actions.find((a) => a.action_type === 'omni_purchase')
+  if (omni) return parseInt(omni.value, 10) || 0
+  const pixel = actions.find((a) => a.action_type === 'offsite_conversion.fb_pixel_purchase')
+  return pixel ? parseInt(pixel.value, 10) || 0 : 0
+}
+
+const BREAKDOWN_FIELD: Record<AdBreakdownRow['breakdown_type'], 'age' | 'gender' | 'platform_position'> = {
+  age: 'age',
+  gender: 'gender',
+  placement: 'platform_position',
+}
+
+// Ad Breakdown tab (2026-08-04): purchase counts per ad per day, split by one
+// dimension at a time — never crossed into one age x gender x placement
+// matrix, which would multiply row volume combinatorially for no benefit here
+// (the dashboard tab shows each dimension separately via its own toggle, so a
+// single-dimension breakdown is all it ever needs). `platform_position`
+// alone (not also `publisher_platform`) for placement — its own values
+// already read as the platform (e.g. "instagram_reels", "facebook_reels").
+async function fetchFacebookBreakdown(
+  accessToken: string,
+  adAccountId: string,
+  since: string,
+  until: string,
+  type: AdBreakdownRow['breakdown_type']
+): Promise<AdBreakdownRow[]> {
+  const rows: AdBreakdownRow[] = []
+  const account = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`
+  const breakdownField = BREAKDOWN_FIELD[type]
+
+  let url: string | null =
+    `https://graph.facebook.com/${GRAPH_VERSION}/${account}/insights` +
+    `?level=ad&time_increment=1` +
+    `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
+    `&breakdowns=${breakdownField}` +
+    `&fields=${encodeURIComponent('campaign_id,campaign_name,ad_id,ad_name,actions')}` +
+    `&limit=500` +
+    `&access_token=${encodeURIComponent(accessToken)}`
+
+  while (url) {
+    const res = await fetch(url)
+    const body = (await res.json()) as FacebookBreakdownResponse
+
+    if (!res.ok || body.error) {
+      throw new Error(`Facebook ${type} breakdown request failed: ${body.error?.message ?? res.statusText}`)
+    }
+
+    for (const r of body.data) {
+      const value =
+        (breakdownField === 'age' ? r.age : breakdownField === 'gender' ? r.gender : r.platform_position) ?? 'unknown'
+      rows.push({
+        date: r.date_start,
+        campaign_id: r.campaign_id ?? null,
+        campaign_name: r.campaign_name ?? null,
+        ad_id: r.ad_id,
+        ad_name: r.ad_name ?? null,
+        breakdown_type: type,
+        breakdown_value: value,
+        purchases: purchaseCount(r.actions),
+      })
+    }
+
+    url = body.paging?.next ?? null
+  }
+
+  return rows
+}
+
+// Three separate single-dimension requests, sequential — same deliberately
+// conservative-against-rate-limits reasoning as the per-ad creative lookups in
+// fetchFacebookAdCosts above, not run in parallel.
+export async function fetchFacebookAdBreakdowns(
+  accessToken: string,
+  adAccountId: string,
+  since: string,
+  until: string
+): Promise<AdBreakdownRow[]> {
+  const age = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'age')
+  const gender = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'gender')
+  const placement = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'placement')
+  return [...age, ...gender, ...placement]
 }

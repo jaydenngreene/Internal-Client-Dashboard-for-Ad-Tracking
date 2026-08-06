@@ -331,19 +331,25 @@ function purchaseCount(actions?: FacebookActionValue[]): number {
   return pixel ? parseInt(pixel.value, 10) || 0 : 0
 }
 
-const BREAKDOWN_FIELD: Record<AdBreakdownRow['breakdown_type'], 'age' | 'gender' | 'platform_position'> = {
+// The `breakdowns` query param sent to Meta — NOT the same as the value read
+// back off each row. `platform_position` is rejected as a standalone
+// breakdown (confirmed live, 2026-08-06: error #100 "Current combination of
+// data breakdown columns (action_type, platform_position) is invalid") — it
+// must always be requested alongside `publisher_platform`, even though only
+// platform_position's own value ends up stored (its values already read as
+// the platform, e.g. "instagram_reels", "facebook_reels" — publisher_platform
+// itself is fetched but discarded). age/gender have no such restriction.
+const BREAKDOWN_QUERY_PARAM: Record<AdBreakdownRow['breakdown_type'], string> = {
   age: 'age',
   gender: 'gender',
-  placement: 'platform_position',
+  placement: 'publisher_platform,platform_position',
 }
 
 // Ad Breakdown tab (2026-08-04): purchase counts per ad per day, split by one
 // dimension at a time — never crossed into one age x gender x placement
 // matrix, which would multiply row volume combinatorially for no benefit here
 // (the dashboard tab shows each dimension separately via its own toggle, so a
-// single-dimension breakdown is all it ever needs). `platform_position`
-// alone (not also `publisher_platform`) for placement — its own values
-// already read as the platform (e.g. "instagram_reels", "facebook_reels").
+// single-dimension breakdown is all it ever needs).
 async function fetchFacebookBreakdown(
   accessToken: string,
   adAccountId: string,
@@ -353,13 +359,12 @@ async function fetchFacebookBreakdown(
 ): Promise<AdBreakdownRow[]> {
   const rows: AdBreakdownRow[] = []
   const account = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`
-  const breakdownField = BREAKDOWN_FIELD[type]
 
   let url: string | null =
     `https://graph.facebook.com/${GRAPH_VERSION}/${account}/insights` +
     `?level=ad&time_increment=1` +
     `&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}` +
-    `&breakdowns=${breakdownField}` +
+    `&breakdowns=${BREAKDOWN_QUERY_PARAM[type]}` +
     `&fields=${encodeURIComponent('campaign_id,campaign_name,ad_id,ad_name,actions')}` +
     `&limit=500` +
     `&access_token=${encodeURIComponent(accessToken)}`
@@ -373,8 +378,7 @@ async function fetchFacebookBreakdown(
     }
 
     for (const r of body.data) {
-      const value =
-        (breakdownField === 'age' ? r.age : breakdownField === 'gender' ? r.gender : r.platform_position) ?? 'unknown'
+      const value = (type === 'age' ? r.age : type === 'gender' ? r.gender : r.platform_position) ?? 'unknown'
       rows.push({
         date: r.date_start,
         campaign_id: r.campaign_id ?? null,
@@ -395,15 +399,26 @@ async function fetchFacebookBreakdown(
 
 // Three separate single-dimension requests, sequential — same deliberately
 // conservative-against-rate-limits reasoning as the per-ad creative lookups in
-// fetchFacebookAdCosts above, not run in parallel.
+// fetchFacebookAdCosts above, not run in parallel. Each dimension is caught
+// independently (2026-08-06 fix): the original version awaited all three into
+// one array and returned it in a single statement, so one dimension throwing
+// (platform_position's #100 error) discarded the other two dimensions' already-
+// fetched rows too, along with the exception silently getting swallowed by
+// runAdCostSync's per-integration try/catch — the sync job kept reporting
+// "success" while ad_breakdowns stayed completely empty for every client.
 export async function fetchFacebookAdBreakdowns(
   accessToken: string,
   adAccountId: string,
   since: string,
   until: string
 ): Promise<AdBreakdownRow[]> {
-  const age = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'age')
-  const gender = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'gender')
-  const placement = await fetchFacebookBreakdown(accessToken, adAccountId, since, until, 'placement')
-  return [...age, ...gender, ...placement]
+  const rows: AdBreakdownRow[] = []
+  for (const type of ['age', 'gender', 'placement'] as const) {
+    try {
+      rows.push(...(await fetchFacebookBreakdown(accessToken, adAccountId, since, until, type)))
+    } catch (err) {
+      console.error(`[facebook] ${type} breakdown fetch failed:`, (err as Error).message)
+    }
+  }
+  return rows
 }

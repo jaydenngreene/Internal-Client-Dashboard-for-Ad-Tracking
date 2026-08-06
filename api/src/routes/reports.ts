@@ -1268,7 +1268,14 @@ export async function reportRoutes(app: FastifyInstance) {
 
       // customer_ltv already carries acquisition_campaign (set at first-purchase time
       // by recordPurchase) and revenue_30d/60d/90d/180d/lifetime (kept current by the
-      // nightly refresh:ltv job — Step 10) — no joins needed, just aggregate by cohort.
+      // nightly refresh:ltv job — Step 10). 2026-08-06: acquisition_campaign is a raw
+      // copy of the first-touch session's utm_campaign, so it carries the same
+      // dynamic-{{campaign.id}}-token problem the funnel breakdown route already
+      // works around — a numeric campaign_id shows up as its own "(unknown)"-adjacent
+      // cohort instead of folding into that campaign's real named cohort. Resolved via
+      // a LATERAL join against ad_costs (gated by a numeric-looking regex so it never
+      // runs for a real text campaign name), then GROUP BY the resolved name so a
+      // numeric-id cohort and its real-named counterpart merge into one row.
       const { rows } = await db.query<{
         acquisition_campaign: string | null
         customers: string
@@ -1280,18 +1287,28 @@ export async function reportRoutes(app: FastifyInstance) {
         total_lifetime: string
       }>(
         `SELECT
-           acquisition_campaign,
+           resolved.campaign_name AS acquisition_campaign,
            COUNT(*) AS customers,
-           AVG(revenue_30d) AS avg_30d,
-           AVG(revenue_60d) AS avg_60d,
-           AVG(revenue_90d) AS avg_90d,
-           AVG(revenue_180d) AS avg_180d,
-           AVG(revenue_lifetime) AS avg_lifetime,
-           SUM(revenue_lifetime) AS total_lifetime
-         FROM customer_ltv
-         WHERE client_id = $1 AND first_purchase_date::date BETWEEN $2 AND $3
-         GROUP BY acquisition_campaign
-         ORDER BY SUM(revenue_lifetime) DESC`,
+           AVG(resolved.revenue_30d) AS avg_30d,
+           AVG(resolved.revenue_60d) AS avg_60d,
+           AVG(resolved.revenue_90d) AS avg_90d,
+           AVG(resolved.revenue_180d) AS avg_180d,
+           AVG(resolved.revenue_lifetime) AS avg_lifetime,
+           SUM(resolved.revenue_lifetime) AS total_lifetime
+         FROM (
+           SELECT COALESCE(ac.campaign_name, cl.acquisition_campaign) AS campaign_name,
+                  cl.revenue_30d, cl.revenue_60d, cl.revenue_90d, cl.revenue_180d, cl.revenue_lifetime
+           FROM customer_ltv cl
+           LEFT JOIN LATERAL (
+             SELECT campaign_name FROM ad_costs
+             WHERE ad_costs.client_id = cl.client_id AND ad_costs.campaign_id = cl.acquisition_campaign
+               AND ad_costs.campaign_name IS NOT NULL
+             LIMIT 1
+           ) ac ON cl.acquisition_campaign ~ '^\\d{10,20}$'
+           WHERE cl.client_id = $1 AND cl.first_purchase_date::date BETWEEN $2 AND $3
+         ) resolved
+         GROUP BY resolved.campaign_name
+         ORDER BY SUM(resolved.revenue_lifetime) DESC`,
         [clientId, from, to]
       )
 
@@ -1307,8 +1324,16 @@ export async function reportRoutes(app: FastifyInstance) {
         revenue_lifetime: string
         first_purchase_date: string
       }>(
-        `SELECT acquisition_campaign, revenue_30d, revenue_180d, revenue_lifetime, first_purchase_date
-         FROM customer_ltv WHERE client_id = $1 AND first_purchase_date::date BETWEEN $2 AND $3`,
+        `SELECT COALESCE(ac.campaign_name, cl.acquisition_campaign) AS acquisition_campaign,
+                cl.revenue_30d, cl.revenue_180d, cl.revenue_lifetime, cl.first_purchase_date
+         FROM customer_ltv cl
+         LEFT JOIN LATERAL (
+           SELECT campaign_name FROM ad_costs
+           WHERE ad_costs.client_id = cl.client_id AND ad_costs.campaign_id = cl.acquisition_campaign
+             AND ad_costs.campaign_name IS NOT NULL
+           LIMIT 1
+         ) ac ON cl.acquisition_campaign ~ '^\\d{10,20}$'
+         WHERE cl.client_id = $1 AND cl.first_purchase_date::date BETWEEN $2 AND $3`,
         [clientId, from, to]
       )
       const predictedByCampaign = new Map<string, number[]>()
@@ -1755,6 +1780,46 @@ export async function reportRoutes(app: FastifyInstance) {
         }
       }
 
+      // 2026-08-06: same underlying problem as the creative fallback above, one
+      // level up — a client using Meta's dynamic {{campaign.id}} URL token (instead
+      // of {{campaign.name}}) tags purchases with a raw numeric campaign_id as their
+      // utm_campaign. The idIndex lookup above already merges that into the real
+      // campaign's row WHEN a spend row for that campaign_id exists in the current
+      // date range — this only fires for the leftover case: a purchase whose
+      // click predates the selected window (or the campaign spent on a different
+      // day than it converted), so no idIndex entry was ever built and the
+      // purchase lands in its own $0-spend row labeled with the bare id. Unlike the
+      // creative fallback, no live API call is needed - ad_costs already carries
+      // campaign_id -> campaign_name from every past sync, unscoped by date. If a
+      // row for the real name already exists (spend present, just not merged),
+      // fold this row's revenue/sales/leads into it instead of just renaming in
+      // place, so the table doesn't show the same campaign twice.
+      if (breakdown === 'campaign') {
+        const unmatched = Array.from(rows.entries()).filter(([, r]) => r.cost === 0 && /^\d{10,20}$/.test(r.name))
+        if (unmatched.length > 0) {
+          const { rows: recovered } = await db.query<{ campaign_id: string; campaign_name: string }>(
+            `SELECT DISTINCT ON (campaign_id) campaign_id, campaign_name FROM ad_costs
+             WHERE client_id = $1 AND campaign_id = ANY($2::text[]) AND campaign_name IS NOT NULL`,
+            [clientId, unmatched.map(([, r]) => r.name)]
+          )
+          const nameByCampaignId = new Map(recovered.map((r) => [r.campaign_id, r.campaign_name]))
+          for (const [key, row] of unmatched) {
+            const realName = nameByCampaignId.get(row.name)
+            if (!realName) continue
+            const targetKey = buildKey(realName, row.platform)
+            const target = targetKey !== key ? rows.get(targetKey) : undefined
+            if (target) {
+              target.revenue += row.revenue
+              target.sales += row.sales
+              target.leads += row.leads
+              rows.delete(key)
+            } else {
+              row.name = realName
+            }
+          }
+        }
+      }
+
       // "matched" means real ad-platform spend backs this row — the anchor dimension
       // here is spend, so a row assembled only from leads/revenue with no cost is the
       // UTM-tagging-mismatch signal worth flagging rather than hiding. CTR/CPC surface
@@ -2009,7 +2074,7 @@ export async function reportRoutes(app: FastifyInstance) {
           utm_source: string | null
         }>(
           `SELECT p.id, p.order_id, p.purchased_at, p.email, p.revenue, p.refunded, p.product,
-                  src.utm_campaign, src.utm_source
+                  COALESCE(ac.campaign_name, src.utm_campaign) AS utm_campaign, src.utm_source
            FROM purchases p
            LEFT JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
            LEFT JOIN LATERAL (
@@ -2018,6 +2083,16 @@ export async function reportRoutes(app: FastifyInstance) {
              ORDER BY started_at ASC
              LIMIT 1
            ) src ON true
+           -- Same dynamic-{{campaign.id}}-token problem as the funnel/LTV routes
+           -- above: resolves a numeric campaign_id-shaped utm_campaign to the
+           -- real campaign name via ad_costs, gated so it never runs for an
+           -- already-readable name.
+           LEFT JOIN LATERAL (
+             SELECT campaign_name FROM ad_costs
+             WHERE ad_costs.client_id = p.client_id AND ad_costs.campaign_id = src.utm_campaign
+               AND ad_costs.campaign_name IS NOT NULL
+             LIMIT 1
+           ) ac ON src.utm_campaign ~ '^\\d{10,20}$'
            WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
            ORDER BY p.purchased_at DESC
            LIMIT ${ORDER_LIMIT}`,

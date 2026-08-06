@@ -19,6 +19,8 @@ import { useDateRangeState } from "@/lib/date-range";
 import { formatCurrency, formatNumber, formatPercent, formatRoas } from "@/lib/format";
 import { vocabularyForNiche } from "@/lib/niche-vocabulary";
 import { StatTile } from "@/components/stat-tile";
+import { StatChartCard } from "@/components/stat-chart-card";
+import { FunnelBars } from "@/components/funnel-bars";
 import { CampaignBreakdownTable } from "@/components/campaign-breakdown-table";
 import { LtvTable } from "@/components/ltv-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -183,10 +185,26 @@ export function FullReportClient({ clientId }: { clientId: string }) {
               value={formatCurrency(overview.data.profit)}
               tone={overview.data.profit >= 0 ? "positive" : "negative"}
             />
-            <StatTile label="ROAS" value={formatRoas(overview.data.roas)} />
+            <StatTile label="Blended ROAS" value={formatRoas(overview.data.blendedRoas)} />
             <StatTile label="ROI" value={formatPercent(overview.data.roi)} />
             <StatTile label="Attribution Rate" value={formatPercent(overview.data.attributionRate)} />
           </div>
+        )}
+        {overview.data && (
+          <StatChartCard
+            title="Profitability"
+            data={overview.data.series.map((p) => ({ label: p.date, cost: p.cost, revenue: p.revenue, profit: p.trueProfit }))}
+            stats={[
+              { key: "cost", label: "Ad Spend", value: formatCurrency(overview.data.cost), color: "var(--color-chart-2)" },
+              { key: "revenue", label: "Total Revenue", value: formatCurrency(overview.data.revenue), color: "var(--color-chart-1)" },
+              { key: "profit", label: "Profit", value: formatCurrency(overview.data.trueProfit), color: "var(--color-chart-3)" },
+            ]}
+            series={[
+              { key: "revenue", label: "Revenue", color: "var(--color-chart-1)" },
+              { key: "cost", label: "Ad Spend", color: "var(--color-chart-2)" },
+              { key: "profit", label: "Profit", color: "var(--color-chart-3)", fillArea: false },
+            ]}
+          />
         )}
       </Section>
 
@@ -250,6 +268,25 @@ export function FullReportClient({ clientId }: { clientId: string }) {
             </CardContent>
           </Card>
         </div>
+        {mof.data && tof.data && bof.data && (
+          <Card className="px-4">
+            <CardHeader className="px-0">
+              <CardTitle className="text-sm">Sessions → {goal === "sales" ? "Purchases" : "Leads"} → Orders</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              <FunnelBars
+                stages={[
+                  { label: "Sessions", value: mof.data.totalSessions },
+                  {
+                    label: goal === "sales" ? "Purchases" : "Leads",
+                    value: goal === "sales" ? tof.data.totalPurchases : tof.data.totalLeads,
+                  },
+                  { label: "Orders", value: bof.data.totalOrders },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        )}
       </Section>
 
       <Section title="Campaign Performance">

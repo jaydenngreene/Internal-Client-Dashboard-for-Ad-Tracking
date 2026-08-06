@@ -100,6 +100,11 @@ interface AdBreakdownQuery {
   type?: 'age' | 'gender' | 'placement'
 }
 
+interface OrdersQuery {
+  from?: string
+  to?: string
+}
+
 interface CohortsQuery {
   months?: string
 }
@@ -1967,6 +1972,81 @@ export async function reportRoutes(app: FastifyInstance) {
           name: r.name ?? `(unnamed ${level})`,
           breakdownValue: r.breakdown_value,
           purchases: parseInt(r.purchases, 10),
+        })),
+      })
+    }
+  )
+
+  // Full Report page (2026-08-06) — order-level list, the one piece that page
+  // needed that no existing report exposes: every other report in this file is
+  // pre-aggregated, nothing returns individual purchases scoped to a date
+  // range. First-touch campaign/source via the same LATERAL-join pattern
+  // aovBySource (BOF route, above) already uses — one session per purchase,
+  // not every attribution row, so a linear-model purchase with several
+  // attributed touches still shows as one order here, not fragmented into
+  // several. LEFT JOINs (not INNER) so an order with no matched identity/
+  // session still shows up with null campaign/source rather than silently
+  // disappearing — same "surface mismatches, don't hide them" convention as
+  // `matched` elsewhere in this file. Capped at 500, most-recent-first — a
+  // deep-dive page, not a paginated order manager.
+  app.get<{ Params: { id: string }; Querystring: OrdersQuery }>(
+    '/clients/:id/reports/orders',
+    async (req, reply) => {
+      const clientId = req.params.id
+      const { from, to } = defaultRange(req.query.from, req.query.to)
+      const ORDER_LIMIT = 500
+
+      const [ordersResult, totalResult] = await Promise.all([
+        db.query<{
+          id: string
+          order_id: string | null
+          purchased_at: string
+          email: string
+          revenue: string
+          refunded: boolean
+          product: string | null
+          utm_campaign: string | null
+          utm_source: string | null
+        }>(
+          `SELECT p.id, p.order_id, p.purchased_at, p.email, p.revenue, p.refunded, p.product,
+                  src.utm_campaign, src.utm_source
+           FROM purchases p
+           LEFT JOIN identities i ON i.client_id = p.client_id AND i.email = p.email
+           LEFT JOIN LATERAL (
+             SELECT utm_source, utm_campaign FROM sessions
+             WHERE visitor_id = i.visitor_id AND started_at <= p.purchased_at
+             ORDER BY started_at ASC
+             LIMIT 1
+           ) src ON true
+           WHERE p.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+           ORDER BY p.purchased_at DESC
+           LIMIT ${ORDER_LIMIT}`,
+          [clientId, from, to]
+        ),
+        db.query<{ total: string }>(
+          `SELECT COUNT(*) AS total FROM purchases WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3`,
+          [clientId, from, to]
+        ),
+      ])
+
+      const total = parseInt(totalResult.rows[0].total, 10)
+
+      return reply.send({
+        from,
+        to,
+        total,
+        truncated: total > ORDER_LIMIT,
+        orders: ordersResult.rows.map((r) => ({
+          id: r.id,
+          orderId: r.order_id,
+          purchasedAt: r.purchased_at,
+          email: r.email,
+          revenue: parseFloat(r.revenue),
+          refunded: r.refunded,
+          product: r.product,
+          campaign: r.utm_campaign,
+          source: r.utm_source,
+          matched: r.utm_source !== null || r.utm_campaign !== null,
         })),
       })
     }

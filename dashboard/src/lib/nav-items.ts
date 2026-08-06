@@ -10,6 +10,7 @@ import {
   Mail,
   Layers,
   PieChart,
+  FileText,
   Repeat2,
   ListChecks,
   FlaskConical,
@@ -61,6 +62,11 @@ export const NAV_SECTIONS: NavSection[] = [
       // cards on its Creative and Campaign tabs respectively, same "same
       // subject, different tab" pattern as the First-Touch/Last-Touch and
       // journey-path work that already lived there. See campaigns-client.tsx.
+      // Internal power-user digest (2026-08-06) — every other report's data,
+      // one date range, one scroll: not a replacement for the focused tabs
+      // below, just a single place to see everything at once instead of
+      // hopping between them.
+      { slug: "full-report", label: "Full Report", icon: FileText, enabled: true, group: "Reporting" },
       { slug: "campaigns", label: "Campaigns", icon: Megaphone, enabled: true, group: "Reporting" },
       { slug: "funnel", label: "Funnel", icon: Filter, enabled: true, group: "Reporting" },
       { slug: "mmm", label: "Media Mix Model", icon: ChartNoAxesCombined, enabled: true, group: "Reporting" },

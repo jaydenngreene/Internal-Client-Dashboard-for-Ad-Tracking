@@ -1618,6 +1618,33 @@ export function getAdBreakdown(
   return fetchJson<AdBreakdownReport>(`/clients/${clientId}/reports/ad-breakdown${rangeQuery(range, { level, type })}`);
 }
 
+export interface OrderRow {
+  id: string;
+  orderId: string | null;
+  purchasedAt: string;
+  email: string;
+  revenue: number;
+  refunded: boolean;
+  product: string | null;
+  campaign: string | null;
+  source: string | null;
+  matched: boolean;
+}
+
+export interface OrdersReport {
+  from: string;
+  to: string;
+  total: number;
+  // True when `total` exceeds the 500-row cap the API applies — `orders` is
+  // the most-recent 500, not necessarily every order in range.
+  truncated: boolean;
+  orders: OrderRow[];
+}
+
+export function getOrders(clientId: string, range?: DateRange): Promise<OrdersReport> {
+  return fetchJson<OrdersReport>(`/clients/${clientId}/reports/orders${rangeQuery(range)}`);
+}
+
 export interface CampaignDetailKpis {
   cost: number;
   impressions: number;

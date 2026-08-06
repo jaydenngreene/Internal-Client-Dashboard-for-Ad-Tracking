@@ -159,7 +159,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       )}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 md:static md:z-auto md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 md:static md:z-auto md:translate-x-0 print:hidden",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >

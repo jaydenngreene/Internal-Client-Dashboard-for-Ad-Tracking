@@ -94,6 +94,7 @@ export const RESOLVERS: Record<string, Resolver> = {
   '/clients/:id/reports/creative-roles': 'client',
   '/clients/:id/reports/journey-paths': 'client',
   '/clients/:id/reports/ad-breakdown': 'client',
+  '/clients/:id/reports/orders': 'client',
   '/clients/:id/campaigns/:platform/:campaignName': 'client',
   '/clients/:id/campaigns/:platform/:campaignName/creatives/:creativeName': 'client',
   '/clients/:id/tags': 'client',

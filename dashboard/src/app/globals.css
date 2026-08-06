@@ -156,3 +156,38 @@
     @apply font-sans;
   }
 }
+
+/* Full Report export (2026-08-06): the app always renders in dark mode (navy
+   background, near-white text) — printed straight, that's either wasted ink
+   from a dark background a browser CAN print, or invisible white-on-white
+   text if the browser's default "don't print backgrounds" setting is on.
+   Forcing the light-mode variable set here, regardless of which theme is
+   active on screen, makes every Card/Table/StatTile - already built on these
+   same tokens - print legibly without needing separate print-only markup. */
+@media print {
+  :root, .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.4 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --border: oklch(0.85 0 0);
+    --chart-1: #0a6b30;
+    --chart-2: #e35a6a;
+    --chart-3: #8347d9;
+    --chart-4: #0f8fd6;
+    --chart-5: #9c7d0a;
+    --status-good: #0ca30c;
+    --status-warning: #b8790a;
+    --status-critical: #d03b3b;
+  }
+}

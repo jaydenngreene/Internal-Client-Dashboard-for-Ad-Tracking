@@ -76,25 +76,49 @@ interface FacebookAdCreativeResponse {
 
 interface FacebookVideoResponse {
   source?: string
+  from?: { id?: string }
   error?: { message: string }
 }
 
-// A video's actual playable file lives behind its own node (a separate, signed CDN
-// URL) — the ad's creative object only ever carries the video_id, never the source
-// itself.
+const pageTokenCache = new Map<string, string | null>()
+
+async function getPageToken(accessToken: string, pageId: string): Promise<string | null> {
+  const key = `${pageId}:${accessToken.slice(-12)}`
+  if (pageTokenCache.has(key)) return pageTokenCache.get(key)!
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${pageId}?fields=access_token&access_token=${encodeURIComponent(accessToken)}`
+  )
+  const body = (await res.json()) as { access_token?: string }
+  const token = body.access_token ?? null
+  pageTokenCache.set(key, token)
+  return token
+}
+
+// A video's playable file lives behind its own node. Meta silently omits `source`
+// for anything but a token of the Page that owns the video, so a system-user token
+// gets swapped for that Page's token (needs the Page assigned to the system user
+// plus pages_read_engagement/pages_show_list).
 async function fetchVideoSource(accessToken: string, videoId: string): Promise<string | null> {
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${videoId}?fields=source&access_token=${encodeURIComponent(accessToken)}`
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${videoId}?fields=source,from&access_token=${encodeURIComponent(accessToken)}`
   const res = await fetch(url)
   const body = (await res.json()) as FacebookVideoResponse
   if (!res.ok || body.error) {
-    // Logged rather than silently swallowed — a missing video source falls back to
-    // rendering the (much lower-resolution) static thumbnail in the dashboard, which
-    // looks like a rendering bug but is actually this request failing upstream, most
-    // often a permissions gap on the token rather than anything wrong in this app.
     console.error(`[facebook] video source fetch failed for ${videoId}:`, body.error?.message ?? res.statusText)
     return null
   }
-  return body.source ?? null
+  if (body.source) return body.source
+  if (!body.from?.id) return null
+
+  const pageToken = await getPageToken(accessToken, body.from.id)
+  if (!pageToken) {
+    console.error(`[facebook] no page token for page ${body.from.id} (video ${videoId}) — assign the Page to the system user`)
+    return null
+  }
+  const pageRes = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${videoId}?fields=source&access_token=${encodeURIComponent(pageToken)}`
+  )
+  const pageBody = (await pageRes.json()) as FacebookVideoResponse
+  return pageBody.source ?? null
 }
 
 const EMPTY_CREATIVE: FacebookCreative = {
@@ -142,7 +166,7 @@ async function parseCreative(accessToken: string, creative: FacebookAdCreativeRe
   return { thumbnailUrl: creative.thumbnail_url ?? null, assetUrl: null, assetType: null, ...copy }
 }
 
-async function fetchCreativeInfo(accessToken: string, adId: string): Promise<FacebookCreative> {
+export async function fetchCreativeInfo(accessToken: string, adId: string): Promise<FacebookCreative> {
   const url =
     `https://graph.facebook.com/${GRAPH_VERSION}/${adId}` +
     `?fields=${encodeURIComponent(

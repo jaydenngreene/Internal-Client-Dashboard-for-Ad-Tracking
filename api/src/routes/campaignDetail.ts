@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { db } from '../db'
 import { computeTrueProfit, MarginConfig } from '../lib/margin'
 import { resolveAdObjectFallback } from '../lib/adObjectFallback'
+import { refreshCreativeMedia } from '../lib/creativeMediaRefresh'
 
 async function getMarginConfig(clientId: string): Promise<MarginConfig | null> {
   const { rows } = await db.query<MarginConfig>(
@@ -138,6 +139,14 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       // matches by utm_content the same way the funnel breakdown's creative mode already
       // does, additionally scoped to this campaign+platform so a same-named creative in a
       // DIFFERENT campaign doesn't bleed into this one's list.
+      const { rows: campaignAdIds } = await db.query<{ ad_id: string | null }>(
+        `SELECT DISTINCT ad_id FROM ad_costs
+         WHERE client_id = $1 AND date BETWEEN $2 AND $3
+           AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($4, '_ads$', ''))
+           AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($5))`,
+        [clientId, from, to, platform, campaignName]
+      )
+      await refreshCreativeMedia(clientId, campaignAdIds.map((r) => r.ad_id))
       const { rows: creativeSpendRows } = await db.query<{
         ad_id: string | null
         ad_name: string | null
@@ -292,6 +301,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const { from, to } = defaultRange(req.query.from, req.query.to)
       const campaignId = await resolveCampaignId(clientId, platform, campaignName)
       const adId = await resolveAdId(clientId, platform, campaignName, creativeName)
+      await refreshCreativeMedia(clientId, [adId ?? creativeName])
 
       let { rows: assetRows } = await db.query<{
         creative_thumbnail_url: string | null

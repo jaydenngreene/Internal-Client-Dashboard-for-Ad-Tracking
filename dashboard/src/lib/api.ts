@@ -1660,27 +1660,17 @@ export interface CampaignDetailKpis {
   ctr: number | null;
 }
 
-export interface CampaignCreativeRow {
-  name: string;
-  cost: number;
-  impressions: number;
-  clicks: number;
-  leads: number;
-  sales: number;
-  revenue: number;
-  thumbnailUrl: string | null;
-  assetUrl: string | null;
-  assetType: "image" | "video" | null;
-  cpl: number | null;
-  roas: number | null;
-  cpm: number | null;
-  ctr: number | null;
-  matched: boolean;
+// Blended = all real Shopify revenue/orders, spread by each row's share of
+// ad-traced sales (see campaignDetail.ts). null when nothing is ad-traced yet.
+export interface BlendedMetrics {
+  blendedRevenue: number | null;
+  blendedSales: number | null;
+  blendedTrueProfit: number | null;
+  blendedRoas: number | null;
+  blendedCostPerSale: number | null;
 }
 
-export interface CampaignDetail {
-  platform: string;
-export interface CampaignAdsetRow {
+export interface CampaignAdsetRow extends BlendedMetrics {
   key: string;
   id: string | null;
   name: string;
@@ -1701,12 +1691,34 @@ export interface CampaignAdsetRow {
   matched: boolean;
 }
 
-  campaignName: string;
-  from: string;
+export interface CampaignCreativeRow extends BlendedMetrics {
+  name: string;
   // Matches CampaignAdsetRow.key of the ad set this ad runs in.
   adsetKey: string;
+  cost: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  sales: number;
+  revenue: number;
+  thumbnailUrl: string | null;
+  assetUrl: string | null;
+  assetType: "image" | "video" | null;
+  cpl: number | null;
+  roas: number | null;
+  cpm: number | null;
+  ctr: number | null;
+  matched: boolean;
+}
+
+export interface CampaignDetail {
+  platform: string;
+  campaignName: string;
+  from: string;
   to: string;
-  kpis: CampaignDetailKpis;
+  kpis: CampaignDetailKpis & BlendedMetrics;
+  blendedBasis: { storeRevenue: number; storeOrders: number; paidRevenue: number; paidSales: number };
+  adsets: CampaignAdsetRow[];
   creatives: CampaignCreativeRow[];
 }
 
@@ -1727,7 +1739,6 @@ export interface CreativeDetailCustomer {
   purchasedAt: string;
   revenue: number;
 }
-  adsets: CampaignAdsetRow[];
 
 export interface CreativeDetailCopy {
   headline: string | null;

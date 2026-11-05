@@ -133,6 +133,50 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const marginConfig = await getMarginConfig(clientId)
       const { trueProfit } = computeTrueProfit(marginConfig, revenue, cost, sales)
 
+      // Blended numbers: every real (non-refunded) Shopify order in the range, not
+      // just the ones a click could be traced to. Total store revenue is spread across
+      // campaigns, ad sets and ads by each one's share of ad-traced sales, using one
+      // store-wide factor (total / ad-traced). So everything adds back up to real
+      // store revenue, and the account-level ROAS matches Overview's Blended ROAS.
+      // "Ad-traced" = sessions from any ad platform this client has spend on.
+      const { rows: storeRows } = await db.query<{ revenue: string; orders: string }>(
+        `SELECT COALESCE(SUM(revenue), 0) AS revenue, COUNT(*) AS orders
+         FROM purchases
+         WHERE client_id = $1 AND purchased_at::date BETWEEN $2 AND $3 AND NOT COALESCE(refunded, false)`,
+        [clientId, from, to]
+      )
+      const { rows: paidRows } = await db.query<{ revenue: string; sales: string }>(
+        `SELECT COALESCE(SUM(a.attributed_revenue), 0) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+         FROM attributions a
+         JOIN sessions s ON s.id = a.session_id
+         JOIN purchases p ON p.id = a.purchase_id
+         WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
+           AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) IN (
+             SELECT DISTINCT LOWER(REGEXP_REPLACE(platform, '_ads$', '')) FROM ad_costs WHERE client_id = $1
+           )`,
+        [clientId, from, to]
+      )
+      const storeRevenue = parseFloat(storeRows[0].revenue)
+      const storeOrders = parseInt(storeRows[0].orders, 10)
+      const paidRevenue = parseFloat(paidRows[0].revenue)
+      const paidSales = parseInt(paidRows[0].sales, 10)
+      const revenueFactor = paidRevenue > 0 ? storeRevenue / paidRevenue : null
+      const salesFactor = paidSales > 0 ? storeOrders / paidSales : null
+      const blend = (rowRevenue: number, rowSales: number, rowCost: number) => {
+        if (revenueFactor === null || salesFactor === null) {
+          return { blendedRevenue: null, blendedSales: null, blendedTrueProfit: null, blendedRoas: null, blendedCostPerSale: null }
+        }
+        const blendedRevenue = rowRevenue * revenueFactor
+        const blendedSales = rowSales * salesFactor
+        return {
+          blendedRevenue,
+          blendedSales,
+          blendedTrueProfit: computeTrueProfit(marginConfig, blendedRevenue, rowCost, Math.round(blendedSales)).trueProfit,
+          blendedRoas: rowCost > 0 ? blendedRevenue / rowCost : null,
+          blendedCostPerSale: blendedSales > 0 ? rowCost / blendedSales : null,
+        }
+      }
+
       // Creative rows within this one campaign — spend side carries the real ad asset
       // columns (populated only where an ad-cost-sync fetcher pulls them; Facebook first,
       // null elsewhere until those fetchers are extended the same way), lead/revenue side
@@ -341,6 +385,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           cpm: r.impressions > 0 ? (r.cost / r.impressions) * 1000 : null,
           ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,
           matched: r.cost > 0,
+          ...blend(r.revenue, r.sales, r.cost),
         }))
         .sort((a, b) => b.revenue - a.revenue)
 
@@ -356,6 +401,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           cpm: a.impressions > 0 ? (a.cost / a.impressions) * 1000 : null,
           ctr: a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null,
           matched: a.cost > 0,
+          ...blend(a.revenue, a.sales, a.cost),
         }))
         // Real ad sets by spend, the "(no ad set)" catch-all always last.
         .sort((a, b) => (a.key === NO_ADSET_KEY ? 1 : 0) - (b.key === NO_ADSET_KEY ? 1 : 0) || b.cost - a.cost)
@@ -378,7 +424,9 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           cpl: leads > 0 ? cost / leads : null,
           cpm: impressions > 0 ? (cost / impressions) * 1000 : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+          ...blend(revenue, sales, cost),
         },
+        blendedBasis: { storeRevenue, storeOrders, paidRevenue, paidSales },
         adsets: adsetsOut,
         creatives: creativesOut,
       })

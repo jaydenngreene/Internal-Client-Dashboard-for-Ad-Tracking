@@ -2,6 +2,7 @@ import * as crypto from 'crypto'
 import { services } from 'google-ads-api'
 import { db } from '../db'
 import { getGoogleAdsCustomer } from './googleAdsClient'
+import { normalizePhone, phoneFromKey, realEmail } from './customerKey'
 import { getBingAccessToken, bingAuthHeaders, BingAdsClientConfig } from './bingAdsClient'
 
 export type SignalEventType = 'Purchase' | 'Lead' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout'
@@ -9,6 +10,8 @@ export type SignalEventType = 'Purchase' | 'Lead' | 'ViewContent' | 'AddToCart' 
 export interface SignalPayload {
   eventType: SignalEventType
   email?: string | null
+  // Normalized "+digits". Sent to Meta as a hashed match key.
+  phone?: string | null
   value?: number | null
   currency?: string
   fbclid?: string | null
@@ -79,6 +82,8 @@ const FB_GRAPH_VERSION = process.env.FB_GRAPH_API_VERSION ?? 'v21.0'
 async function sendFacebookCapi(config: FacebookCapiConfig, payload: SignalPayload): Promise<void> {
   const userData: Record<string, unknown> = {}
   if (payload.email) userData.em = [sha256(payload.email)]
+  // Meta wants digits only, country code included, no '+'.
+  if (payload.phone) userData.ph = [sha256(payload.phone.replace(/\D/g, ''))]
   if (payload.ip) userData.client_ip_address = payload.ip
   if (payload.userAgent) userData.client_user_agent = payload.userAgent
   // Best-effort fbc — not the real _fbc cookie Meta's own browser pixel would set
@@ -388,7 +393,15 @@ async function sendBingOfflineConversion(config: BingAdsClientConfig, payload: S
 // Never throws — a failed/missing integration must never block the purchase, lead, or
 // event flow that triggered it, same philosophy as jobs/adCosts/run.ts's per-client
 // try/catch.
-export async function sendConversionSignals(clientId: string, payload: SignalPayload): Promise<void> {
+export async function sendConversionSignals(clientId: string, rawPayload: SignalPayload): Promise<void> {
+  // A phone-only customer's "phone:+1..." stand-in key must never be hashed and
+  // sent as an email. Every platform below reads payload.email, so swap it out
+  // here once: the real phone moves to payload.phone, email becomes null.
+  const payload: SignalPayload = {
+    ...rawPayload,
+    email: realEmail(rawPayload.email),
+    phone: normalizePhone(rawPayload.phone) ?? phoneFromKey(rawPayload.email),
+  }
   const { rows } = await db.query<{ platform: string; config: Record<string, string> }>(
     `SELECT platform, config FROM client_integrations
      WHERE client_id = $1 AND platform IN (

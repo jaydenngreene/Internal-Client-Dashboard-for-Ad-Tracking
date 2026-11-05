@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { parse } from 'csv-parse/sync'
 import { recordPurchase, recordRefund } from '../lib/attribution'
+import { normalizePhone, phoneCustomerKey } from '../lib/customerKey'
 
 const MAX_ERRORS_RETURNED = 20
 
@@ -14,6 +15,7 @@ interface OrderAgg {
   id: string
   name: string
   email: string
+  phone: string
   total: string
   currency: string
   financialStatus: string
@@ -29,11 +31,15 @@ function groupOrders(rows: Record<string, string>[]): Map<string, OrderAgg> {
     if (!name) continue
     let order = orders.get(name)
     if (!order) {
-      order = { id: '', name, email: '', total: '', currency: '', financialStatus: '', cancelledAt: '', refundedAmount: '', createdAt: '' }
+      order = { id: '', name, email: '', phone: '', total: '', currency: '', financialStatus: '', cancelledAt: '', refundedAmount: '', createdAt: '' }
       orders.set(name, order)
     }
     if (row['Id']?.trim()) order.id = row['Id'].trim()
     if (row['Email']?.trim()) order.email = row['Email'].trim()
+    // Order-level phone first, then the billing/shipping address phones.
+    for (const col of ['Phone', 'Billing Phone', 'Shipping Phone']) {
+      if (!order.phone && row[col]?.trim()) order.phone = row[col].trim()
+    }
     if (row['Total']?.trim()) order.total = row['Total'].trim()
     if (row['Currency']?.trim()) order.currency = row['Currency'].trim()
     if (row['Financial Status']?.trim()) order.financialStatus = row['Financial Status'].trim()
@@ -83,7 +89,10 @@ export async function shopifyImportRoutes(app: FastifyInstance) {
           skipped++
           continue
         }
-        if (!order.email) {
+        // Phone-only orders count too, under the same "phone:+1..." key the live
+        // webhook uses (lib/customerKey.ts).
+        const customerKey = order.email || phoneCustomerKey(order.phone)
+        if (!customerKey) {
           skipped++
           continue
         }
@@ -106,7 +115,8 @@ export async function shopifyImportRoutes(app: FastifyInstance) {
         const purchasedAt = createdAt && !isNaN(createdAt.getTime()) ? createdAt : null
 
         const wasNew = await recordPurchase(clientId, {
-          email: order.email,
+          email: customerKey,
+          phone: normalizePhone(order.phone),
           revenue: total,
           product: null,
           order_id: orderId,

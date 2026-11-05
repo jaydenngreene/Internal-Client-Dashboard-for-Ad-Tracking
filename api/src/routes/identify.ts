@@ -3,6 +3,7 @@ import { db } from '../db'
 import { sendConversionSignals } from '../lib/conversionSignals'
 import { lookupVisitorId } from '../lib/visitorResolution'
 import { autoLinkByPhone, autoLinkByIp } from '../lib/identityLinking'
+import { normalizePhone, phoneCustomerKey, realEmail } from '../lib/customerKey'
 import { dispatchEvent } from '../lib/outboundWebhooks'
 import { attemptRetroactiveAttribution } from '../lib/attribution'
 
@@ -18,13 +19,17 @@ interface IdentifyBody {
 
 export async function identifyRoutes(app: FastifyInstance) {
   app.post<{ Body: IdentifyBody }>('/track/identify', async (req, reply) => {
-    const { pixel_key, anonymous_id, email, phone, lead_type = 'optin', page, metadata } = req.body
+    const { pixel_key, anonymous_id, email, phone: rawPhone, lead_type = 'optin', page, metadata } = req.body
 
-    if (!pixel_key || !anonymous_id || !email) {
+    // A phone alone is enough (phone-only Shopify checkouts): it becomes the same
+    // "phone:+1..." customer key the order webhook uses, so the two meet up.
+    const phone = normalizePhone(rawPhone)
+    const customerKey = email?.trim() ? email : phoneCustomerKey(rawPhone)
+    if (!pixel_key || !anonymous_id || !customerKey) {
       return reply.code(400).send({ error: 'Missing required fields' })
     }
 
-    const normalizedEmail = email.toLowerCase().trim()
+    const normalizedEmail = customerKey.toLowerCase().trim()
 
     const { rows: clientRows } = await db.query(
       'SELECT id FROM clients WHERE pixel_key = $1',
@@ -91,6 +96,7 @@ export async function identifyRoutes(app: FastifyInstance) {
     await sendConversionSignals(clientId, {
       eventType: 'Lead',
       email: normalizedEmail,
+      phone,
       fbclid: sessionRows[0]?.fbclid ?? null,
       gclid: sessionRows[0]?.gclid ?? null,
       msclkid: sessionRows[0]?.msclkid ?? null,
@@ -98,7 +104,7 @@ export async function identifyRoutes(app: FastifyInstance) {
     })
 
     // Step 29 — notify any of the client's own systems subscribed to this event.
-    await dispatchEvent(clientId, 'lead.opted.in', { email: normalizedEmail, lead_type, page: page ?? null })
+    await dispatchEvent(clientId, 'lead.opted.in', { email: realEmail(normalizedEmail), phone, lead_type, page: page ?? null })
 
     return reply.code(200).send({ ok: true })
   })

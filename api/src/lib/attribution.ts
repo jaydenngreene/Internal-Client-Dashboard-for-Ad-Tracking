@@ -4,9 +4,14 @@ import { dispatchEvent } from './outboundWebhooks'
 import { convertToBaseCurrency, getClientCurrency } from './currency'
 import { parseAdParamsFromLandingSite } from './session'
 import { resolveVisitor } from './visitorResolution'
+import { normalizePhone, phoneFromKey, realEmail } from './customerKey'
+
 
 export interface NormalizedConversion {
+  // A real email, or a phone-only buyer's "phone:+1..." stand-in key (lib/customerKey.ts).
   email: string
+  // The order's phone number, normalized (+digits), when it has one.
+  phone?: string | null
   revenue: number
   product?: string | null
   order_id?: string | null
@@ -88,11 +93,17 @@ async function attributePurchase(
   purchaseTime: Date,
   landingSite: string | null | undefined,
   referringSite: string | null | undefined,
-  signal: { originalValue: number; currency: string; orderId: string | null; product: string | null; processor: string }
+  signal: { originalValue: number; currency: string; orderId: string | null; product: string | null; processor: string },
+  phone: string | null = null
 ): Promise<boolean> {
+  // Exact customer-key match first; otherwise any visitor who identified with
+  // the same phone number (lets a phone-only checkout match its own browser).
   const { rows: identityRows } = await db.query(
-    'SELECT visitor_id FROM identities WHERE client_id = $1 AND email = $2',
-    [clientId, email]
+    `SELECT visitor_id FROM identities
+     WHERE client_id = $1 AND (email = $2 OR ($3::text IS NOT NULL AND phone = $3))
+     ORDER BY (email = $2) DESC, identified_at DESC
+     LIMIT 1`,
+    [clientId, email, phone]
   )
 
   let sessionRows: TouchSession[] = []
@@ -179,6 +190,7 @@ async function attributePurchase(
     await sendConversionSignals(clientId, {
       eventType: 'Purchase',
       email,
+      phone,
       value: signal.originalValue,
       currency: signal.currency,
       eventTime: purchaseTime,
@@ -238,6 +250,7 @@ async function attributePurchase(
   await sendConversionSignals(clientId, {
     eventType: 'Purchase',
     email,
+    phone,
     value: signal.originalValue,
     currency: signal.currency,
     fbclid: lastSession.fbclid,
@@ -254,7 +267,8 @@ async function attributePurchase(
   // Reports the base-currency-converted amount, matching what every internal
   // report now shows, alongside the original for anyone downstream who wants it.
   await dispatchEvent(clientId, 'sale.attributed', {
-    email,
+    email: realEmail(email),
+    phone: phone ?? phoneFromKey(email),
     revenue,
     original_revenue: signal.originalValue,
     original_currency: signal.currency,
@@ -277,13 +291,14 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
   if (!conv.email || !conv.revenue) return false
 
   const email = conv.email.toLowerCase().trim()
+  const phone = normalizePhone(conv.phone) ?? phoneFromKey(email)
 
   const baseCurrency = await getClientCurrency(clientId)
   const revenue = await convertToBaseCurrency(conv.revenue, conv.currency, baseCurrency)
 
   const { rows: purchaseRows } = await db.query(
-    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at, source_name, referring_site)
-     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8, $9)
+    `INSERT INTO purchases (client_id, email, revenue, product, order_id, processor, purchased_at, source_name, referring_site, phone)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8, $9, $10)
      ON CONFLICT (client_id, order_id) WHERE order_id IS NOT NULL DO NOTHING
      RETURNING id`,
     [
@@ -296,6 +311,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
       conv.purchased_at ?? null,
       conv.source_name ?? null,
       conv.referring_site ?? null,
+      phone,
     ]
   )
   if (purchaseRows.length === 0) return false // duplicate (webhook retry)
@@ -312,7 +328,7 @@ export async function recordPurchase(clientId: string, conv: NormalizedConversio
     orderId: conv.order_id ?? null,
     product: conv.product ?? null,
     processor: conv.processor,
-  })
+  }, phone)
 
   return true
 }
@@ -342,8 +358,9 @@ export async function attemptRetroactiveAttribution(clientId: string, email: str
     product: string | null
     processor: string
     purchased_at: string
+    phone: string | null
   }>(
-    `SELECT p.id, p.revenue, p.order_id, p.product, p.processor, p.purchased_at
+    `SELECT p.id, p.revenue, p.order_id, p.product, p.processor, p.purchased_at, p.phone
      FROM purchases p
      WHERE p.client_id = $1 AND p.email = $2 AND NOT p.refunded
        AND p.purchased_at >= NOW() - INTERVAL '24 hours'
@@ -365,7 +382,7 @@ export async function attemptRetroactiveAttribution(clientId: string, email: str
       orderId: p.order_id,
       product: p.product,
       processor: p.processor,
-    })
+    }, p.phone)
   }
 }
 

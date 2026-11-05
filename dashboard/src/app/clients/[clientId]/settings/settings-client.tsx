@@ -300,9 +300,16 @@ analytics.subscribe('checkout_started', (event) => {
 // whichever purchase record lands (from the webhook) can find it.
 analytics.subscribe('checkout_completed', (event) => {
   const checkout = event.data.checkout;
-  if (!checkout || !checkout.email) return;
+  if (!checkout) return;
+  // Phone-only checkouts (no email) still identify, by phone.
+  const phone = checkout.phone
+    || (checkout.shippingAddress && checkout.shippingAddress.phone)
+    || (checkout.billingAddress && checkout.billingAddress.phone)
+    || null;
+  if (!checkout.email && !phone) return;
   postBeacon('/track/identify', {
-    email: checkout.email,
+    email: checkout.email || undefined,
+    phone: phone || undefined,
     lead_type: 'checkout',
     page: window.location.href,
   });

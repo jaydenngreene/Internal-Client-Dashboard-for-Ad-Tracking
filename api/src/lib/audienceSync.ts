@@ -1,5 +1,6 @@
 import * as crypto from 'crypto'
 import { db } from '../db'
+import { isPhoneKey } from './customerKey'
 
 export type SegmentType = 'all_customers' | 'ltv_above' | 'tag'
 
@@ -16,7 +17,13 @@ function sha256(value: string): string {
 // Resolves a segment definition to the actual list of emails right now — segments
 // are defined declaratively (not a frozen snapshot), so every sync re-evaluates
 // against current data.
+// Only real emails: phone-only customers ("phone:+1..." keys) are left out,
+// since these lists are uploaded as hashed emails.
 export async function resolveSegmentEmails(clientId: string, segment: SegmentDefinition): Promise<string[]> {
+  return (await resolveSegmentKeys(clientId, segment)).filter((e) => !isPhoneKey(e))
+}
+
+async function resolveSegmentKeys(clientId: string, segment: SegmentDefinition): Promise<string[]> {
   if (segment.type === 'all_customers') {
     const { rows } = await db.query<{ email: string }>(`SELECT DISTINCT email FROM customer_ltv WHERE client_id = $1`, [
       clientId,

@@ -2,10 +2,12 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import * as crypto from 'crypto'
 import { db } from '../../db'
 import { recordPurchase, recordRefund } from '../../lib/attribution'
+import { normalizePhone, phoneCustomerKey } from '../../lib/customerKey'
 
 interface ShopifyOrder {
   id: number
-  email: string
+  email: string | null
+  phone: string | null
   total_price: string
   subtotal_price: string
   total_tax: string
@@ -22,10 +24,13 @@ interface ShopifyOrder {
   tags: string
   customer: {
     id: number
-    email: string
+    email: string | null
+    phone: string | null
     first_name: string
     last_name: string
   } | null
+  billing_address: { phone: string | null } | null
+  shipping_address: { phone: string | null } | null
   line_items: Array<{
     id: number
     title: string
@@ -106,8 +111,15 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
         return reply.code(200).send({ received: true, skipped: 'cancelled' })
       }
 
-      const email = order.email ?? order.customer?.email
-      if (!email) return reply.code(200).send({ received: true, skipped: 'no_email' })
+      // Phone-only checkouts (no email) used to be skipped. They're now recorded
+      // under a stand-in "phone:+1..." customer key (lib/customerKey.ts), so they
+      // count toward revenue/orders and can still be attributed (Shopify's own
+      // landing_site, or a checkout identify() that sent the same phone).
+      const rawPhone =
+        order.phone ?? order.customer?.phone ?? order.billing_address?.phone ?? order.shipping_address?.phone ?? null
+      const phone = normalizePhone(rawPhone)
+      const email = order.email || order.customer?.email || phoneCustomerKey(rawPhone)
+      if (!email) return reply.code(200).send({ received: true, skipped: 'no_email_or_phone' })
 
       const revenue = parseFloat(order.total_price)
       const productName = order.line_items?.[0]?.title ?? null
@@ -115,6 +127,7 @@ export async function shopifyWebhookRoutes(app: FastifyInstance) {
 
       await recordPurchase(client_id, {
         email,
+        phone,
         revenue,
         product: productName,
         order_id: orderId,

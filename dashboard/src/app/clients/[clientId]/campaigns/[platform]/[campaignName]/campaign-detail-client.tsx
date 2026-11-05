@@ -76,9 +76,9 @@ function CreativeRowCard({
             </>
           ) : (
             <>
-              <span>{formatNumber(Math.round(creative.blendedSales ?? creative.sales))} purchases</span>
-              <span className="text-chart-1">{formatCurrency(creative.blendedRevenue ?? creative.revenue)} revenue</span>
-              <span>{formatRoas(creative.blendedRoas ?? creative.roas)} ROAS</span>
+              <span>{count(creative.blendedSales)} purchases</span>
+              <span className="text-chart-1">{money(creative.blendedRevenue)} revenue</span>
+              <span>{formatRoas(creative.blendedRoas)} ROAS</span>
             </>
           )}
           <span>{formatPercent(creative.ctr)} CTR</span>
@@ -88,7 +88,10 @@ function CreativeRowCard({
   );
 }
 
-const money = (v: number | null) => (v === null ? "-" : formatCurrency(v));
+// null/undefined = no blended number available (e.g. nothing ad-traced yet): show "-",
+// never the click-traced value under a "blended" label.
+const money = (v: number | null | undefined) => (v == null ? "-" : formatCurrency(v));
+const count = (v: number | null | undefined) => (v == null ? "-" : formatNumber(Math.round(v)));
 
 function MiniStat({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
@@ -149,15 +152,15 @@ function AdsetCard({
             </>
           ) : (
             <>
-              <MiniStat label="Purchases" value={formatNumber(Math.round(adset.blendedSales ?? adset.sales))} />
-              <MiniStat label="Cost / Purchase" value={money(adset.blendedCostPerSale ?? adset.costPerSale)} />
-              <MiniStat label="Revenue" value={formatCurrency(adset.blendedRevenue ?? adset.revenue)} className="text-chart-1" />
+              <MiniStat label="Purchases" value={count(adset.blendedSales)} />
+              <MiniStat label="Cost / Purchase" value={money(adset.blendedCostPerSale)} />
+              <MiniStat label="Revenue" value={money(adset.blendedRevenue)} className="text-chart-1" />
               <MiniStat
                 label="Profit"
-                value={formatCurrency(adset.blendedTrueProfit ?? adset.trueProfit)}
-                className={(adset.blendedTrueProfit ?? adset.trueProfit) >= 0 ? "text-chart-1" : "text-chart-2"}
+                value={money(adset.blendedTrueProfit)}
+                className={(adset.blendedTrueProfit ?? 0) >= 0 ? "text-chart-1" : "text-chart-2"}
               />
-              <MiniStat label="Blended ROAS" value={formatRoas(adset.blendedRoas ?? adset.roas)} />
+              <MiniStat label="Blended ROAS" value={formatRoas(adset.blendedRoas)} />
             </>
           )}
           <MiniStat label="CTR" value={formatPercent(adset.ctr)} />
@@ -259,23 +262,23 @@ export function CampaignDetailClient({
               </>
             ) : (
               <>
-                <StatTile label="Purchases" value={formatNumber(Math.round(data.kpis.blendedSales ?? data.kpis.sales))} />
+                <StatTile label="Purchases" value={count(data.kpis.blendedSales)} />
                 <StatTile
                   label="Ad Spend / Purchase"
-                  value={money(data.kpis.blendedCostPerSale ?? (data.kpis.sales > 0 ? data.kpis.cost / data.kpis.sales : null))}
+                  value={money(data.kpis.blendedCostPerSale)}
                 />
               </>
             )}
             <StatTile
               label="Revenue"
-              value={formatCurrency(goal === "sales" ? (data.kpis.blendedRevenue ?? data.kpis.revenue) : data.kpis.revenue)}
+              value={goal === "sales" ? money(data.kpis.blendedRevenue) : formatCurrency(data.kpis.revenue)}
               tone="positive"
             />
             {(() => {
-              const p = goal === "sales" ? (data.kpis.blendedTrueProfit ?? data.kpis.trueProfit) : data.kpis.trueProfit;
-              return <StatTile label="Profit" value={formatCurrency(p)} tone={p >= 0 ? "positive" : "negative"} />;
+              const p = goal === "sales" ? data.kpis.blendedTrueProfit : data.kpis.trueProfit;
+              return <StatTile label="Profit" value={money(p)} tone={(p ?? 0) >= 0 ? "positive" : "negative"} />;
             })()}
-            {goal === "sales" && <StatTile label="Blended ROAS" value={formatRoas(data.kpis.blendedRoas ?? data.kpis.roas)} />}
+            {goal === "sales" && <StatTile label="Blended ROAS" value={formatRoas(data.kpis.blendedRoas)} />}
             <StatTile label="Impressions" value={formatNumber(data.kpis.impressions)} />
             {goal === "sales" && (
               <StatTile label="CPM" value={data.kpis.cpm === null ? "-" : formatCurrency(data.kpis.cpm)} />

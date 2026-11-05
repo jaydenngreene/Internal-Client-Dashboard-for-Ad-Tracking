@@ -18,14 +18,21 @@ export const RANGE_PRESETS: { value: RangePreset; label: string }[] = [
   { value: "custom", label: "Custom range" },
 ];
 
+// Local calendar date, not UTC: toISOString() flips to tomorrow's date every
+// evening in US timezones (after 7-8pm Eastern), which shifted every "Last N
+// days" window a day ahead, dropping the first day and adding a day with no
+// data, so totals stopped matching Meta/Shopify.
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function defaultCustomRange(): DateRange {
   const today = new Date();
   const from = new Date(today);
-  from.setUTCDate(from.getUTCDate() - 29);
+  from.setDate(from.getDate() - 29);
   return { from: isoDate(from), to: isoDate(today) };
 }
 
@@ -39,19 +46,19 @@ export function resolveRange(preset: RangePreset, customRange?: DateRange): Date
   }
 
   if (preset === "this_month") {
-    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const from = new Date(today.getFullYear(), today.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(today) };
   }
 
   if (preset === "last_month") {
-    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
-    const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+    const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const to = new Date(today.getFullYear(), today.getMonth(), 0);
     return { from: isoDate(from), to: isoDate(to) };
   }
 
   const days = DAY_PRESETS.find((p) => p.value === preset)?.days ?? 30;
   const from = new Date(today);
-  from.setUTCDate(from.getUTCDate() - (days - 1));
+  from.setDate(from.getDate() - (days - 1));
   return { from: isoDate(from), to: isoDate(today) };
 }
 

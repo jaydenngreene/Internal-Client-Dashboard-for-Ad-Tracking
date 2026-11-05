@@ -150,6 +150,8 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
       const { rows: creativeSpendRows } = await db.query<{
         ad_id: string | null
         ad_name: string | null
+        adset_id: string | null
+        adset_name: string | null
         cost: string
         impressions: string
         clicks: string
@@ -157,7 +159,8 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
         creative_asset_url: string | null
         creative_type: string | null
       }>(
-        `SELECT ad_id, ad_name, SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
+        `SELECT ad_id, ad_name, adset_id, MAX(adset_name) AS adset_name,
+                SUM(spend) AS cost, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
                 MAX(creative_thumbnail_url) AS creative_thumbnail_url,
                 MAX(creative_asset_url) AS creative_asset_url,
                 MAX(creative_type) AS creative_type
@@ -165,38 +168,56 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
          WHERE client_id = $1 AND date BETWEEN $2 AND $3
            AND LOWER(REGEXP_REPLACE(platform, '_ads$', '')) = LOWER(REGEXP_REPLACE($4, '_ads$', ''))
            AND LOWER(TRIM(campaign_name)) = LOWER(TRIM($5))
-         GROUP BY ad_id, ad_name`,
+         GROUP BY ad_id, ad_name, adset_id`,
         [clientId, from, to, platform, campaignName]
       )
-      const { rows: creativeLeadRows } = await db.query<{ utm_content: string | null; leads: string }>(
-        `SELECT s.utm_content, COUNT(DISTINCT l.id) AS leads
+      // utm_term carries the ad set ({{adset.id}} or {{adset.name}}) on Meta links,
+      // so it's grouped alongside utm_content to credit each lead/sale to its ad set.
+      const { rows: creativeLeadRows } = await db.query<{ utm_content: string | null; utm_term: string | null; leads: string }>(
+        `SELECT s.utm_content, s.utm_term, COUNT(DISTINCT l.id) AS leads
          FROM leads l
          JOIN identities i ON i.client_id = l.client_id AND i.email = l.email
          JOIN LATERAL (
-           SELECT utm_content, utm_source, utm_campaign FROM sessions
+           SELECT utm_content, utm_term, utm_source, utm_campaign FROM sessions
            WHERE visitor_id = i.visitor_id AND started_at <= l.created_at AND started_at >= l.created_at - INTERVAL '90 days'
            ORDER BY started_at ASC LIMIT 1
          ) s ON true
          WHERE l.client_id = $1 AND l.created_at::date BETWEEN $2 AND $3
            AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($4, '_ads$', ''))
            AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($5)) OR ($6::text IS NOT NULL AND s.utm_campaign = $6))
-         GROUP BY s.utm_content`,
+         GROUP BY s.utm_content, s.utm_term`,
         [clientId, from, to, platform, campaignName, campaignId]
       )
-      const { rows: creativeRevRows } = await db.query<{ utm_content: string | null; revenue: string; sales: string }>(
-        `SELECT s.utm_content, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
+      const { rows: creativeRevRows } = await db.query<{ utm_content: string | null; utm_term: string | null; revenue: string; sales: string }>(
+        `SELECT s.utm_content, s.utm_term, SUM(a.attributed_revenue) AS revenue, COUNT(DISTINCT a.purchase_id) AS sales
          FROM attributions a
          JOIN sessions s ON s.id = a.session_id
          JOIN purchases p ON p.id = a.purchase_id
          WHERE a.client_id = $1 AND p.purchased_at::date BETWEEN $2 AND $3
            AND LOWER(REGEXP_REPLACE(s.utm_source, '_ads$', '')) = LOWER(REGEXP_REPLACE($4, '_ads$', ''))
            AND (LOWER(TRIM(s.utm_campaign)) = LOWER(TRIM($5)) OR ($6::text IS NOT NULL AND s.utm_campaign = $6))
-         GROUP BY s.utm_content`,
+         GROUP BY s.utm_content, s.utm_term`,
         [clientId, from, to, platform, campaignName, campaignId]
       )
 
+      // Rows are grouped Campaign -> Ad set -> Ad, the same shape as Meta Ads
+      // Manager. A creative's key includes its ad set, so the same ad name running
+      // in two ad sets shows up once under each instead of being merged into one.
+      interface AdsetRow {
+        key: string
+        id: string | null
+        name: string
+        cost: number
+        impressions: number
+        clicks: number
+        leads: number
+        sales: number
+        revenue: number
+        adCount: number
+      }
       interface CreativeRow {
         name: string
+        adsetKey: string
         cost: number
         impressions: number
         clicks: number
@@ -207,56 +228,109 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
         assetUrl: string | null
         assetType: 'image' | 'video' | null
       }
+      const norm = (s: string | null) => (s ?? '').trim().toLowerCase()
+      const NO_ADSET_KEY = '__no_adset__'
+
+      const adsets = new Map<string, AdsetRow>()
+      // Lookup-only (never iterated): a link's utm_term can hold the ad set's id OR name.
+      const adsetIndex = new Map<string, AdsetRow>()
+      const getOrCreateAdset = (id: string | null, name: string | null): AdsetRow => {
+        const key = norm(id) || norm(name) || NO_ADSET_KEY
+        let row = adsets.get(key)
+        if (!row) {
+          row = {
+            key,
+            id: id || null,
+            name: name || id || '(no ad set)',
+            cost: 0, impressions: 0, clicks: 0, leads: 0, sales: 0, revenue: 0, adCount: 0,
+          }
+          adsets.set(key, row)
+        }
+        if (id) adsetIndex.set(norm(id), row)
+        if (name) adsetIndex.set(norm(name), row)
+        return row
+      }
+
       const creatives = new Map<string, CreativeRow>()
       // Same idIndex pattern as reports.ts's funnel breakdown: a client's ad
       // URLs can carry the raw ad_id in utm_content instead of the ad name, so
       // a lead/revenue row matched by id needs to land on the same object a
-      // spend row registered by name - idIndex is lookup-only, never iterated,
-      // so a row found through it can't get double-counted in the output below.
+      // spend row registered by name. Both indexes are lookup-only, never
+      // iterated, so a row found through them can't get double-counted.
       const idIndex = new Map<string, CreativeRow>()
-      const norm = (s: string | null) => (s ?? '').trim().toLowerCase()
-      const getOrCreate = (name: string | null): CreativeRow => {
-        const key = norm(name)
+      const nameIndex = new Map<string, CreativeRow[]>()
+      const getOrCreate = (adset: AdsetRow, name: string | null): CreativeRow => {
+        const key = `${adset.key}::${norm(name)}`
         let row = creatives.get(key)
         if (!row) {
           row = {
             name: name || '(unnamed creative)',
-            cost: 0,
-            impressions: 0,
-            clicks: 0,
-            leads: 0,
-            sales: 0,
-            revenue: 0,
-            thumbnailUrl: null,
-            assetUrl: null,
-            assetType: null,
+            adsetKey: adset.key,
+            cost: 0, impressions: 0, clicks: 0, leads: 0, sales: 0, revenue: 0,
+            thumbnailUrl: null, assetUrl: null, assetType: null,
           }
           creatives.set(key, row)
+          adset.adCount += 1
+          const list = nameIndex.get(norm(name)) ?? []
+          list.push(row)
+          nameIndex.set(norm(name), list)
         }
         return row
       }
-      const findCreative = (name: string | null): CreativeRow | undefined =>
-        creatives.get(norm(name)) ?? idIndex.get(norm(name))
       for (const r of creativeSpendRows) {
-        const row = getOrCreate(r.ad_name)
-        row.cost += parseFloat(r.cost)
-        row.impressions += parseInt(r.impressions, 10)
-        row.clicks += parseInt(r.clicks, 10)
+        const adset = getOrCreateAdset(r.adset_id, r.adset_name)
+        const row = getOrCreate(adset, r.ad_name)
+        const c = parseFloat(r.cost)
+        const imp = parseInt(r.impressions, 10)
+        const clk = parseInt(r.clicks, 10)
+        row.cost += c
+        row.impressions += imp
+        row.clicks += clk
+        adset.cost += c
+        adset.impressions += imp
+        adset.clicks += clk
         row.thumbnailUrl = r.creative_thumbnail_url
         row.assetUrl = r.creative_asset_url
         row.assetType = (r.creative_type as 'image' | 'video' | null) ?? null
         if (r.ad_id && norm(r.ad_id) !== norm(r.ad_name)) idIndex.set(norm(r.ad_id), row)
       }
+
+      // Where a lead/sale lands: an exact ad id in utm_content wins (an ad id
+      // belongs to exactly one ad set). Otherwise the ad set comes from utm_term,
+      // and the ad is matched by name inside that ad set. Anything with no
+      // traceable ad set goes to a "(no ad set)" row so the ad sets still add up
+      // to the campaign totals.
+      const resolve = (content: string | null, term: string | null): { adset: AdsetRow; creative: CreativeRow | null } => {
+        const byId = content ? idIndex.get(norm(content)) : undefined
+        if (byId) return { adset: adsets.get(byId.adsetKey)!, creative: byId }
+        const termAdset = term ? adsetIndex.get(norm(term)) : undefined
+        if (content) {
+          const candidates = nameIndex.get(norm(content)) ?? []
+          const match = (termAdset && candidates.find((c) => c.adsetKey === termAdset.key)) || candidates[0]
+          if (match) return { adset: adsets.get(match.adsetKey)!, creative: match }
+          const adset = termAdset ?? getOrCreateAdset(null, null)
+          return { adset, creative: getOrCreate(adset, content) }
+        }
+        // No ad on the link at all: credit the ad set only (the creative list
+        // never showed content-less rows before either).
+        return { adset: termAdset ?? getOrCreateAdset(null, null), creative: null }
+      }
       for (const r of creativeLeadRows) {
-        if (!r.utm_content) continue
-        const row = findCreative(r.utm_content) ?? getOrCreate(r.utm_content)
-        row.leads += parseInt(r.leads, 10)
+        const { adset, creative } = resolve(r.utm_content, r.utm_term)
+        const n = parseInt(r.leads, 10)
+        adset.leads += n
+        if (creative) creative.leads += n
       }
       for (const r of creativeRevRows) {
-        if (!r.utm_content) continue
-        const row = findCreative(r.utm_content) ?? getOrCreate(r.utm_content)
-        row.revenue += parseFloat(r.revenue)
-        row.sales += parseInt(r.sales, 10)
+        const { adset, creative } = resolve(r.utm_content, r.utm_term)
+        const rev = parseFloat(r.revenue)
+        const n = parseInt(r.sales, 10)
+        adset.revenue += rev
+        adset.sales += n
+        if (creative) {
+          creative.revenue += rev
+          creative.sales += n
+        }
       }
 
       const creativesOut = Array.from(creatives.values())
@@ -269,6 +343,22 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           matched: r.cost > 0,
         }))
         .sort((a, b) => b.revenue - a.revenue)
+
+      const adsetsOut = Array.from(adsets.values())
+        .filter((a) => a.cost > 0 || a.revenue > 0 || a.leads > 0 || a.sales > 0)
+        .map((a) => ({
+          ...a,
+          profit: a.revenue - a.cost,
+          trueProfit: computeTrueProfit(marginConfig, a.revenue, a.cost, a.sales).trueProfit,
+          roas: a.cost > 0 ? a.revenue / a.cost : null,
+          cpl: a.leads > 0 ? a.cost / a.leads : null,
+          costPerSale: a.sales > 0 ? a.cost / a.sales : null,
+          cpm: a.impressions > 0 ? (a.cost / a.impressions) * 1000 : null,
+          ctr: a.impressions > 0 ? (a.clicks / a.impressions) * 100 : null,
+          matched: a.cost > 0,
+        }))
+        // Real ad sets by spend, the "(no ad set)" catch-all always last.
+        .sort((a, b) => (a.key === NO_ADSET_KEY ? 1 : 0) - (b.key === NO_ADSET_KEY ? 1 : 0) || b.cost - a.cost)
 
       return reply.send({
         platform,
@@ -289,6 +379,7 @@ export async function campaignDetailRoutes(app: FastifyInstance) {
           cpm: impressions > 0 ? (cost / impressions) * 1000 : null,
           ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
         },
+        adsets: adsetsOut,
         creatives: creativesOut,
       })
     }

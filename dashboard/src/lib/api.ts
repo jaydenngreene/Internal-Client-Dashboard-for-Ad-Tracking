@@ -1680,8 +1680,31 @@ export interface CampaignCreativeRow {
 
 export interface CampaignDetail {
   platform: string;
+export interface CampaignAdsetRow {
+  key: string;
+  id: string | null;
+  name: string;
+  adCount: number;
+  cost: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  sales: number;
+  revenue: number;
+  profit: number;
+  trueProfit: number;
+  roas: number | null;
+  cpl: number | null;
+  costPerSale: number | null;
+  cpm: number | null;
+  ctr: number | null;
+  matched: boolean;
+}
+
   campaignName: string;
   from: string;
+  // Matches CampaignAdsetRow.key of the ad set this ad runs in.
+  adsetKey: string;
   to: string;
   kpis: CampaignDetailKpis;
   creatives: CampaignCreativeRow[];
@@ -1704,6 +1727,7 @@ export interface CreativeDetailCustomer {
   purchasedAt: string;
   revenue: number;
 }
+  adsets: CampaignAdsetRow[];
 
 export interface CreativeDetailCopy {
   headline: string | null;

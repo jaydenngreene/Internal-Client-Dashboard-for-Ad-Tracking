@@ -1,10 +1,20 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ImageIcon, PlayIcon } from "lucide-react";
-import { getCampaignDetail, getClients, getCreativeRoles, campaignGoalForNiche, CampaignCreativeRow, CreativeRoleRow } from "@/lib/api";
+import { ArrowLeft, ChevronRight, ImageIcon, PlayIcon } from "lucide-react";
+import {
+  getCampaignDetail,
+  getClients,
+  getCreativeRoles,
+  campaignGoalForNiche,
+  CampaignAdsetRow,
+  CampaignCreativeRow,
+  CreativeRoleRow,
+} from "@/lib/api";
+import { SegmentedToggle } from "@/components/segmented-toggle";
 import { useDateRangeState } from "@/lib/date-range";
 import { InsightsPanel } from "@/components/insights-panel";
 import { StatTile } from "@/components/stat-tile";
@@ -73,6 +83,79 @@ function CreativeRowCard({
   );
 }
 
+function MiniStat({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`truncate text-sm font-medium tabular-nums ${className ?? ""}`}>{value}</p>
+    </div>
+  );
+}
+
+// One ad set, Ads Manager style: its own full metrics on the row, and the ads
+// running inside it revealed on click.
+function AdsetCard({
+  adset,
+  goal,
+  expanded,
+  onToggle,
+  children,
+}: {
+  adset: CampaignAdsetRow;
+  goal: "leads" | "sales";
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full flex-col gap-3 rounded-lg p-3 text-left hover:bg-accent/40"
+      >
+        <div className="flex w-full items-center gap-2">
+          <ChevronRight className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold">{adset.name}</p>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
+            {adset.adCount} {adset.adCount === 1 ? "ad" : "ads"}
+          </Badge>
+          {!adset.matched && (
+            <Badge variant="outline" className="shrink-0 text-[10px] text-status-warning border-status-warning/40">
+              unmatched
+            </Badge>
+          )}
+        </div>
+        <div className="grid w-full grid-cols-3 gap-x-4 gap-y-2 pl-6 sm:grid-cols-4 lg:grid-cols-8">
+          <MiniStat label="Spend" value={adset.matched ? formatCurrency(adset.cost) : "-"} />
+          {goal === "leads" ? (
+            <>
+              <MiniStat label="Leads" value={formatNumber(adset.leads)} />
+              <MiniStat label="CPL" value={adset.cpl === null ? "-" : formatCurrency(adset.cpl)} />
+            </>
+          ) : (
+            <>
+              <MiniStat label="Purchases" value={formatNumber(adset.sales)} />
+              <MiniStat label="Cost / Purchase" value={adset.costPerSale === null ? "-" : formatCurrency(adset.costPerSale)} />
+            </>
+          )}
+          <MiniStat label="Revenue" value={formatCurrency(adset.revenue)} className="text-chart-1" />
+          <MiniStat
+            label="Profit"
+            value={formatCurrency(adset.trueProfit)}
+            className={adset.trueProfit >= 0 ? "text-chart-1" : "text-chart-2"}
+          />
+          {goal === "sales" && <MiniStat label="ROAS" value={formatRoas(adset.roas)} />}
+          <MiniStat label="CTR" value={formatPercent(adset.ctr)} />
+          <MiniStat label="CPM" value={adset.cpm === null ? "-" : formatCurrency(adset.cpm)} />
+        </div>
+      </button>
+      {expanded && <div className="flex flex-col gap-2 border-t border-border p-2.5 pl-8">{children}</div>}
+    </div>
+  );
+}
+
 export function CampaignDetailClient({
   clientId,
   platform,
@@ -102,6 +185,27 @@ export function CampaignDetailClient({
     queryFn: () => getCreativeRoles(clientId, range),
   });
   const roleByKey = new Map((creativeRoles?.creatives ?? []).map((r) => [`${r.name}::${r.platform ?? ""}`, r.role]));
+
+  const [view, setView] = useState<"adsets" | "ads">("adsets");
+  const [expandedAdsets, setExpandedAdsets] = useState<Set<string>>(new Set());
+  const toggleAdset = (key: string) =>
+    setExpandedAdsets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const renderCreative = (c: CampaignCreativeRow) => (
+    <CreativeRowCard
+      // The same ad name can run in more than one ad set, so the key includes it.
+      key={`${c.adsetKey}::${c.name}`}
+      creative={c}
+      goal={goal}
+      role={creativeRoles ? (roleByKey.get(`${c.name}::${platform}`) ?? null) : undefined}
+      href={`/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}/creatives/${encodeURIComponent(c.name)}`}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -171,25 +275,50 @@ export function CampaignDetailClient({
           />
 
           <div className="flex flex-col gap-2">
-            <h2 className="text-sm font-semibold">Creatives ({data.creatives.length})</h2>
-            {data.creatives.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                {view === "adsets" ? `Ad Sets (${data.adsets.length})` : `Ads (${data.creatives.length})`}
+              </h2>
+              <SegmentedToggle
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "adsets", label: "By ad set" },
+                  { value: "ads", label: "All ads" },
+                ]}
+              />
+            </div>
+            {data.creatives.length === 0 && data.adsets.length === 0 ? (
               <Card className="px-4 py-8">
                 <CardContent className="px-0 text-center text-sm text-muted-foreground">
-                  No creative-level spend, leads, or revenue in this range yet.
+                  No ad set or ad-level spend, leads, or revenue in this range yet.
                 </CardContent>
               </Card>
-            ) : (
+            ) : view === "adsets" ? (
               <div className="flex flex-col gap-2">
-                {data.creatives.map((c) => (
-                  <CreativeRowCard
-                    key={c.name}
-                    creative={c}
-                    goal={goal}
-                    role={creativeRoles ? (roleByKey.get(`${c.name}::${platform}`) ?? null) : undefined}
-                    href={`/clients/${clientId}/campaigns/${encodeURIComponent(platform)}/${encodeURIComponent(campaignName)}/creatives/${encodeURIComponent(c.name)}`}
-                  />
-                ))}
+                {data.adsets.map((a) => {
+                  const ads = data.creatives.filter((c) => c.adsetKey === a.key);
+                  return (
+                    <AdsetCard
+                      key={a.key}
+                      adset={a}
+                      goal={goal}
+                      expanded={expandedAdsets.has(a.key)}
+                      onToggle={() => toggleAdset(a.key)}
+                    >
+                      {ads.length === 0 ? (
+                        <p className="px-1 py-2 text-xs text-muted-foreground">
+                          These sales came from links that named the ad set but not a specific ad.
+                        </p>
+                      ) : (
+                        ads.map(renderCreative)
+                      )}
+                    </AdsetCard>
+                  );
+                })}
               </div>
+            ) : (
+              <div className="flex flex-col gap-2">{data.creatives.map(renderCreative)}</div>
             )}
           </div>
         </>

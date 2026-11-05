@@ -77,6 +77,7 @@ function CreativeRowCard({
           ) : (
             <>
               <span>{count(creative.blendedSales)} purchases</span>
+              <span className="text-foreground">{formatNumber(creative.sales)} traced</span>
               <span className="text-chart-1">{money(creative.blendedRevenue)} revenue</span>
               <span>{formatRoas(creative.blendedRoas)} ROAS</span>
             </>
@@ -137,7 +138,7 @@ function AdsetCard({
             </Badge>
           )}
         </div>
-        <div className="grid w-full grid-cols-3 gap-x-4 gap-y-2 pl-6 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="grid w-full grid-cols-3 gap-x-4 gap-y-2 pl-6 sm:grid-cols-5 lg:grid-cols-9">
           <MiniStat label="Spend" value={adset.matched ? formatCurrency(adset.cost) : "-"} />
           {goal === "leads" ? (
             <>
@@ -153,6 +154,7 @@ function AdsetCard({
           ) : (
             <>
               <MiniStat label="Purchases" value={count(adset.blendedSales)} />
+              <MiniStat label="Traced Sales" value={formatNumber(adset.sales)} />
               <MiniStat label="Cost / Purchase" value={money(adset.blendedCostPerSale)} />
               <MiniStat label="Revenue" value={money(adset.blendedRevenue)} className="text-chart-1" />
               <MiniStat
@@ -263,6 +265,7 @@ export function CampaignDetailClient({
             ) : (
               <>
                 <StatTile label="Purchases" value={count(data.kpis.blendedSales)} />
+                <StatTile label="Traced Purchases" value={formatNumber(data.kpis.sales)} />
                 <StatTile
                   label="Ad Spend / Purchase"
                   value={money(data.kpis.blendedCostPerSale)}
